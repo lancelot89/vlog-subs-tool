@@ -34,8 +34,8 @@ log_error() {
 check_environment() {
     log_info "環境確認中..."
     
-    # Python仮想環境確認
-    if [[ "$VIRTUAL_ENV" == "" ]]; then
+    # Python仮想環境確認（GitHub Actionsの場合はスキップ）
+    if [[ "$VIRTUAL_ENV" == "" && "$GITHUB_ACTIONS" != "true" ]]; then
         log_error "仮想環境が有効化されていません"
         log_info "以下のコマンドを実行してください："
         log_info "source venv/bin/activate"
