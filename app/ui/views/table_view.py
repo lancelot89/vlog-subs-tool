@@ -21,6 +21,8 @@ class SubtitleTableView(QWidget):
     subtitle_selected = Signal(int)  # 字幕選択（時間ms）
     subtitle_changed = Signal(int, SubtitleItem)  # 字幕変更
     subtitles_reordered = Signal()  # 順序変更
+    seek_requested = Signal(int)  # プレイヤーへのシーク要求
+    loop_region_set = Signal(int, int)  # ループ区間設定（開始ms, 終了ms）
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -67,6 +69,20 @@ class SubtitleTableView(QWidget):
         self.down_btn.clicked.connect(self.move_down)
         self.down_btn.setEnabled(False)
         button_layout.addWidget(self.down_btn)
+        
+        button_layout.addStretch()
+        
+        # プレビューボタン
+        self.preview_btn = QPushButton("プレビュー")
+        self.preview_btn.clicked.connect(self.preview_selected)
+        self.preview_btn.setEnabled(False)
+        button_layout.addWidget(self.preview_btn)
+        
+        # ループ設定ボタン
+        self.loop_btn = QPushButton("ループ設定")
+        self.loop_btn.clicked.connect(self.set_loop_region)
+        self.loop_btn.setEnabled(False)
+        button_layout.addWidget(self.loop_btn)
         
         layout.addLayout(button_layout)
         
@@ -215,6 +231,8 @@ class SubtitleTableView(QWidget):
         self.delete_btn.setEnabled(has_selection)
         self.up_btn.setEnabled(has_selection)
         self.down_btn.setEnabled(has_selection)
+        self.preview_btn.setEnabled(has_selection)
+        self.loop_btn.setEnabled(has_selection)
         
         # 選択された行の字幕時間にシーク
         if selected_rows:
@@ -245,6 +263,9 @@ class SubtitleTableView(QWidget):
                 item = self.table.item(current_row, col)
                 if item:
                     item.setBackground(QColor(255, 255, 0, 100))  # 薄い黄色
+            
+            # テーブルを該当行までスクロール
+            self.table.scrollToItem(self.table.item(current_row, 0))
         
         self.current_highlight_row = current_row
     
@@ -370,3 +391,95 @@ class SubtitleTableView(QWidget):
         item = self.table.itemAt(position)
         if item:
             self.context_menu.exec(self.table.mapToGlobal(position))
+    
+    def preview_selected(self):
+        """選択された字幕をプレビュー"""
+        row = self.table.currentRow()
+        if row < 0 or row >= len(self.subtitles):
+            return
+        
+        subtitle = self.subtitles[row]
+        # プレイヤーに開始時間でのシークを要求
+        self.seek_requested.emit(subtitle.start_ms)
+    
+    def set_loop_region(self):
+        """選択された字幕の区間をループ設定"""
+        row = self.table.currentRow()
+        if row < 0 or row >= len(self.subtitles):
+            return
+        
+        subtitle = self.subtitles[row]
+        # ループ区間設定シグナルを発信
+        self.loop_region_set.emit(subtitle.start_ms, subtitle.end_ms)
+    
+    def get_current_subtitle(self) -> Optional[SubtitleItem]:
+        """現在選択されている字幕を取得"""
+        row = self.table.currentRow()
+        if row < 0 or row >= len(self.subtitles):
+            return None
+        return self.subtitles[row]
+    
+    def select_subtitle_at_time(self, time_ms: int) -> bool:
+        """指定時間の字幕を選択"""
+        for row, subtitle in enumerate(self.subtitles):
+            if subtitle.start_ms <= time_ms <= subtitle.end_ms:
+                self.table.selectRow(row)
+                return True
+        return False
+    
+    def validate_subtitle_data(self, row: int) -> bool:
+        """字幕データの妥当性を検証"""
+        if row < 0 or row >= len(self.subtitles):
+            return False
+        
+        subtitle = self.subtitles[row]
+        
+        # 基本チェック
+        if subtitle.start_ms >= subtitle.end_ms:
+            return False
+        
+        if not subtitle.text.strip():
+            return False
+        
+        # 他の字幕との重複チェック
+        for i, other in enumerate(self.subtitles):
+            if i == row:
+                continue
+            
+            # 時間重複チェック
+            if (subtitle.start_ms < other.end_ms and subtitle.end_ms > other.start_ms):
+                return False
+        
+        return True
+    
+    def auto_adjust_timing(self, row: int):
+        """字幕タイミングの自動調整"""
+        if row < 0 or row >= len(self.subtitles):
+            return
+        
+        subtitle = self.subtitles[row]
+        
+        # 最小表示時間の保証（1.2秒）
+        min_duration = 1200  # ms
+        if subtitle.end_ms - subtitle.start_ms < min_duration:
+            subtitle.end_ms = subtitle.start_ms + min_duration
+        
+        # 前後の字幕との間隔調整
+        gap_ms = 100  # 100ms の間隔
+        
+        if row > 0:
+            prev_subtitle = self.subtitles[row - 1]
+            if subtitle.start_ms <= prev_subtitle.end_ms:
+                subtitle.start_ms = prev_subtitle.end_ms + gap_ms
+                if subtitle.end_ms <= subtitle.start_ms:
+                    subtitle.end_ms = subtitle.start_ms + min_duration
+        
+        if row < len(self.subtitles) - 1:
+            next_subtitle = self.subtitles[row + 1]
+            if subtitle.end_ms >= next_subtitle.start_ms:
+                subtitle.end_ms = next_subtitle.start_ms - gap_ms
+                if subtitle.end_ms <= subtitle.start_ms:
+                    subtitle.end_ms = subtitle.start_ms + min_duration
+        
+        # テーブル更新
+        self.refresh_table()

@@ -213,6 +213,14 @@ class MainWindow(QMainWindow):
         
         # プレビュー時間変更時のテーブル同期
         self.player_view.time_changed.connect(self.table_view.highlight_current_subtitle)
+        
+        # 新しい同期機能
+        self.table_view.seek_requested.connect(self.player_view.seek_to_time)
+        self.table_view.loop_region_set.connect(self.player_view.set_loop_region)
+        
+        # 字幕変更時の更新
+        self.table_view.subtitle_changed.connect(self.on_subtitle_changed)
+        self.table_view.subtitles_reordered.connect(self.on_subtitles_reordered)
     
     def open_video(self):
         """動画ファイルを開く"""
@@ -301,6 +309,9 @@ class MainWindow(QMainWindow):
         # テーブルビューに字幕を表示
         self.table_view.set_subtitles(subtitle_items)
         
+        # プレイヤービューにも字幕を設定
+        self.player_view.set_subtitles(subtitle_items)
+        
         # UI状態の更新
         self.extract_btn.setEnabled(True)
         self.re_extract_btn.setEnabled(True)
@@ -379,6 +390,24 @@ class MainWindow(QMainWindow):
     def update_status(self):
         """ステータスの定期更新"""
         pass
+    
+    def on_subtitle_changed(self, row: int, subtitle_item: SubtitleItem):
+        """字幕変更時の処理"""
+        if self.current_project and 0 <= row < len(self.current_project.subtitles):
+            # プロジェクトの字幕を更新
+            self.current_project.subtitles[row] = subtitle_item
+            
+            # プレイヤーの字幕リストも更新
+            self.player_view.set_subtitles(self.current_project.subtitles)
+    
+    def on_subtitles_reordered(self):
+        """字幕順序変更時の処理"""
+        if self.current_project:
+            # テーブルから最新の字幕リストを取得
+            self.current_project.subtitles = self.table_view.subtitles[:]
+            
+            # プレイヤーの字幕リストも更新
+            self.player_view.set_subtitles(self.current_project.subtitles)
     
     def dragEnterEvent(self, event):
         """ドラッグ開始イベント"""
