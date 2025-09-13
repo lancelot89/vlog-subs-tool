@@ -39,11 +39,20 @@ VLog字幕ツールは、音声なしのVLOG動画に焼き付けられた日本
 git clone https://github.com/your-username/vlog-subs-tool.git
 cd vlog-subs-tool
 
+# 仮想環境作成（推奨）
+python3 -m venv venv
+source venv/bin/activate  # Linux/macOS
+# venv\Scripts\activate   # Windows
+
 # 依存関係のインストール
-pip install -r requirements.txt
+pip install -e .
 
 # アプリケーション起動
 python -m app.main
+
+# テスト実行（開発者向け）
+pip install -e ".[dev]"
+python -m pytest tests/unit/test_models.py -v
 ```
 
 ### 基本的な使い方
@@ -145,19 +154,56 @@ project.subproj       # プロジェクト保存（JSON形式）
 ## 🛠️ 開発・ビルド
 
 ### 開発環境セットアップ
+
+#### 仮想環境での開発（推奨）
 ```bash
-# 開発用依存関係
-pip install -r requirements.txt
+# 仮想環境作成
+python3 -m venv venv
+
+# 仮想環境有効化
+source venv/bin/activate  # Linux/macOS
+# venv\Scripts\activate   # Windows
+
+# 開発用依存関係インストール
+pip install -e ".[dev]"
 
 # 開発サーバー起動
 python -m app.main
+```
 
-# テスト実行
-python -m pytest tests/
+#### テスト実行
+```bash
+# 仮想環境を有効化してからテスト実行
+source venv/bin/activate
 
+# 全テスト実行
+python -m pytest tests/ -v
+
+# 特定のテストモジュール実行
+python -m pytest tests/unit/test_models.py -v
+
+# カバレッジ付きテスト実行
+python -m pytest tests/ --cov=app --cov-report=html
+
+# 単体テストのみ実行
+python tests/test_runner.py unit
+
+# 統合テストのみ実行  
+python tests/test_runner.py integration
+
+# 高速テストのみ実行（時間のかかるテストをスキップ）
+python -m pytest tests/ -m "not slow"
+```
+
+#### コード品質チェック
+```bash
 # リント
 python -m flake8 app/
 python -m mypy app/
+
+# コードフォーマット
+python -m black app/
+python -m isort app/
 ```
 
 ### バイナリビルド
@@ -193,7 +239,28 @@ app/
 │   ├── views/        # 画面・ダイアログ
 │   └── main_window.py # メインウィンドウ
 └── main.py           # エントリーポイント
+
+tests/
+├── unit/             # 単体テスト
+│   ├── test_models.py     # データモデルテスト
+│   ├── test_srt.py        # SRT処理テスト
+│   ├── test_qc_rules.py   # QCルールテスト
+│   └── test_csv_modules.py # CSV処理テスト
+├── integration/      # 統合テスト
+│   └── test_main_window.py # GUIテスト
+├── fixtures/         # テストデータ
+│   ├── sample.srt         # サンプルSRT
+│   └── sample_translation.csv # サンプル翻訳CSV
+├── conftest.py       # pytest設定
+├── test_runner.py    # カスタムテストランナー
+└── README.md         # テスト実行ガイド
 ```
+
+### テストカバレッジ
+- **単体テスト**: コアモジュール・データモデル・フォーマット処理
+- **統合テスト**: GUI操作・ウィンドウ連携・ユーザーワークフロー
+- **フィクスチャ**: 実データに近いサンプルファイル
+- **カスタムランナー**: テストタイプ別実行・カバレッジレポート
 
 ## 🤝 コントリビューション
 
