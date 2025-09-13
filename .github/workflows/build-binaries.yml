@@ -1,0 +1,149 @@
+name: Build Binaries
+
+on:
+  push:
+    tags:
+      - 'v*'  # v1.0.0 などのタグがプッシュされた時
+  workflow_dispatch:  # 手動実行も可能
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libxcb-xinerama0-dev \
+          libxcb-cursor0 \
+          libxcb-icccm4 \
+          libxcb-image0 \
+          libxcb-keysyms1 \
+          libxcb-render-util0 \
+          libxcb-shape0 \
+          libxcb-util1 \
+          libxcb-xkb1 \
+          libxkbcommon-x11-0 \
+          libgl1-mesa-glx
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[build]"
+        pip install pyinstaller
+    
+    - name: Build Linux binary
+      run: |
+        chmod +x scripts/build_binary.sh
+        ./scripts/build_binary.sh linux
+    
+    - name: Upload Linux binary
+      uses: actions/upload-artifact@v3
+      with:
+        name: vlog-subs-tool-linux
+        path: dist/linux/vlog-subs-tool
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[build]"
+        pip install pyinstaller
+    
+    - name: Build Windows binary
+      run: |
+        python -m PyInstaller --onefile --windowed --name "vlog-subs-tool" --distpath "dist/windows" --add-data "README.md;." app/main.py
+    
+    - name: Upload Windows binary
+      uses: actions/upload-artifact@v3
+      with:
+        name: vlog-subs-tool-windows
+        path: dist/windows/vlog-subs-tool.exe
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[build]"
+        pip install pyinstaller
+    
+    - name: Build macOS binary
+      run: |
+        python -m PyInstaller --onefile --windowed --name "VLog字幕ツール" --distpath "dist/macos" --add-data "README.md:." --osx-bundle-identifier "com.vlogsubs.tool" app/main.py
+    
+    - name: Upload macOS binary
+      uses: actions/upload-artifact@v3
+      with:
+        name: vlog-subs-tool-macos
+        path: dist/macos/VLog字幕ツール
+
+  create-release:
+    needs: [build-linux, build-windows, build-macos]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          vlog-subs-tool-linux/vlog-subs-tool
+          vlog-subs-tool-windows/vlog-subs-tool.exe
+          vlog-subs-tool-macos/VLog字幕ツール
+        body: |
+          ## 🎬 VLog字幕ツール ${{ github.ref_name }}
+
+          ### 📦 ダウンロード
+          
+          - **Linux**: `vlog-subs-tool` (実行可能ファイル)
+          - **Windows**: `vlog-subs-tool.exe` 
+          - **macOS**: `VLog字幕ツール`
+
+          ### 🚀 使用方法
+          
+          1. お使いのOS用のファイルをダウンロード
+          2. ダウンロードしたファイルを適当なフォルダに配置
+          3. ファイルをダブルクリックして実行
+
+          ### 📋 システム要件
+          
+          - **Windows**: Windows 10/11 (64bit)
+          - **macOS**: macOS 10.15+
+          - **Linux**: Ubuntu 20.04+ または同等のディストリビューション
+
+          ### ⚠️ 注意事項
+          
+          - 初回起動時にOCRモデルのダウンロードが必要です
+          - インターネット接続が必要です
+          - ウイルス対策ソフトで誤検知される場合があります
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
