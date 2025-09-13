@@ -96,7 +96,7 @@
 ---
 
 ## 🔚 補足
-- ClaudeがGitへの自動コミットを行う場合、**署名やAI記録が残らないよう工夫（ユーザー名は \"fukumarukun\" を想定）**。
+- **AI署名完全禁止**：コミットメッセージ・文章・コメントにClaude Code、Claude、AI生成、Co-Authored-By等の記述を絶対に含めない。
 - CLI版・Web版展開はこのGUI版が完成後に議論。
 
 ---
