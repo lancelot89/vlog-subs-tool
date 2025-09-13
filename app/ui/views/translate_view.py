@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QPushButton, QComboBox, QCheckBox, QSpinBox, QLineEdit,
     QLabel, QProgressBar, QTextEdit, QFileDialog, QMessageBox
 )
-from PySide6.QtCore import Qt, Signal, QThread, pyqtSignal
+from PySide6.QtCore import Qt, Signal, QThread
 
 
 class TranslateView(QDialog):
