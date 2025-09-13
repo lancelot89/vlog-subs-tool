@@ -19,7 +19,8 @@ from .views.player_view import PlayerView
 from .views.table_view import SubtitleTableView
 from .views.translate_view import TranslateView
 from .views.settings_view import SettingsView
-from ..core.models import Project
+from .extraction_worker import ExtractionWorker
+from ..core.models import Project, SubtitleItem
 
 
 class MainWindow(QMainWindow):
@@ -35,6 +36,9 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.current_project: Optional[Project] = None
         self.current_video_path: Optional[str] = None
+        
+        # 抽出ワーカー
+        self.extraction_worker: Optional[ExtractionWorker] = None
         
         self.init_ui()
         self.connect_signals()
@@ -253,27 +257,74 @@ class MainWindow(QMainWindow):
     
     def start_extraction(self):
         """字幕抽出を開始"""
-        if not self.current_project:
+        if not self.current_project or not self.current_video_path:
             return
         
-        self.extraction_started.emit()
-        self.status_label.setText("字幕を抽出しています...")
-        self.progress_bar.setVisible(True)
-        self.extract_btn.setEnabled(False)
+        # 既存の抽出処理をキャンセル
+        if self.extraction_worker and self.extraction_worker.isRunning():
+            self.extraction_worker.cancel()
+            self.extraction_worker.wait()
         
-        # TODO: 実際の抽出処理を別スレッドで実行
-        # 現在は仮の処理
-        QTimer.singleShot(2000, self._mock_extraction_complete)
+        # UI状態の更新
+        self.extraction_started.emit()
+        self.status_label.setText("字幕抽出を開始しています...")
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+        self.extract_btn.setEnabled(False)
+        self.re_extract_btn.setEnabled(False)
+        
+        # 抽出ワーカーの作成と開始
+        self.extraction_worker = ExtractionWorker(
+            self.current_video_path,
+            self.current_project.settings
+        )
+        
+        # ワーカーシグナルの接続
+        self.extraction_worker.progress_updated.connect(self.on_extraction_progress)
+        self.extraction_worker.subtitles_extracted.connect(self.on_extraction_completed)
+        self.extraction_worker.error_occurred.connect(self.on_extraction_error)
+        self.extraction_worker.finished.connect(self.on_extraction_finished)
+        
+        # 抽出開始
+        self.extraction_worker.start()
     
-    def _mock_extraction_complete(self):
-        """仮の抽出完了処理"""
-        self.progress_bar.setVisible(False)
+    def on_extraction_progress(self, percentage: int, message: str):
+        """抽出プログレス更新"""
+        self.progress_bar.setValue(percentage)
+        self.status_label.setText(message)
+    
+    def on_extraction_completed(self, subtitle_items: List[SubtitleItem]):
+        """抽出完了処理"""
+        # プロジェクトに字幕を設定
+        self.current_project.subtitles = subtitle_items
+        
+        # テーブルビューに字幕を表示
+        self.table_view.set_subtitles(subtitle_items)
+        
+        # UI状態の更新
         self.extract_btn.setEnabled(True)
         self.re_extract_btn.setEnabled(True)
         self.qc_btn.setEnabled(True)
         
-        self.status_label.setText("字幕の抽出が完了しました")
+        self.status_label.setText(f"字幕の抽出が完了しました ({len(subtitle_items)}件)")
         self.extraction_completed.emit()
+    
+    def on_extraction_error(self, error_message: str):
+        """抽出エラー処理"""
+        QMessageBox.critical(self, "抽出エラー", f"字幕の抽出に失敗しました:\\n{error_message}")
+        
+        # UI状態をリセット
+        self.extract_btn.setEnabled(True)
+        self.status_label.setText("字幕の抽出に失敗しました")
+    
+    def on_extraction_finished(self):
+        """抽出処理終了時の共通処理"""
+        self.progress_bar.setVisible(False)
+        
+        # ワーカーのクリーンアップ
+        if self.extraction_worker:
+            self.extraction_worker.cleanup()
+            self.extraction_worker = None
     
     def re_extract(self):
         """再抽出"""

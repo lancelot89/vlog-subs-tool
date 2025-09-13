@@ -1,0 +1,428 @@
+"""
+OCR結果のグルーピング・統合機能
+"""
+
+import re
+from typing import List, Dict, Tuple, Optional
+from dataclasses import dataclass
+from difflib import SequenceMatcher
+
+from ..models import SubtitleItem
+from .ocr import OCRResult
+from .sampler import VideoFrame
+
+
+@dataclass
+class FrameOCRResult:
+    """フレーム単位のOCR結果"""
+    frame: VideoFrame
+    ocr_results: List[OCRResult]
+    
+    @property
+    def best_text(self) -> str:
+        """最も信頼度の高いテキストを取得"""
+        if not self.ocr_results:
+            return ""
+        
+        best_result = max(self.ocr_results, key=lambda x: x.confidence)
+        return best_result.text
+    
+    @property
+    def average_confidence(self) -> float:
+        """平均信頼度を取得"""
+        if not self.ocr_results:
+            return 0.0
+        
+        return sum(r.confidence for r in self.ocr_results) / len(self.ocr_results)
+
+
+class TextSimilarityCalculator:
+    """テキスト類似度計算器"""
+    
+    @staticmethod
+    def calculate_similarity(text1: str, text2: str) -> float:
+        """
+        2つのテキストの類似度を計算（0.0-1.0）
+        
+        Args:
+            text1: テキスト1
+            text2: テキスト2
+            
+        Returns:
+            float: 類似度（0.0-1.0）
+        """
+        if not text1 or not text2:
+            return 0.0
+        
+        # 正規化（空白・記号の統一）
+        norm_text1 = TextSimilarityCalculator._normalize_text(text1)
+        norm_text2 = TextSimilarityCalculator._normalize_text(text2)
+        
+        # 完全一致
+        if norm_text1 == norm_text2:
+            return 1.0
+        
+        # 文字レベルの類似度（SequenceMatcher）
+        char_similarity = SequenceMatcher(None, norm_text1, norm_text2).ratio()
+        
+        # 単語レベルの類似度
+        words1 = set(norm_text1.split())
+        words2 = set(norm_text2.split())
+        
+        if not words1 and not words2:
+            word_similarity = 1.0
+        elif not words1 or not words2:
+            word_similarity = 0.0
+        else:
+            intersection = len(words1 & words2)
+            union = len(words1 | words2)
+            word_similarity = intersection / union if union > 0 else 0.0
+        
+        # 加重平均（文字レベル70%、単語レベル30%）
+        final_similarity = char_similarity * 0.7 + word_similarity * 0.3
+        
+        return final_similarity
+    
+    @staticmethod
+    def _normalize_text(text: str) -> str:
+        """テキストの正規化"""
+        # 小文字化
+        normalized = text.lower()
+        
+        # 全角・半角の統一
+        normalized = normalized.translate(str.maketrans(
+            'ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ'
+            'ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ'
+            '０１２３４５６７８９',
+            'abcdefghijklmnopqrstuvwxyz'
+            'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+            '0123456789'
+        ))
+        
+        # 句読点・記号の正規化
+        normalized = re.sub(r'[。、．，]', '', normalized)
+        normalized = re.sub(r'[!！]', '!', normalized)
+        normalized = re.sub(r'[?？]', '?', normalized)
+        
+        # 連続空白を1つに
+        normalized = re.sub(r'\\s+', ' ', normalized)
+        
+        return normalized.strip()
+
+
+class SubtitleGrouper:
+    """字幕グルーピング処理"""
+    
+    def __init__(self, 
+                 similarity_threshold: float = 0.90,
+                 min_duration_sec: float = 1.2,
+                 max_gap_sec: float = 0.5):
+        """
+        Args:
+            similarity_threshold: 類似度閾値（この値以上で同一字幕と判定）
+            min_duration_sec: 最小表示秒数
+            max_gap_sec: 結合可能な最大間隔（秒）
+        """
+        self.similarity_threshold = similarity_threshold
+        self.min_duration_ms = int(min_duration_sec * 1000)
+        self.max_gap_ms = int(max_gap_sec * 1000)
+        self.similarity_calc = TextSimilarityCalculator()
+    
+    def group_frame_results(self, frame_results: List[FrameOCRResult]) -> List[SubtitleItem]:
+        """
+        フレームOCR結果を字幕アイテムにグルーピング
+        
+        Args:
+            frame_results: フレーム別OCR結果リスト
+            
+        Returns:
+            List[SubtitleItem]: グルーピングされた字幕アイテム
+        """
+        if not frame_results:
+            return []
+        
+        # フレーム結果を時間順にソート
+        sorted_results = sorted(frame_results, key=lambda x: x.frame.timestamp_ms)
+        
+        # 空のフレームを除去
+        valid_results = [r for r in sorted_results if r.best_text.strip()]
+        
+        if not valid_results:
+            return []
+        
+        # 連続する類似フレームをグルーピング
+        groups = self._group_similar_frames(valid_results)
+        
+        # グループを字幕アイテムに変換
+        subtitle_items = []
+        for i, group in enumerate(groups):
+            item = self._create_subtitle_item(i + 1, group)
+            if item:
+                subtitle_items.append(item)
+        
+        # 短すぎる字幕を統合
+        subtitle_items = self._merge_short_subtitles(subtitle_items)
+        
+        # インデックスを再採番
+        for i, item in enumerate(subtitle_items, 1):
+            item.index = i
+        
+        return subtitle_items
+    
+    def _group_similar_frames(self, frame_results: List[FrameOCRResult]) -> List[List[FrameOCRResult]]:
+        """類似フレームをグルーピング"""
+        if not frame_results:
+            return []
+        
+        groups = []
+        current_group = [frame_results[0]]
+        
+        for i in range(1, len(frame_results)):
+            current_result = frame_results[i]
+            prev_result = frame_results[i-1]
+            
+            # テキスト類似度の計算
+            similarity = self.similarity_calc.calculate_similarity(
+                current_result.best_text,
+                prev_result.best_text
+            )
+            
+            # 時間間隔の確認
+            time_gap = current_result.frame.timestamp_ms - prev_result.frame.timestamp_ms
+            
+            # 同一グループに追加する条件
+            if (similarity >= self.similarity_threshold and 
+                time_gap <= self.max_gap_ms * 3):  # 少し余裕を持たせる
+                current_group.append(current_result)
+            else:
+                # 新しいグループを開始
+                groups.append(current_group)
+                current_group = [current_result]
+        
+        # 最後のグループを追加
+        if current_group:
+            groups.append(current_group)
+        
+        return groups
+    
+    def _create_subtitle_item(self, index: int, group: List[FrameOCRResult]) -> Optional[SubtitleItem]:
+        """グループから字幕アイテムを作成"""
+        if not group:
+            return None
+        
+        # 時間範囲の計算
+        start_ms = group[0].frame.timestamp_ms
+        end_ms = group[-1].frame.timestamp_ms
+        
+        # 最小表示時間の保証
+        if end_ms - start_ms < self.min_duration_ms:
+            end_ms = start_ms + self.min_duration_ms
+        
+        # 最も信頼度の高いテキストを選択
+        best_text = self._select_best_text(group)
+        
+        if not best_text.strip():
+            return None
+        
+        # バウンディングボックスの計算（最初のフレームの結果を使用）
+        bbox = self._calculate_bbox(group[0])
+        
+        return SubtitleItem(
+            index=index,
+            start_ms=start_ms,
+            end_ms=end_ms,
+            text=best_text,
+            bbox=bbox
+        )
+    
+    def _select_best_text(self, group: List[FrameOCRResult]) -> str:
+        """グループから最適なテキストを選択"""
+        if not group:
+            return ""
+        
+        # 各フレームのベストテキストと信頼度を取得
+        text_confidence_pairs = []
+        for frame_result in group:
+            text = frame_result.best_text
+            confidence = frame_result.average_confidence
+            if text.strip():
+                text_confidence_pairs.append((text, confidence))
+        
+        if not text_confidence_pairs:
+            return ""
+        
+        # 信頼度が最も高いテキストを選択
+        best_text, _ = max(text_confidence_pairs, key=lambda x: x[1])
+        
+        # テキストクリーンアップ
+        return self._clean_subtitle_text(best_text)
+    
+    def _clean_subtitle_text(self, text: str) -> str:
+        """字幕テキストのクリーンアップ"""
+        if not text:
+            return ""
+        
+        # 基本的なクリーンアップ
+        cleaned = text.strip()
+        
+        # 明らかな誤認識文字の除去・修正
+        replacements = {
+            '|': 'l',
+            '0': 'O',  # 文脈によって
+            '1': 'l',  # 文脈によって
+        }
+        
+        # OCR特有の誤認識パターンの修正
+        cleaned = re.sub(r'[\\x00-\\x1f\\x7f-\\x9f]', '', cleaned)  # 制御文字除去
+        
+        # 連続する同じ文字の除去（明らかな誤認識）
+        cleaned = re.sub(r'(.)\\1{3,}', r'\\1', cleaned)
+        
+        return cleaned
+    
+    def _calculate_bbox(self, frame_result: FrameOCRResult) -> Optional[Tuple[int, int, int, int]]:
+        """バウンディングボックスの計算"""
+        if not frame_result.ocr_results:
+            return None
+        
+        # 全ての検出領域を統合
+        min_x = min(r.bbox[0] for r in frame_result.ocr_results)
+        min_y = min(r.bbox[1] for r in frame_result.ocr_results)
+        max_x = max(r.bbox[0] + r.bbox[2] for r in frame_result.ocr_results)
+        max_y = max(r.bbox[1] + r.bbox[3] for r in frame_result.ocr_results)
+        
+        return (min_x, min_y, max_x - min_x, max_y - min_y)
+    
+    def _merge_short_subtitles(self, subtitles: List[SubtitleItem]) -> List[SubtitleItem]:
+        """短すぎる字幕を前後と統合"""
+        if not subtitles:
+            return []
+        
+        merged = []
+        i = 0
+        
+        while i < len(subtitles):
+            current = subtitles[i]
+            
+            # 表示時間が短すぎる場合
+            if current.duration_ms() < self.min_duration_ms:
+                # 次の字幕と統合可能かチェック
+                if (i + 1 < len(subtitles) and 
+                    subtitles[i + 1].start_ms - current.end_ms <= self.max_gap_ms):
+                    
+                    next_subtitle = subtitles[i + 1]
+                    
+                    # 統合
+                    merged_subtitle = SubtitleItem(
+                        index=current.index,
+                        start_ms=current.start_ms,
+                        end_ms=next_subtitle.end_ms,
+                        text=f"{current.text} {next_subtitle.text}",
+                        bbox=current.bbox
+                    )
+                    
+                    merged.append(merged_subtitle)
+                    i += 2  # 2つの字幕をスキップ
+                    continue
+                
+                # 前の字幕と統合可能かチェック
+                elif merged and current.start_ms - merged[-1].end_ms <= self.max_gap_ms:
+                    prev_subtitle = merged.pop()
+                    
+                    # 統合
+                    merged_subtitle = SubtitleItem(
+                        index=prev_subtitle.index,
+                        start_ms=prev_subtitle.start_ms,
+                        end_ms=current.end_ms,
+                        text=f"{prev_subtitle.text} {current.text}",
+                        bbox=prev_subtitle.bbox
+                    )
+                    
+                    merged.append(merged_subtitle)
+                    i += 1
+                    continue
+                
+                else:
+                    # 統合できない場合は最小時間まで延長
+                    current.end_ms = current.start_ms + self.min_duration_ms
+            
+            merged.append(current)
+            i += 1
+        
+        return merged
+
+
+class ExtractionProcessor:
+    """抽出処理の統合クラス"""
+    
+    def __init__(self, settings: Dict):
+        """
+        Args:
+            settings: 抽出設定辞書
+        """
+        self.settings = settings
+        self.grouper = SubtitleGrouper(
+            similarity_threshold=settings.get('similarity_threshold', 0.90),
+            min_duration_sec=settings.get('min_duration_sec', 1.2),
+            max_gap_sec=settings.get('max_gap_sec', 0.5)
+        )
+    
+    def process_extraction_results(self, 
+                                 frame_results: List[FrameOCRResult]) -> List[SubtitleItem]:
+        """
+        抽出結果の処理
+        
+        Args:
+            frame_results: フレーム別OCR結果
+            
+        Returns:
+            List[SubtitleItem]: 処理済み字幕アイテム
+        """
+        # グルーピング処理
+        subtitle_items = self.grouper.group_frame_results(frame_results)
+        
+        # 追加の後処理
+        subtitle_items = self._post_process_subtitles(subtitle_items)
+        
+        return subtitle_items
+    
+    def _post_process_subtitles(self, subtitles: List[SubtitleItem]) -> List[SubtitleItem]:
+        """字幕の後処理"""
+        # 重複除去
+        subtitles = self._remove_duplicates(subtitles)
+        
+        # 時間順ソート
+        subtitles.sort(key=lambda x: x.start_ms)
+        
+        # インデックス再採番
+        for i, subtitle in enumerate(subtitles, 1):
+            subtitle.index = i
+        
+        return subtitles
+    
+    def _remove_duplicates(self, subtitles: List[SubtitleItem]) -> List[SubtitleItem]:
+        """重複字幕の除去"""
+        if not subtitles:
+            return []
+        
+        unique_subtitles = []
+        calc = TextSimilarityCalculator()
+        
+        for subtitle in subtitles:
+            is_duplicate = False
+            
+            for existing in unique_subtitles:
+                # 時間が重複し、テキストが類似している場合は重複と判定
+                time_overlap = (subtitle.start_ms < existing.end_ms and 
+                              subtitle.end_ms > existing.start_ms)
+                
+                if time_overlap:
+                    similarity = calc.calculate_similarity(subtitle.text, existing.text)
+                    if similarity > 0.8:  # 重複判定の閾値
+                        is_duplicate = True
+                        break
+            
+            if not is_duplicate:
+                unique_subtitles.append(subtitle)
+        
+        return unique_subtitles
