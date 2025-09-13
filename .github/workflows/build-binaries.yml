@@ -41,11 +41,13 @@ jobs:
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -e ".[build]"
+        pip install -r requirements.txt
         pip install pyinstaller
-    
+
     - name: Build Linux binary
       run: |
+        # 仮想環境設定（GitHub Actionsではスキップされる）
+        export GITHUB_ACTIONS=true
         chmod +x scripts/build_binary.sh
         ./scripts/build_binary.sh linux
     
@@ -68,12 +70,16 @@ jobs:
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -e ".[build]"
+        pip install -r requirements.txt
         pip install pyinstaller
-    
+
     - name: Build Windows binary
+      shell: bash
       run: |
-        python -m PyInstaller --onefile --windowed --name "vlog-subs-tool" --distpath "dist/windows" --add-data "README.md;." app/main.py
+        # 仮想環境設定（GitHub Actionsではスキップされる）
+        export GITHUB_ACTIONS=true
+        chmod +x scripts/build_binary.sh
+        ./scripts/build_binary.sh windows
     
     - name: Upload Windows binary
       uses: actions/upload-artifact@v4
@@ -94,18 +100,30 @@ jobs:
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -e ".[build]"
+        pip install -r requirements.txt
         pip install pyinstaller
-    
+
     - name: Build macOS binary
       run: |
-        python -m PyInstaller --onefile --windowed --name "VLog字幕ツール" --distpath "dist/macos" --add-data "README.md:." --osx-bundle-identifier "com.vlogsubs.tool" app/main.py
+        # 仮想環境設定（GitHub Actionsではスキップされる）
+        export GITHUB_ACTIONS=true
+        chmod +x scripts/build_binary.sh
+        ./scripts/build_binary.sh macos
+
+    - name: Fix macOS app permissions
+      run: |
+        # .appバンドル内の実行権限を設定
+        if [ -d "dist/macos/VLog字幕ツール.app" ]; then
+          chmod +x "dist/macos/VLog字幕ツール.app/Contents/MacOS/VLog字幕ツール"
+          # macOSでのGatekeeper警告を回避するため、拡張属性を削除
+          xattr -cr "dist/macos/VLog字幕ツール.app" || true
+        fi
     
     - name: Upload macOS binary
       uses: actions/upload-artifact@v4
       with:
         name: vlog-subs-tool-macos
-        path: dist/macos/VLog字幕ツール
+        path: dist/macos/VLog字幕ツール.app
 
   create-release:
     needs: [build-linux, build-windows, build-macos]
@@ -121,21 +139,28 @@ jobs:
         files: |
           vlog-subs-tool-linux/vlog-subs-tool
           vlog-subs-tool-windows/vlog-subs-tool.exe
-          vlog-subs-tool-macos/VLog字幕ツール
+          vlog-subs-tool-macos/VLog字幕ツール.app
         body: |
           ## 🎬 VLog字幕ツール ${{ github.ref_name }}
 
           ### 📦 ダウンロード
           
           - **Linux**: `vlog-subs-tool` (実行可能ファイル)
-          - **Windows**: `vlog-subs-tool.exe` 
-          - **macOS**: `VLog字幕ツール`
+          - **Windows**: `vlog-subs-tool.exe`
+          - **macOS**: `VLog字幕ツール.app` (アプリケーションバンドル)
 
           ### 🚀 使用方法
-          
+
+          #### Windows・Linux
           1. お使いのOS用のファイルをダウンロード
           2. ダウンロードしたファイルを適当なフォルダに配置
           3. ファイルをダブルクリックして実行
+
+          #### macOS
+          1. `VLog字幕ツール.app` をダウンロード
+          2. ダウンロードしたファイルをアプリケーションフォルダに移動（推奨）
+          3. 右クリックで「開く」を選択（初回のみ）
+          4. セキュリティ警告で「開く」をクリック
 
           ### 📋 システム要件
           
