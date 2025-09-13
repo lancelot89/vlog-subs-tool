@@ -41,11 +41,13 @@ jobs:
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -e ".[build]"
+        pip install -r requirements.txt
         pip install pyinstaller
-    
+
     - name: Build Linux binary
       run: |
+        # 仮想環境設定（GitHub Actionsではスキップされる）
+        export GITHUB_ACTIONS=true
         chmod +x scripts/build_binary.sh
         ./scripts/build_binary.sh linux
     
@@ -68,12 +70,16 @@ jobs:
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -e ".[build]"
+        pip install -r requirements.txt
         pip install pyinstaller
-    
+
     - name: Build Windows binary
+      shell: bash
       run: |
-        python -m PyInstaller --onefile --windowed --name "vlog-subs-tool" --distpath "dist/windows" --add-data "README.md;." app/main.py
+        # 仮想環境設定（GitHub Actionsではスキップされる）
+        export GITHUB_ACTIONS=true
+        chmod +x scripts/build_binary.sh
+        ./scripts/build_binary.sh windows
     
     - name: Upload Windows binary
       uses: actions/upload-artifact@v4
@@ -94,18 +100,21 @@ jobs:
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -e ".[build]"
+        pip install -r requirements.txt
         pip install pyinstaller
-    
+
     - name: Build macOS binary
       run: |
-        python -m PyInstaller --onefile --windowed --name "VLog字幕ツール" --distpath "dist/macos" --add-data "README.md:." --osx-bundle-identifier "com.vlogsubs.tool" app/main.py
+        # 仮想環境設定（GitHub Actionsではスキップされる）
+        export GITHUB_ACTIONS=true
+        chmod +x scripts/build_binary.sh
+        ./scripts/build_binary.sh macos
     
     - name: Upload macOS binary
       uses: actions/upload-artifact@v4
       with:
         name: vlog-subs-tool-macos
-        path: dist/macos/VLog字幕ツール
+        path: dist/macos/VLog字幕ツール.app
 
   create-release:
     needs: [build-linux, build-windows, build-macos]
@@ -121,7 +130,7 @@ jobs:
         files: |
           vlog-subs-tool-linux/vlog-subs-tool
           vlog-subs-tool-windows/vlog-subs-tool.exe
-          vlog-subs-tool-macos/VLog字幕ツール
+          vlog-subs-tool-macos/VLog字幕ツール.app
         body: |
           ## 🎬 VLog字幕ツール ${{ github.ref_name }}
 
