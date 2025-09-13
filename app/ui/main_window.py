@@ -5,7 +5,7 @@ DESIGN.mdの画面仕様に基づくGUIレイアウト
 
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 from PySide6.QtWidgets import (
     QMainWindow, QApplication, QWidget, QHBoxLayout, QVBoxLayout,
@@ -20,9 +20,9 @@ from .views.table_view import SubtitleTableView
 from .views.translate_view import TranslateView
 from .views.settings_view import SettingsView
 from .extraction_worker import ExtractionWorker
-from ..core.models import Project, SubtitleItem
-from ..core.format.srt import SRTFormatter, SRTFormatSettings
-from ..core.qc.rules import QCChecker
+from app.core.models import Project, SubtitleItem
+from app.core.format.srt import SRTFormatter, SRTFormatSettings
+from app.core.qc.rules import QCChecker
 
 
 class MainWindow(QMainWindow):

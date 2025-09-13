@@ -7,7 +7,7 @@ from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 
-from ..models import SubtitleItem
+from app.core.models import SubtitleItem
 from .ocr import OCRResult
 from .sampler import VideoFrame
 
