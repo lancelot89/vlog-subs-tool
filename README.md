@@ -26,17 +26,19 @@ VLog字幕ツールは、音声なしのVLOG動画に焼き付けられた日本
 ### インストール
 
 #### 方法1: バイナリ版（推奨）
-```bash
-# リリースページからダウンロード
-# Windows: vlog-subs-tool.exe
-# macOS: VLog字幕ツール.app
-# Linux: vlog-subs-tool.AppImage
-```
+
+**📦 [リリースページ](https://github.com/lancelot89/vlog-subs-tool/releases/latest)** からプラットフォーム別のファイルをダウンロード：
+
+- **Windows**: `vlog-subs-tool.exe` (準備中)
+- **macOS**: `VLog字幕ツール.app` (準備中)  
+- **Linux**: `vlog-subs-tool.AppImage` (準備中)
+
+> **注意**: バイナリファイルは現在準備中です。ソースコードから実行をご利用ください。
 
 #### 方法2: ソースコードから実行
 ```bash
 # リポジトリのクローン
-git clone https://github.com/your-username/vlog-subs-tool.git
+git clone https://github.com/lancelot89/vlog-subs-tool.git
 cd vlog-subs-tool
 
 # 仮想環境作成（推奨）
@@ -265,7 +267,7 @@ tests/
 ## 🤝 コントリビューション
 
 ### バグレポート・機能要望
-- **Issues**: [GitHub Issues](https://github.com/your-username/vlog-subs-tool/issues)
+- **Issues**: [GitHub Issues](https://github.com/lancelot89/vlog-subs-tool/issues)
 - **サポート**: OCR精度向上・翻訳API追加・UI改善のご提案歓迎
 
 ### 開発参加
@@ -293,9 +295,9 @@ tests/
 
 ## 📞 サポート・お問い合わせ
 
-- **ドキュメント**: [Wiki](https://github.com/your-username/vlog-subs-tool/wiki)
-- **FAQ**: [よくある質問](https://github.com/your-username/vlog-subs-tool/wiki/FAQ)
-- **Discussions**: [GitHub Discussions](https://github.com/your-username/vlog-subs-tool/discussions)
+- **ドキュメント**: [Wiki](https://github.com/lancelot89/vlog-subs-tool/wiki)
+- **FAQ**: [よくある質問](https://github.com/lancelot89/vlog-subs-tool/wiki/FAQ)
+- **Discussions**: [GitHub Discussions](https://github.com/lancelot89/vlog-subs-tool/discussions)
 
 ---
 
