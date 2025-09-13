@@ -21,6 +21,8 @@ from .views.translate_view import TranslateView
 from .views.settings_view import SettingsView
 from .extraction_worker import ExtractionWorker
 from ..core.models import Project, SubtitleItem
+from ..core.format.srt import SRTFormatter, SRTFormatSettings
+from ..core.qc.rules import QCChecker
 
 
 class MainWindow(QMainWindow):
@@ -95,6 +97,19 @@ class MainWindow(QMainWindow):
         
         file_menu.addSeparator()
         
+        # SRT出力メニュー
+        export_menu = file_menu.addMenu("字幕を出力(&E)")
+        
+        export_ja_action = QAction("日本語SRT(&J)", self)
+        export_ja_action.triggered.connect(self.export_japanese_srt)
+        export_menu.addAction(export_ja_action)
+        
+        export_all_action = QAction("全言語SRT(&A)", self)
+        export_all_action.triggered.connect(self.export_all_srt)
+        export_menu.addAction(export_all_action)
+        
+        file_menu.addSeparator()
+        
         exit_action = QAction("終了(&X)", self)
         exit_action.setShortcut("Alt+F4")
         exit_action.triggered.connect(self.close)
@@ -162,6 +177,12 @@ class MainWindow(QMainWindow):
         self.save_btn.clicked.connect(self.save_project)
         self.save_btn.setEnabled(False)
         toolbar.addWidget(self.save_btn)
+        
+        # SRT出力
+        self.export_srt_btn = QPushButton("SRT出力")
+        self.export_srt_btn.clicked.connect(self.export_japanese_srt)
+        self.export_srt_btn.setEnabled(False)
+        toolbar.addWidget(self.export_srt_btn)
     
     def create_central_widget(self):
         """中央ウィジェットの作成"""
@@ -305,6 +326,7 @@ class MainWindow(QMainWindow):
         self.extract_btn.setEnabled(True)
         self.re_extract_btn.setEnabled(True)
         self.qc_btn.setEnabled(True)
+        self.export_srt_btn.setEnabled(True)
         
         self.status_label.setText(f"字幕の抽出が完了しました ({len(subtitle_items)}件)")
         self.extraction_completed.emit()
@@ -332,11 +354,65 @@ class MainWindow(QMainWindow):
     
     def run_qc_check(self):
         """QCチェックを実行"""
-        if not self.current_project:
+        if not self.current_project or not self.current_project.subtitles:
+            QMessageBox.information(self, "情報", "QCチェックする字幕がありません。\\n先に字幕を抽出してください。")
             return
         
-        # TODO: QCチェック処理の実装
-        self.status_label.setText("QCチェックを実行しました")
+        try:
+            # QCチェッカーでチェック実行
+            qc_checker = QCChecker()
+            qc_results = qc_checker.check_all(self.current_project.subtitles)
+            
+            # 結果のサマリー
+            summary = qc_checker.get_summary(qc_results)
+            
+            # 結果表示
+            self.show_qc_results(qc_results, summary)
+            
+            self.status_label.setText(f"QCチェック完了: {summary['total']}件の問題を検出")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "エラー", f"QCチェックでエラーが発生しました:\\n{str(e)}")
+    
+    def show_qc_results(self, qc_results, summary):
+        """QC結果を表示"""
+        if not qc_results:
+            QMessageBox.information(
+                self, 
+                "QCチェック結果", 
+                "品質チェックが完了しました。\\n問題は検出されませんでした。"
+            )
+            return
+        
+        # 結果の詳細メッセージを作成
+        message = f"品質チェック結果:\\n"
+        message += f"・エラー: {summary['error']}件\\n"
+        message += f"・警告: {summary['warning']}件\\n"
+        message += f"・情報: {summary['info']}件\\n\\n"
+        
+        # エラーと警告の詳細を表示（最大10件）
+        error_warnings = [r for r in qc_results if r.severity in ["error", "warning"]]
+        if error_warnings:
+            message += "主な問題:\\n"
+            for i, result in enumerate(error_warnings[:10]):
+                message += f"{i+1}. 字幕{result.subtitle_index+1}: {result.message}\\n"
+            
+            if len(error_warnings) > 10:
+                message += f"...他 {len(error_warnings)-10}件\\n"
+        
+        # メッセージボックスで表示
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("QCチェック結果")
+        msg_box.setText(message)
+        
+        if summary['error'] > 0:
+            msg_box.setIcon(QMessageBox.Critical)
+        elif summary['warning'] > 0:
+            msg_box.setIcon(QMessageBox.Warning)
+        else:
+            msg_box.setIcon(QMessageBox.Information)
+        
+        msg_box.exec()
     
     def save_project(self):
         """プロジェクトを保存"""
@@ -374,6 +450,72 @@ class MainWindow(QMainWindow):
             "VLog字幕ツール v1.0\\n\\n"
             "VLOG動画から字幕を自動抽出し、編集・翻訳・出力を行うアプリケーションです。\\n\\n"
             "技術スタック: Python + PySide6 + OpenCV + PaddleOCR"
+        )
+    
+    def export_japanese_srt(self):
+        """日本語SRTファイルを出力"""
+        if not self.current_project or not self.current_project.subtitles:
+            QMessageBox.information(self, "情報", "出力する字幕がありません。\\n先に字幕を抽出してください。")
+            return
+        
+        # 保存先の選択
+        if self.current_video_path:
+            video_path = Path(self.current_video_path)
+            default_filename = f"{video_path.stem}.ja.srt"
+        else:
+            default_filename = "subtitles.ja.srt"
+        
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "日本語SRTファイルを保存",
+            default_filename,
+            "SRTファイル (*.srt);;すべてのファイル (*)"
+        )
+        
+        if not file_path:
+            return
+        
+        try:
+            # SRT フォーマッタを作成
+            settings = SRTFormatSettings(
+                encoding="utf-8",
+                with_bom=False,
+                line_ending="lf",
+                max_chars_per_line=42,
+                max_lines=2
+            )
+            formatter = SRTFormatter(settings)
+            
+            # SRTファイルを保存
+            success = formatter.save_srt_file(self.current_project.subtitles, Path(file_path))
+            
+            if success:
+                QMessageBox.information(
+                    self, 
+                    "保存完了", 
+                    f"日本語SRTファイルを保存しました:\\n{file_path}"
+                )
+                self.status_label.setText(f"SRTファイルを保存: {Path(file_path).name}")
+            else:
+                QMessageBox.critical(self, "保存エラー", "SRTファイルの保存に失敗しました。")
+        
+        except Exception as e:
+            QMessageBox.critical(self, "エラー", f"SRTファイルの保存でエラーが発生しました:\\n{str(e)}")
+    
+    def export_all_srt(self):
+        """全言語のSRTファイルを出力（現在は日本語のみ）"""
+        # 将来的に多言語対応する際のプレースホルダー
+        self.export_japanese_srt()
+    
+    def get_srt_export_settings(self) -> SRTFormatSettings:
+        """SRT出力設定を取得（設定画面から）"""
+        # TODO: 設定画面から取得する実装
+        return SRTFormatSettings(
+            encoding="utf-8",
+            with_bom=False,
+            line_ending="lf",
+            max_chars_per_line=42,
+            max_lines=2
         )
     
     def update_status(self):
