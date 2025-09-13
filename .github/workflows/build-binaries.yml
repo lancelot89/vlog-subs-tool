@@ -6,6 +6,10 @@ on:
       - 'v*'  # v1.0.0 などのタグがプッシュされた時
   workflow_dispatch:  # 手動実行も可能
 
+permissions:
+  contents: write
+  actions: read
+
 jobs:
   build-linux:
     runs-on: ubuntu-latest
