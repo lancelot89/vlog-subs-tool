@@ -1,0 +1,189 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vlog-subs-tool"
+version = "1.0.0"
+description = "VLOG動画から字幕を自動抽出・編集・翻訳・出力する非エンジニア向けデスクトップアプリケーション"
+authors = [
+    {name = "VLog字幕ツール Development Team", email = "dev@vlog-subs-tool.com"},
+]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.8"
+keywords = ["subtitle", "ocr", "translation", "video", "srt", "gui", "desktop"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Text Processing :: Linguistic",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+    "Environment :: X11 Applications :: Qt",
+    "Environment :: Win32 (MS Windows)",
+    "Environment :: MacOS X",
+]
+
+dependencies = [
+    "PySide6>=6.5.0",
+    "opencv-python>=4.8.0",
+    "ffmpeg-python>=0.2.0",
+    "paddlepaddle>=2.5.0",
+    "paddleocr>=2.7.0",
+    "pytesseract>=0.3.10",
+    "google-cloud-translate>=3.12.0",
+    "deepl>=1.12.0",
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    "python-bidi>=0.4.2",
+    "pysrt>=1.1.2",
+    "PyYAML>=6.0",
+    "Pillow>=10.0.0",
+    "loguru>=0.7.0",
+    "tqdm>=4.65.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-qt>=4.2.0",
+    "flake8>=5.0.0",
+    "mypy>=1.0.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "pre-commit>=3.0.0",
+]
+build = [
+    "pyinstaller>=5.13.0",
+    "setuptools>=61.0",
+    "wheel>=0.38.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/your-username/vlog-subs-tool"
+Repository = "https://github.com/your-username/vlog-subs-tool.git"
+Issues = "https://github.com/your-username/vlog-subs-tool/issues"
+Documentation = "https://github.com/your-username/vlog-subs-tool/wiki"
+
+[project.scripts]
+vlog-subs-tool = "app.main:main"
+
+[project.gui-scripts]
+vlog-subs-tool-gui = "app.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+exclude = ["tests*", "build*", "dist*"]
+
+[tool.black]
+line-length = 100
+target-version = ['py38', 'py39', 'py310', 'py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+  | paddle_models
+  | tesseract_models
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+known_first_party = ["app"]
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "cv2.*",
+    "paddleocr.*",
+    "tesseract.*",
+    "ffmpeg.*",
+    "pysrt.*",
+    "bidi.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q --strict-markers --cov=app --cov-report=term-missing --cov-report=html"
+testpaths = [
+    "tests",
+]
+python_files = [
+    "test_*.py",
+    "*_test.py",
+]
+python_classes = [
+    "Test*",
+]
+python_functions = [
+    "test_*",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+    "gui: marks tests as GUI tests",
+    "ocr: marks tests that require OCR models",
+]
+
+[tool.coverage.run]
+source = ["app"]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/__main__.py",
+    "*/main.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
