@@ -19,6 +19,7 @@ class PlayerView(QWidget):
     # シグナル定義
     time_changed = Signal(int)  # 再生時間変更（ミリ秒）
     frame_changed = Signal(int)  # フレーム変更
+    subtitle_sync_request = Signal(int)  # 字幕同期要求
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -27,6 +28,15 @@ class PlayerView(QWidget):
         self.total_frames = 0
         self.fps = 30.0
         self.current_time_ms = 0
+        
+        # 字幕関連
+        self.current_subtitles = []
+        self.current_subtitle_text = ""
+        
+        # ループ再生関連
+        self.loop_start_ms = 0
+        self.loop_end_ms = 0
+        self.is_looping = False
         
         # タイマー
         self.timer = QTimer()
@@ -98,11 +108,18 @@ class PlayerView(QWidget):
         
         self.loop_start_btn = QPushButton("開始点設定")
         self.loop_start_btn.setEnabled(False)
+        self.loop_start_btn.clicked.connect(self.set_loop_start)
         loop_layout.addWidget(self.loop_start_btn)
         
         self.loop_end_btn = QPushButton("終了点設定")
         self.loop_end_btn.setEnabled(False)
+        self.loop_end_btn.clicked.connect(self.set_loop_end)
         loop_layout.addWidget(self.loop_end_btn)
+        
+        self.clear_loop_btn = QPushButton("解除")
+        self.clear_loop_btn.setEnabled(False)
+        self.clear_loop_btn.clicked.connect(self.clear_loop)
+        loop_layout.addWidget(self.clear_loop_btn)
         
         loop_layout.addStretch()
         
@@ -169,6 +186,9 @@ class PlayerView(QWidget):
         if ret:
             self.display_frame(frame)
         
+        # 字幕更新
+        self.update_current_subtitle()
+        
         # シグナルの発信
         self.time_changed.emit(self.current_time_ms)
         self.frame_changed.emit(frame_num)
@@ -189,6 +209,16 @@ class PlayerView(QWidget):
             return
         
         next_frame = self.current_frame + 1
+        next_time_ms = int(next_frame * 1000 / self.fps)
+        
+        # ループ再生チェック
+        if self.loop_check.isChecked() and self.loop_end_ms > 0:
+            if next_time_ms >= self.loop_end_ms:
+                # ループ開始点に戻る
+                self.seek_to_time(self.loop_start_ms)
+                return
+        
+        # 通常の終了チェック
         if next_frame >= self.total_frames:
             self.timer.stop()
             self.play_btn.setText("再生")
@@ -208,6 +238,10 @@ class PlayerView(QWidget):
         # ROI表示
         if self.show_roi_check.isChecked():
             rgb_frame = self.draw_roi(rgb_frame)
+        
+        # 字幕オーバーレイ
+        if self.show_subtitle_check.isChecked() and self.current_subtitle_text:
+            rgb_frame = self.draw_subtitle_overlay(rgb_frame)
         
         # NumPy配列からQPixmapに変換
         height, width, channel = rgb_frame.shape
@@ -268,6 +302,103 @@ class PlayerView(QWidget):
         if self.cap:
             self.cap.release()
         event.accept()
-
-
-from PySide6.QtGui import QImage
+    
+    def set_subtitles(self, subtitles):
+        """字幕リストを設定"""
+        self.current_subtitles = subtitles
+        self.update_current_subtitle()
+    
+    def update_current_subtitle(self):
+        """現在時間の字幕テキストを更新"""
+        self.current_subtitle_text = ""
+        
+        for subtitle in self.current_subtitles:
+            if subtitle.start_ms <= self.current_time_ms <= subtitle.end_ms:
+                self.current_subtitle_text = subtitle.text
+                break
+    
+    def draw_subtitle_overlay(self, frame):
+        """字幕オーバーレイを描画"""
+        if not self.current_subtitle_text:
+            return frame
+        
+        height, width = frame.shape[:2]
+        
+        # 字幕表示位置（下部中央）
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.8
+        thickness = 2
+        
+        # テキストサイズを計算
+        lines = self.current_subtitle_text.split('\n')
+        line_height = 30
+        max_width = 0
+        
+        for line in lines:
+            (text_width, text_height), _ = cv2.getTextSize(line, font, font_scale, thickness)
+            max_width = max(max_width, text_width)
+        
+        # 背景矩形
+        bg_height = len(lines) * line_height + 20
+        bg_y = height - bg_height - 20
+        bg_x = (width - max_width) // 2 - 10
+        
+        # 半透明背景
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (bg_x, bg_y), (bg_x + max_width + 20, bg_y + bg_height), 
+                     (0, 0, 0), -1)
+        frame = cv2.addWeighted(frame, 0.7, overlay, 0.3, 0)
+        
+        # テキスト描画
+        y_offset = bg_y + 30
+        for line in lines:
+            (text_width, _), _ = cv2.getTextSize(line, font, font_scale, thickness)
+            x_pos = (width - text_width) // 2
+            
+            # 白い縁取り
+            cv2.putText(frame, line, (x_pos, y_offset), font, font_scale, (0, 0, 0), thickness + 2)
+            # 白いテキスト
+            cv2.putText(frame, line, (x_pos, y_offset), font, font_scale, (255, 255, 255), thickness)
+            
+            y_offset += line_height
+        
+        return frame
+    
+    def set_loop_start(self):
+        """ループ開始点を現在時間に設定"""
+        self.loop_start_ms = self.current_time_ms
+        self.clear_loop_btn.setEnabled(True)
+        self.update_loop_display()
+    
+    def set_loop_end(self):
+        """ループ終了点を現在時間に設定"""
+        self.loop_end_ms = self.current_time_ms
+        if self.loop_end_ms <= self.loop_start_ms:
+            self.loop_end_ms = self.loop_start_ms + 2000  # 最低2秒
+        self.clear_loop_btn.setEnabled(True)
+        self.update_loop_display()
+    
+    def set_loop_region(self, start_ms: int, end_ms: int):
+        """ループ区間を設定（外部から）"""
+        self.loop_start_ms = start_ms
+        self.loop_end_ms = end_ms
+        self.loop_check.setChecked(True)
+        self.clear_loop_btn.setEnabled(True)
+        self.update_loop_display()
+    
+    def clear_loop(self):
+        """ループ設定をクリア"""
+        self.loop_start_ms = 0
+        self.loop_end_ms = 0
+        self.loop_check.setChecked(False)
+        self.clear_loop_btn.setEnabled(False)
+        self.update_loop_display()
+    
+    def update_loop_display(self):
+        """ループ表示を更新"""
+        if self.loop_start_ms > 0 and self.loop_end_ms > 0:
+            start_time = self.format_time(self.loop_start_ms)
+            end_time = self.format_time(self.loop_end_ms)
+            self.loop_check.setText(f"ループ再生 ({start_time} - {end_time})")
+        else:
+            self.loop_check.setText("ループ再生")
