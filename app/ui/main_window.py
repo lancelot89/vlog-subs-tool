@@ -109,6 +109,20 @@ class MainWindow(QMainWindow):
         # 翻訳メニュー
         translate_menu = menubar.addMenu("翻訳(&T)")
         
+        translate_settings_action = QAction("翻訳設定(&S)", self)
+        translate_settings_action.triggered.connect(self.show_translate_view)
+        translate_menu.addAction(translate_settings_action)
+        
+        translate_menu.addSeparator()
+        
+        export_csv_action = QAction("CSVエクスポート(&E)", self)
+        export_csv_action.triggered.connect(self.export_translation_csv)
+        translate_menu.addAction(export_csv_action)
+        
+        import_csv_action = QAction("翻訳CSVインポート(&I)", self)
+        import_csv_action.triggered.connect(self.import_translation_csv)
+        translate_menu.addAction(import_csv_action)
+        
         # 設定メニュー
         settings_menu = menubar.addMenu("設定(&S)")
         
@@ -154,6 +168,19 @@ class MainWindow(QMainWindow):
         self.qc_btn.clicked.connect(self.run_qc_check)
         self.qc_btn.setEnabled(False)
         toolbar.addWidget(self.qc_btn)
+        
+        toolbar.addSeparator()
+        
+        # 翻訳・CSV連携
+        self.translate_btn = QPushButton("翻訳設定")
+        self.translate_btn.clicked.connect(self.show_translate_view)
+        self.translate_btn.setEnabled(False)
+        toolbar.addWidget(self.translate_btn)
+        
+        self.csv_export_btn = QPushButton("CSV出力")
+        self.csv_export_btn.clicked.connect(self.export_translation_csv)
+        self.csv_export_btn.setEnabled(False)
+        toolbar.addWidget(self.csv_export_btn)
         
         toolbar.addSeparator()
         
@@ -305,6 +332,8 @@ class MainWindow(QMainWindow):
         self.extract_btn.setEnabled(True)
         self.re_extract_btn.setEnabled(True)
         self.qc_btn.setEnabled(True)
+        self.translate_btn.setEnabled(True)
+        self.csv_export_btn.setEnabled(True)
         
         self.status_label.setText(f"字幕の抽出が完了しました ({len(subtitle_items)}件)")
         self.extraction_completed.emit()
@@ -375,6 +404,44 @@ class MainWindow(QMainWindow):
             "VLOG動画から字幕を自動抽出し、編集・翻訳・出力を行うアプリケーションです。\\n\\n"
             "技術スタック: Python + PySide6 + OpenCV + PaddleOCR"
         )
+    
+    def show_translate_view(self):
+        """翻訳設定画面を表示"""
+        if not self.table_view.subtitles:
+            QMessageBox.warning(self, "警告", "字幕データがありません\\n先に字幕抽出を行ってください")
+            return
+        
+        translate_dialog = TranslateView(self)
+        translate_dialog.set_subtitles(self.table_view.subtitles, self.current_project)
+        translate_dialog.translations_updated.connect(self.on_translations_updated)
+        translate_dialog.exec()
+    
+    def export_translation_csv(self):
+        """翻訳用CSVエクスポート"""
+        if not self.table_view.subtitles:
+            QMessageBox.warning(self, "警告", "字幕データがありません")
+            return
+        
+        # 翻訳設定画面を開く
+        self.show_translate_view()
+    
+    def import_translation_csv(self):
+        """翻訳済みCSVインポート"""
+        if not self.table_view.subtitles:
+            QMessageBox.warning(self, "警告", "元の字幕データがありません")
+            return
+        
+        # 翻訳設定画面を開く
+        self.show_translate_view()
+    
+    def on_translations_updated(self, translations_dict):
+        """翻訳データ更新時の処理"""
+        # 現在のプロジェクトに翻訳データを保存
+        if self.current_project:
+            # プロジェクトデータに翻訳情報を追加（将来の拡張用）
+            pass
+        
+        self.status_label.setText(f"翻訳データ更新: {len(translations_dict)}言語")
     
     def update_status(self):
         """ステータスの定期更新"""

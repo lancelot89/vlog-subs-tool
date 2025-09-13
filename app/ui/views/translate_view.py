@@ -7,11 +7,23 @@ from PySide6.QtWidgets import (
     QPushButton, QComboBox, QCheckBox, QSpinBox, QLineEdit,
     QLabel, QProgressBar, QTextEdit, QFileDialog, QMessageBox
 )
-from PySide6.QtCore import Qt, Signal, QThread, pyqtSignal
+from PySide6.QtCore import Qt, Signal, QThread
+from pathlib import Path
+from typing import List, Dict, Optional
+
+from ...core.models import SubtitleItem, Project
+from ...core.csv import (
+    SubtitleCSVExporter, SubtitleCSVImporter, 
+    TranslationWorkflowManager, CSVExportSettings
+)
+from ...core.format.srt import SRTFormatter
 
 
 class TranslateView(QDialog):
     """翻訳設定・実行ダイアログ"""
+    
+    # シグナル定義
+    translations_updated = Signal(dict)  # 翻訳データ更新
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -19,7 +31,23 @@ class TranslateView(QDialog):
         self.setModal(True)
         self.resize(600, 500)
         
+        # データ
+        self.subtitles: List[SubtitleItem] = []
+        self.project: Optional[Project] = None
+        self.translated_subtitles: Dict[str, List[SubtitleItem]] = {}
+        
         self.init_ui()
+    
+    def set_subtitles(self, subtitles: List[SubtitleItem], project: Optional[Project] = None):
+        """字幕データを設定"""
+        self.subtitles = subtitles
+        self.project = project
+        
+        # ボタンの有効/無効を設定
+        has_subtitles = len(subtitles) > 0
+        self.export_csv_btn.setEnabled(has_subtitles)
+        self.translate_btn.setEnabled(has_subtitles)
+        self.save_srt_btn.setEnabled(len(self.translated_subtitles) > 0)
     
     def init_ui(self):
         """UIの初期化"""
@@ -226,33 +254,172 @@ class TranslateView(QDialog):
     
     def export_csv(self):
         """CSVに書き出し"""
-        file_path, _ = QFileDialog.getSaveFileName(
+        if not self.subtitles:
+            QMessageBox.warning(self, "警告", "字幕データがありません")
+            return
+        
+        # 選択された言語を取得
+        target_langs = self._get_selected_languages()
+        if not target_langs:
+            QMessageBox.warning(self, "警告", "対象言語が選択されていません")
+            return
+        
+        # ベースディレクトリの選択
+        base_dir = QFileDialog.getExistingDirectory(
             self,
-            "翻訳用CSVファイルを保存",
-            "subs/export.csv",
-            "CSVファイル (*.csv);;すべてのファイル (*)"
+            "翻訳ファイル出力先フォルダを選択",
+            str(Path.cwd() / "subs")
         )
         
-        if file_path:
-            # TODO: 実際のCSVエクスポート処理
-            self.log_text.append(f"CSVを書き出しました: {file_path}")
+        if not base_dir:
+            return
+        
+        try:
+            # プロジェクト名を決定
+            project_name = self._get_project_name()
+            
+            # 翻訳ワークフローを作成
+            workflow_manager = TranslationWorkflowManager(Path(base_dir))
+            created_files = workflow_manager.create_translation_workflow(
+                self.subtitles, project_name, target_langs
+            )
+            
+            # 結果をログに表示
+            self.log_text.append("翻訳ワークフローファイルを作成しました:")
+            for file_type, file_path in created_files.items():
+                self.log_text.append(f"  {file_type}: {file_path.name}")
+            
+            # 成功メッセージ
+            QMessageBox.information(
+                self, 
+                "完了", 
+                f"翻訳用ファイルを作成しました\\n出力先: {base_dir}\\n\\n"
+                f"作成されたファイル:\\n" + 
+                "\\n".join([f"• {path.name}" for path in created_files.values()])
+            )
+            
+        except Exception as e:
+            self.log_text.append(f"エクスポートエラー: {str(e)}")
+            QMessageBox.critical(self, "エラー", f"CSVエクスポートに失敗しました:\\n{str(e)}")
     
     def import_csv(self):
         """翻訳済みCSVを取り込み"""
-        file_path, _ = QFileDialog.getOpenFileName(
+        if not self.subtitles:
+            QMessageBox.warning(self, "警告", "元の字幕データがありません\\n先に字幕抽出を行ってください")
+            return
+        
+        file_paths, _ = QFileDialog.getOpenFileNames(
             self,
-            "翻訳済みCSVファイルを選択",
-            "subs/",
+            "翻訳済みCSVファイルを選択（複数選択可）",
+            str(Path.cwd() / "subs"),
             "CSVファイル (*.csv);;すべてのファイル (*)"
         )
         
-        if file_path:
-            # TODO: 実際のCSVインポート処理
-            self.log_text.append(f"翻訳CSVを取り込みました: {file_path}")
+        if not file_paths:
+            return
+        
+        try:
+            importer = SubtitleCSVImporter()
+            imported_languages = []
+            total_imported = 0
+            
+            for file_path in file_paths:
+                self.log_text.append(f"インポート中: {Path(file_path).name}")
+                
+                # CSVインポート実行
+                result = importer.import_translated_csv(Path(file_path), self.subtitles)
+                
+                if result.success:
+                    self.translated_subtitles[result.language] = result.subtitles
+                    imported_languages.append(result.language)
+                    total_imported += result.imported_count
+                    
+                    self.log_text.append(f"  ✓ {result.language}: {result.imported_count}件取得")
+                    
+                    # 警告があれば表示
+                    if result.warnings:
+                        self.log_text.append(f"  警告: {len(result.warnings)}件")
+                        for warning in result.warnings[:3]:  # 最初の3件のみ表示
+                            self.log_text.append(f"    {warning}")
+                        if len(result.warnings) > 3:
+                            self.log_text.append(f"    ...他{len(result.warnings) - 3}件")
+                else:
+                    self.log_text.append(f"  ✗ インポート失敗: {Path(file_path).name}")
+                    for error in result.errors:
+                        self.log_text.append(f"    エラー: {error}")
+            
+            # 結果表示
+            if imported_languages:
+                self.save_srt_btn.setEnabled(True)
+                self.translations_updated.emit(self.translated_subtitles)
+                
+                QMessageBox.information(
+                    self, 
+                    "インポート完了", 
+                    f"翻訳データを取り込みました\\n\\n"
+                    f"言語: {', '.join(imported_languages)}\\n"
+                    f"合計字幕数: {total_imported}件\\n\\n"
+                    f"「SRT一括保存」で字幕ファイルを生成できます"
+                )
+            else:
+                QMessageBox.warning(self, "警告", "有効な翻訳データが見つかりませんでした")
+            
+        except Exception as e:
+            self.log_text.append(f"インポートエラー: {str(e)}")
+            QMessageBox.critical(self, "エラー", f"CSVインポートに失敗しました:\\n{str(e)}")
     
     def save_all_srt(self):
         """全言語のSRTファイルを保存"""
-        # TODO: 実際のSRT保存処理
+        if not self.translated_subtitles and not self.subtitles:
+            QMessageBox.warning(self, "警告", "保存する字幕データがありません")
+            return
+        
+        # 保存先ディレクトリを選択
+        output_dir = QFileDialog.getExistingDirectory(
+            self,
+            "SRTファイル保存先フォルダを選択",
+            str(Path.cwd())
+        )
+        
+        if not output_dir:
+            return
+        
+        try:
+            formatter = SRTFormatter()
+            project_name = self._get_project_name()
+            saved_files = []
+            
+            # 日本語（元データ）を保存
+            if self.subtitles:
+                ja_path = Path(output_dir) / f"{project_name}.ja.srt"
+                if formatter.save_srt_file(self.subtitles, ja_path):
+                    saved_files.append(f"ja: {ja_path.name}")
+                    self.log_text.append(f"日本語SRT保存: {ja_path.name}")
+            
+            # 各翻訳言語を保存
+            for lang, subtitles in self.translated_subtitles.items():
+                if subtitles:
+                    srt_path = Path(output_dir) / f"{project_name}.{lang}.srt"
+                    if formatter.save_srt_file(subtitles, srt_path):
+                        saved_files.append(f"{lang}: {srt_path.name}")
+                        self.log_text.append(f"{lang}SRT保存: {srt_path.name}")
+            
+            if saved_files:
+                QMessageBox.information(
+                    self,
+                    "保存完了",
+                    f"SRTファイルを保存しました\\n保存先: {output_dir}\\n\\n"
+                    f"保存されたファイル:\\n" + "\\n".join([f"• {file}" for file in saved_files])
+                )
+            else:
+                QMessageBox.warning(self, "警告", "保存できるファイルがありませんでした")
+            
+        except Exception as e:
+            self.log_text.append(f"SRT保存エラー: {str(e)}")
+            QMessageBox.critical(self, "エラー", f"SRT保存に失敗しました:\\n{str(e)}")
+    
+    def _get_selected_languages(self) -> List[str]:
+        """選択された言語リストを取得"""
         languages = []
         if self.en_check.isChecked():
             languages.append("en")
@@ -262,8 +429,13 @@ class TranslateView(QDialog):
             languages.append("ko")
         if self.ar_check.isChecked():
             languages.append("ar")
-        
-        self.log_text.append(f"SRTファイルを保存しました: {', '.join(languages)}")
+        return languages
+    
+    def _get_project_name(self) -> str:
+        """プロジェクト名を取得"""
+        if self.project and self.project.settings.video_path:
+            return Path(self.project.settings.video_path).stem
+        return "subtitles"
 
 
 class GoogleApiSettingsDialog(QDialog):
