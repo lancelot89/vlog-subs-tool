@@ -634,16 +634,68 @@ class MainWindow(QMainWindow):
 
 def main():
     """メイン関数"""
-    app = QApplication(sys.argv)
-    
-    # アプリケーションの設定
-    app.setApplicationName("VLog字幕ツール")
-    app.setApplicationVersion("1.0.0")
-    app.setOrganizationName("VLogTools")
-    
-    # メインウィンドウの作成と表示
-    window = MainWindow()
-    window.show()
-    
-    # アプリケーションの実行
-    sys.exit(app.exec())
+    try:
+        import logging
+
+        # ロギング設定
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+
+        # Qt のメッセージハンドラ設定
+        from PySide6.QtCore import qInstallMessageHandler, QtMsgType
+
+        def qt_message_handler(mode, context, message):
+            if mode == QtMsgType.QtCriticalMsg or mode == QtMsgType.QtFatalMsg:
+                logging.error(f"Qt Error: {message}")
+            elif mode == QtMsgType.QtWarningMsg:
+                logging.warning(f"Qt Warning: {message}")
+            else:
+                logging.info(f"Qt Info: {message}")
+
+        qInstallMessageHandler(qt_message_handler)
+
+        app = QApplication(sys.argv)
+
+        # アプリケーションの設定
+        app.setApplicationName("VLog字幕ツール")
+        app.setApplicationVersion("1.0.0")
+        app.setOrganizationName("VLogTools")
+
+        # 依存関係の確認
+        try:
+            import cv2
+            logging.info(f"OpenCV version: {cv2.__version__}")
+        except ImportError as e:
+            logging.error(f"OpenCV import failed: {e}")
+
+        try:
+            import paddleocr
+            logging.info("PaddleOCR imported successfully")
+        except ImportError as e:
+            logging.error(f"PaddleOCR import failed: {e}")
+
+        # メインウィンドウの作成と表示
+        window = MainWindow()
+        window.show()
+
+        # アプリケーションの実行
+        sys.exit(app.exec())
+
+    except Exception as e:
+        # 致命的エラーの処理
+        import traceback
+        error_msg = f"アプリケーション起動エラー: {str(e)}\n\n{traceback.format_exc()}"
+
+        try:
+            # Qt が使用可能な場合はメッセージボックスで表示
+            if 'app' in locals():
+                QMessageBox.critical(None, "起動エラー", error_msg)
+            else:
+                print(error_msg, file=sys.stderr)
+        except:
+            # 最終手段として標準エラー出力に表示
+            print(error_msg, file=sys.stderr)
+
+        sys.exit(1)
