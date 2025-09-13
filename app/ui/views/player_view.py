@@ -270,8 +270,4 @@ class PlayerView(QWidget):
         event.accept()
 
 
-# PySide6のQImageをインポート（後で使用）
-try:
-    from PySide6.QtGui import QImage
-except ImportError:
-    print("QImageのインポートに失敗しました")
+from PySide6.QtGui import QImage
