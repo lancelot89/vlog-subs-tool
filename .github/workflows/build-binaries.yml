@@ -45,7 +45,7 @@ jobs:
         ./scripts/build_binary.sh linux
     
     - name: Upload Linux binary
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: vlog-subs-tool-linux
         path: dist/linux/vlog-subs-tool
@@ -71,7 +71,7 @@ jobs:
         python -m PyInstaller --onefile --windowed --name "vlog-subs-tool" --distpath "dist/windows" --add-data "README.md;." app/main.py
     
     - name: Upload Windows binary
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: vlog-subs-tool-windows
         path: dist/windows/vlog-subs-tool.exe
@@ -97,7 +97,7 @@ jobs:
         python -m PyInstaller --onefile --windowed --name "VLog字幕ツール" --distpath "dist/macos" --add-data "README.md:." --osx-bundle-identifier "com.vlogsubs.tool" app/main.py
     
     - name: Upload macOS binary
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: vlog-subs-tool-macos
         path: dist/macos/VLog字幕ツール
@@ -108,7 +108,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     steps:
     - name: Download all artifacts
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
     
     - name: Create Release
       uses: softprops/action-gh-release@v1
