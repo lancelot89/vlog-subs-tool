@@ -54,70 +54,117 @@ check_environment() {
 # クリーンアップ
 cleanup() {
     log_info "前回のビルドファイルをクリーンアップ中..."
-    rm -rf "$BUILD_DIR" "$DIST_DIR" *.spec
+    rm -rf "$BUILD_DIR" "$DIST_DIR"
+    # 自動生成されたspecファイルのみ削除（手動作成したvlog-subs-tool.specは保持）
+    find . -name "*.spec" -not -name "vlog-subs-tool.spec" -delete 2>/dev/null || true
 }
 
 # Windowsビルド
 build_windows() {
     log_info "Windows用バイナリをビルド中..."
-    
-    pyinstaller \
-        --onefile \
-        --windowed \
-        --name "vlog-subs-tool" \
-        --distpath "$DIST_DIR/windows" \
-        --workpath "$BUILD_DIR/windows" \
-        --add-data "README.md:." \
-        --hidden-import "PySide6.QtCore" \
-        --hidden-import "PySide6.QtGui" \
-        --hidden-import "PySide6.QtWidgets" \
-        --exclude-module "tkinter" \
-        --exclude-module "matplotlib" \
-        app/main.py
-    
+
+    # specファイルが存在する場合はそれを使用
+    if [[ -f "vlog-subs-tool.spec" ]]; then
+        log_info "specファイルを使用してビルド中..."
+        pyinstaller \
+            --distpath "$DIST_DIR/windows" \
+            --workpath "$BUILD_DIR/windows" \
+            vlog-subs-tool.spec
+    else
+        log_warn "specファイルが見つかりません。従来の方法でビルド..."
+        pyinstaller \
+            --onefile \
+            --windowed \
+            --name "vlog-subs-tool" \
+            --distpath "$DIST_DIR/windows" \
+            --workpath "$BUILD_DIR/windows" \
+            --add-data "README.md:." \
+            --hidden-import "PySide6.QtCore" \
+            --hidden-import "PySide6.QtGui" \
+            --hidden-import "PySide6.QtWidgets" \
+            --hidden-import "paddleocr" \
+            --hidden-import "paddle" \
+            --hidden-import "cv2" \
+            --hidden-import "numpy" \
+            --exclude-module "tkinter" \
+            --exclude-module "matplotlib" \
+            app/main.py
+    fi
+
     log_info "Windows用バイナリ完成: $DIST_DIR/windows/vlog-subs-tool.exe"
 }
 
 # macOSビルド
 build_macos() {
     log_info "macOS用バイナリをビルド中..."
-    
-    pyinstaller \
-        --onefile \
-        --windowed \
-        --name "$APP_NAME" \
-        --distpath "$DIST_DIR/macos" \
-        --workpath "$BUILD_DIR/macos" \
-        --add-data "README.md:." \
-        --hidden-import "PySide6.QtCore" \
-        --hidden-import "PySide6.QtGui" \
-        --hidden-import "PySide6.QtWidgets" \
-        --exclude-module "tkinter" \
-        --exclude-module "matplotlib" \
-        --osx-bundle-identifier "com.vlogsubs.tool" \
-        app/main.py
-    
+
+    # specファイルが存在する場合はそれを使用
+    if [[ -f "vlog-subs-tool.spec" ]]; then
+        log_info "specファイルを使用してビルド中..."
+        # macOS用に設定を一時変更
+        sed 's/console=False/console=False, target_os="Darwin"/' vlog-subs-tool.spec > vlog-subs-tool-macos.spec
+        pyinstaller \
+            --distpath "$DIST_DIR/macos" \
+            --workpath "$BUILD_DIR/macos" \
+            vlog-subs-tool-macos.spec
+        rm -f vlog-subs-tool-macos.spec
+    else
+        log_warn "specファイルが見つかりません。従来の方法でビルド..."
+        pyinstaller \
+            --onefile \
+            --windowed \
+            --name "$APP_NAME" \
+            --distpath "$DIST_DIR/macos" \
+            --workpath "$BUILD_DIR/macos" \
+            --add-data "README.md:." \
+            --hidden-import "PySide6.QtCore" \
+            --hidden-import "PySide6.QtGui" \
+            --hidden-import "PySide6.QtWidgets" \
+            --hidden-import "paddleocr" \
+            --hidden-import "paddle" \
+            --hidden-import "cv2" \
+            --hidden-import "numpy" \
+            --exclude-module "tkinter" \
+            --exclude-module "matplotlib" \
+            --osx-bundle-identifier "com.vlogsubs.tool" \
+            app/main.py
+    fi
+
     log_info "macOS用バイナリ完成: $DIST_DIR/macos/$APP_NAME.app"
 }
 
 # Linuxビルド
 build_linux() {
     log_info "Linux用バイナリをビルド中..."
-    
-    pyinstaller \
-        --onefile \
-        --windowed \
-        --name "vlog-subs-tool" \
-        --distpath "$DIST_DIR/linux" \
-        --workpath "$BUILD_DIR/linux" \
-        --add-data "README.md:." \
-        --hidden-import "PySide6.QtCore" \
-        --hidden-import "PySide6.QtGui" \
-        --hidden-import "PySide6.QtWidgets" \
-        --exclude-module "tkinter" \
-        --exclude-module "matplotlib" \
-        app/main.py
-    
+
+    # specファイルが存在する場合はそれを使用
+    if [[ -f "vlog-subs-tool.spec" ]]; then
+        log_info "specファイルを使用してビルド中..."
+        pyinstaller \
+            --distpath "$DIST_DIR/linux" \
+            --workpath "$BUILD_DIR/linux" \
+            vlog-subs-tool.spec
+    else
+        log_warn "specファイルが見つかりません。従来の方法でビルド..."
+        pyinstaller \
+            --onefile \
+            --windowed \
+            --name "vlog-subs-tool" \
+            --distpath "$DIST_DIR/linux" \
+            --workpath "$BUILD_DIR/linux" \
+            --add-data "README.md:." \
+            --hidden-import "PySide6.QtCore" \
+            --hidden-import "PySide6.QtGui" \
+            --hidden-import "PySide6.QtWidgets" \
+            --hidden-import "paddleocr" \
+            --hidden-import "paddle" \
+            --hidden-import "cv2" \
+            --hidden-import "numpy" \
+            --exclude-module "tkinter" \
+            --exclude-module "matplotlib" \
+            app/main.py
+    fi
+
     # AppImage作成（オプション）
     if command -v appimagetool &> /dev/null; then
         log_info "AppImage作成中..."
@@ -125,7 +172,7 @@ build_linux() {
     else
         log_warn "AppImageToolが見つかりません。通常のバイナリのみ作成"
     fi
-    
+
     log_info "Linux用バイナリ完成: $DIST_DIR/linux/vlog-subs-tool"
 }
 
