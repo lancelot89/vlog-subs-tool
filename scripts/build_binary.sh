@@ -55,8 +55,12 @@ check_environment() {
 cleanup() {
     log_info "前回のビルドファイルをクリーンアップ中..."
     rm -rf "$BUILD_DIR" "$DIST_DIR"
-    # 自動生成されたspecファイルのみ削除（手動作成したvlog-subs-tool.specは保持）
-    find . -name "*.spec" -not -name "vlog-subs-tool.spec" -delete 2>/dev/null || true
+    # 自動生成されたspecファイルのみ削除（手動作成したspecファイルは保持）
+    find . -name "*.spec" \
+        -not -name "vlog-subs-tool.spec" \
+        -not -name "vlog-subs-tool-macos.spec" \
+        -not -name "temp-macos.spec" \
+        -delete 2>/dev/null || true
 }
 
 # Windowsビルド
@@ -98,20 +102,25 @@ build_windows() {
 build_macos() {
     log_info "macOS用バイナリをビルド中..."
 
-    # specファイルが存在する場合はそれを使用
-    if [[ -f "vlog-subs-tool.spec" ]]; then
-        log_info "specファイルを使用してビルド中..."
-        # macOS用に設定を一時変更
-        sed 's/console=False/console=False, target_os="Darwin"/' vlog-subs-tool.spec > vlog-subs-tool-macos.spec
+    # macOS専用specファイルが存在する場合はそれを優先使用
+    if [[ -f "vlog-subs-tool-macos.spec" ]]; then
+        log_info "macOS専用specファイルを使用してビルド中..."
         pyinstaller \
             --distpath "$DIST_DIR/macos" \
             --workpath "$BUILD_DIR/macos" \
             vlog-subs-tool-macos.spec
-        rm -f vlog-subs-tool-macos.spec
+    elif [[ -f "vlog-subs-tool.spec" ]]; then
+        log_info "汎用specファイルを使用してビルド中..."
+        # 汎用specファイルをmacOS用に一時変更
+        sed 's/name='\''vlog-subs-tool'\''/name='\''VLog字幕ツール'\''/' vlog-subs-tool.spec > temp-macos.spec
+        pyinstaller \
+            --distpath "$DIST_DIR/macos" \
+            --workpath "$BUILD_DIR/macos" \
+            temp-macos.spec
+        rm -f temp-macos.spec
     else
         log_warn "specファイルが見つかりません。従来の方法でビルド..."
         pyinstaller \
-            --onefile \
             --windowed \
             --name "$APP_NAME" \
             --distpath "$DIST_DIR/macos" \

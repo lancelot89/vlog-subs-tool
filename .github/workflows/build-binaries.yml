@@ -109,6 +109,15 @@ jobs:
         export GITHUB_ACTIONS=true
         chmod +x scripts/build_binary.sh
         ./scripts/build_binary.sh macos
+
+    - name: Fix macOS app permissions
+      run: |
+        # .appバンドル内の実行権限を設定
+        if [ -d "dist/macos/VLog字幕ツール.app" ]; then
+          chmod +x "dist/macos/VLog字幕ツール.app/Contents/MacOS/VLog字幕ツール"
+          # macOSでのGatekeeper警告を回避するため、拡張属性を削除
+          xattr -cr "dist/macos/VLog字幕ツール.app" || true
+        fi
     
     - name: Upload macOS binary
       uses: actions/upload-artifact@v4
@@ -137,14 +146,21 @@ jobs:
           ### 📦 ダウンロード
           
           - **Linux**: `vlog-subs-tool` (実行可能ファイル)
-          - **Windows**: `vlog-subs-tool.exe` 
-          - **macOS**: `VLog字幕ツール`
+          - **Windows**: `vlog-subs-tool.exe`
+          - **macOS**: `VLog字幕ツール.app` (アプリケーションバンドル)
 
           ### 🚀 使用方法
-          
+
+          #### Windows・Linux
           1. お使いのOS用のファイルをダウンロード
           2. ダウンロードしたファイルを適当なフォルダに配置
           3. ファイルをダブルクリックして実行
+
+          #### macOS
+          1. `VLog字幕ツール.app` をダウンロード
+          2. ダウンロードしたファイルをアプリケーションフォルダに移動（推奨）
+          3. 右クリックで「開く」を選択（初回のみ）
+          4. セキュリティ警告で「開く」をクリック
 
           ### 📋 システム要件
           
