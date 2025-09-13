@@ -1,0 +1,38 @@
+# GUI Framework
+PySide6>=6.5.0
+
+# Video Processing
+opencv-python>=4.8.0
+ffmpeg-python>=0.2.0
+
+# OCR
+paddlepaddle>=2.5.0
+paddleocr>=2.7.0
+pytesseract>=0.3.10  # オプション
+
+# Translation APIs
+google-cloud-translate>=3.12.0
+deepl>=1.12.0
+
+# Data Processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# File Handling
+python-bidi>=0.4.2  # RTL language support
+pysrt>=1.1.2  # SRT file handling
+
+# Packaging
+pyinstaller>=5.13.0
+
+# Configuration
+PyYAML>=6.0
+
+# Image Processing (additional for OCR preprocessing)
+Pillow>=10.0.0
+
+# Logging
+loguru>=0.7.0
+
+# Progress bars for GUI
+tqdm>=4.65.0
