@@ -5,8 +5,8 @@
 from PySide6.QtCore import QThread, Signal, QObject
 from typing import List, Optional
 
-from ..core.models import SubtitleItem, ProjectSettings
-from ..core.extractor.detector import SubtitleDetector
+from app.core.models import SubtitleItem, ProjectSettings
+from app.core.extractor.detector import SubtitleDetector
 
 
 class ExtractionWorker(QThread):

@@ -11,7 +11,7 @@ from PySide6.QtCore import Qt, Signal, QPoint
 from PySide6.QtGui import QFont, QColor, QAction
 from typing import List, Optional
 
-from ...core.models import SubtitleItem
+from app.core.models import SubtitleItem
 
 
 class SubtitleTableView(QWidget):

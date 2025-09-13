@@ -8,7 +8,7 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 
-from ..models import SubtitleItem, ProjectSettings
+from app.core.models import SubtitleItem, ProjectSettings
 from .sampler import VideoSampler, BottomROISampler, VideoFrame
 from .roi import ROIManager, ROIMode, ROIRegion
 from .ocr import OCRManager, OCRResult

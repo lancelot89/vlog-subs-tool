@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime
 
-from ..models import SubtitleItem
+from app.core.models import SubtitleItem
 
 
 @dataclass

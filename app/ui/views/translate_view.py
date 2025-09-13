@@ -11,12 +11,12 @@ from PySide6.QtCore import Qt, Signal, QThread
 from pathlib import Path
 from typing import List, Dict, Optional
 
-from ...core.models import SubtitleItem, Project
-from ...core.csv import (
+from app.core.models import SubtitleItem, Project
+from app.core.csv import (
     SubtitleCSVExporter, SubtitleCSVImporter, 
     TranslationWorkflowManager, CSVExportSettings
 )
-from ...core.format.srt import SRTFormatter
+from app.core.format.srt import SRTFormatter
 
 
 class TranslateView(QDialog):

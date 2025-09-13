@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
-from ..models import SubtitleItem
+from app.core.models import SubtitleItem
 
 
 @dataclass

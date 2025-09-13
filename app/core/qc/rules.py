@@ -6,7 +6,7 @@ from typing import List, Dict, Any
 from dataclasses import dataclass
 from enum import Enum
 
-from ..models import SubtitleItem, QCResult
+from app.core.models import SubtitleItem, QCResult
 
 
 class QCSeverity(Enum):
