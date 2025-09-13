@@ -1,0 +1,52 @@
+# アプリケーション設定ファイル
+app:
+  name: "VLog字幕ツール"
+  version: "1.0.0"
+  
+# 抽出設定のデフォルト値
+extraction:
+  fps_sample: 3.0
+  roi_mode: "bottom_30"  # "auto", "bottom_30", "manual"
+  bottom_ratio: 0.3
+  ocr_engine: "paddleocr_ja"
+  
+# 整形設定のデフォルト値
+formatting:
+  max_chars_per_line: 42
+  max_lines: 2
+  min_duration_sec: 1.2
+  similarity_threshold: 0.90
+  
+# 出力設定のデフォルト値
+output:
+  srt_encoding: "utf-8"
+  filename_pattern: "{basename}.{lang}.srt"
+  csv_encoding: "utf-8"
+  
+# 翻訳設定
+translation:
+  providers:
+    - "none"  # CSV外部連携
+    - "google_v3"
+    - "deepl"
+  default_languages:
+    - "en"
+    - "zh"
+    - "ko"
+    - "ar"
+    
+# UI設定
+ui:
+  window_width: 1200
+  window_height: 800
+  table_columns:
+    - "index"
+    - "start_time"
+    - "end_time"
+    - "text"
+    
+# ログ設定
+logging:
+  level: "INFO"
+  format: "{time} | {level} | {message}"
+  file: "app.log"
