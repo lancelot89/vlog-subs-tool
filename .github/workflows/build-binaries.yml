@@ -22,9 +22,9 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y \
           qt6-base-dev \
-          libgl1-mesa-glx \
+          libgl1-mesa-dev \
           libxcb-xinerama0 \
-          libegl1-mesa \
+          libegl1-mesa-dev \
           libxkbcommon-x11-0 \
           libxcb-icccm4 \
           libxcb-image0 \
