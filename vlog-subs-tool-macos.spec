@@ -52,18 +52,29 @@ hidden_imports = [
     'yaml',
     'bidi.algorithm',
 
-    # アプリケーション内部モジュール
+    # アプリケーション内部モジュール（完全収集）
+    'app',
+    'app.main',
     'app.core',
     'app.core.models',
     'app.core.extractor',
     'app.core.extractor.ocr',
     'app.core.extractor.detector',
+    'app.core.format',
     'app.core.format.srt',
     'app.core.csv',
+    'app.core.qc',
     'app.core.qc.rules',
+    'app.core.translate',
+    'app.core.translate.provider_google',
+    'app.core.translate.provider_deepl',
     'app.ui',
     'app.ui.main_window',
     'app.ui.views',
+    'app.ui.dialogs',
+    'app.ui.dialogs.ocr_setup_dialog',
+    'app.ui.dialogs.translation_dialog',
+    'app.ui.dialogs.settings_dialog',
 ]
 
 # データファイルの定義
@@ -94,12 +105,15 @@ hooks_dir = project_root / "hooks"
 if hooks_dir.exists():
     hookspath_list.append(str(hooks_dir))
 
-# 分析設定
+# 分析設定（完全スタンドアロン対応）
 a = Analysis(
     ['app/main.py'],
     pathex=[str(project_root), str(app_dir)],
     binaries=binaries,
-    datas=datas,
+    datas=datas + [
+        # アプリケーション全体をバンドル
+        (str(app_dir), 'app'),
+    ],
     hiddenimports=hidden_imports,
     hookspath=hookspath_list,
     hooksconfig={},
@@ -109,6 +123,16 @@ a = Analysis(
     win_private_assemblies=False,
     cipher=None,
     noarchive=False,
+    # 再帰的にすべてのモジュールを収集
+    collect_all=[
+        'app',
+        'app.ui',
+        'app.core',
+        'app.core.extractor',
+        'app.core.format',
+        'app.core.translate',
+        'app.core.qc',
+    ],
 )
 
 # PYZアーカイブ作成
@@ -151,17 +175,17 @@ app = BUNDLE(
     name='VLog字幕ツール.app',
     icon=None,
     bundle_identifier='com.vlogsubs.tool',
-    version='1.0.0',
+    version='1.0.5',
     info_plist={
         'CFBundleDisplayName': 'VLog字幕ツール',
-        'CFBundleGetInfoString': 'VLOG動画字幕抽出・編集・翻訳ツール v1.0.0',
+        'CFBundleGetInfoString': 'VLOG動画字幕抽出・編集・翻訳ツール v1.0.5 - 完全スタンドアロン対応',
         'CFBundleIdentifier': 'com.vlogsubs.tool',
         'CFBundleInfoDictionaryVersion': '6.0',
         'CFBundleName': 'VLog字幕ツール',
         'CFBundlePackageType': 'APPL',
-        'CFBundleShortVersionString': '1.0.0',
+        'CFBundleShortVersionString': '1.0.5',
         'CFBundleSignature': 'VLOG',
-        'CFBundleVersion': '1.0.0',
+        'CFBundleVersion': '1.0.5',
         'LSMinimumSystemVersion': '10.15',
         'NSHighResolutionCapable': True,
         'NSHumanReadableCopyright': '© 2024 VLog字幕ツール',
