@@ -12,7 +12,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from ...core.extractor.ocr import OCRModelDownloader, PADDLEOCR_AVAILABLE
+from app.core.extractor.ocr import OCRModelDownloader, PADDLEOCR_AVAILABLE
 
 
 class OCRSetupWorker(QThread):

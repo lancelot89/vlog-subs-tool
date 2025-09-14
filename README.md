@@ -23,6 +23,33 @@ VLog字幕ツールは、音声なしのVLOG動画に焼き付けられた日本
 - **RAM**: 4GB以上推奨
 - **ストレージ**: 2GB以上の空き容量
 
+### Linux環境での追加設定
+
+Linux環境で日本語UIを正しく表示するために、以下の追加設定が必要です：
+
+#### 日本語フォントのインストール
+```bash
+# Ubuntu/Debian系
+sudo apt update
+sudo apt install fonts-noto-cjk fonts-noto-cjk-extra fonts-dejavu
+
+# CentOS/RHEL系
+sudo yum install google-noto-cjk-fonts dejavu-sans-fonts
+
+# Arch Linux
+sudo pacman -S noto-fonts-cjk ttf-dejavu
+```
+
+#### ロケール設定（オプション）
+```bash
+# 日本語ロケールの有効化
+sudo locale-gen ja_JP.UTF-8
+
+# 環境変数設定（シェル設定ファイルに追加）
+export LANG=ja_JP.UTF-8
+export LC_ALL=ja_JP.UTF-8
+```
+
 ### インストール
 
 #### 方法1: バイナリ版（推奨）

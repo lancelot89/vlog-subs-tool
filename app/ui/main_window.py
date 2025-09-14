@@ -27,6 +27,102 @@ from app.core.qc.rules import QCChecker
 from app.core.extractor.ocr import OCRModelDownloader, PADDLEOCR_AVAILABLE
 
 
+def setup_japanese_support(app):
+    """日本語表示サポート設定"""
+    import locale
+    import os
+    from PySide6.QtCore import QLocale
+    from PySide6.QtGui import QFont, QFontDatabase
+
+    try:
+        # システムエンコーディング設定
+        if hasattr(locale, 'getpreferredencoding'):
+            encoding = locale.getpreferredencoding()
+            if encoding.lower() not in ['utf-8', 'utf8']:
+                os.environ['LANG'] = 'ja_JP.UTF-8'
+                os.environ['LC_ALL'] = 'ja_JP.UTF-8'
+
+        # Qt ロケール設定
+        QLocale.setDefault(QLocale(QLocale.Japanese))
+
+        # フォント設定
+        font_database = QFontDatabase()
+
+        # 利用可能な日本語フォントを検索
+        japanese_fonts = [
+            "Noto Sans CJK JP",
+            "IPAexGothic",
+            "IPAPGothic",
+            "VL PGothic",
+            "TakaoExGothic",
+            "TakaoPGothic",
+            "MS Gothic",
+            "Meiryo",
+            "Yu Gothic",
+            "ヒラギノ角ゴ ProN",
+            "Source Han Sans JP",
+            "DejaVu Sans"
+        ]
+
+        selected_font = None
+        for font_name in japanese_fonts:
+            families = font_database.families()
+            for family in families:
+                if font_name.lower() in family.lower():
+                    selected_font = family
+                    break
+            if selected_font:
+                break
+
+        # フォールバック: システムのデフォルト日本語フォント
+        if not selected_font:
+            # システムフォントから検索
+            for family in font_database.families():
+                # CJK（中日韓）文字対応フォントを検索
+                if any(keyword in family.lower() for keyword in ['cjk', 'gothic', 'mincho', 'jp', 'japanese']):
+                    selected_font = family
+                    break
+
+        # 最終フォールバック: 汎用Unicode対応フォント
+        if not selected_font:
+            fallback_fonts = [
+                "Arial Unicode MS",
+                "DejaVu Sans",
+                "Liberation Sans",
+                "FreeSans",
+                "sans-serif"
+            ]
+            for fallback in fallback_fonts:
+                if fallback in font_database.families():
+                    selected_font = fallback
+                    break
+
+            # 全てのフォールバックが失敗した場合
+            if not selected_font:
+                selected_font = font_database.families()[0] if font_database.families() else "Arial"
+
+        # アプリケーション全体のフォント設定
+        font = QFont(selected_font, 10)
+        # 日本語表示に最適なヒント設定
+        font.setStyleHint(QFont.SansSerif, QFont.PreferDefault)
+        font.setStyleStrategy(QFont.PreferAntialias)
+        app.setFont(font)
+
+        import logging
+        logging.info(f"日本語フォント設定完了: {selected_font}")
+
+        # 利用可能なフォント一覧をデバッグ出力（最初の10個）
+        available_fonts = font_database.families()[:10]
+        logging.info(f"利用可能なフォント (最初10個): {available_fonts}")
+
+    except Exception as e:
+        import logging
+        logging.error(f"日本語サポート設定でエラー: {e}")
+        # エラーの場合はデフォルトフォントを使用
+        default_font = QFont("DejaVu Sans", 10)
+        app.setFont(default_font)
+
+
 class MainWindow(QMainWindow):
     """メインウィンドウクラス"""
     
@@ -841,6 +937,9 @@ def main():
         qInstallMessageHandler(qt_message_handler)
 
         app = QApplication(sys.argv)
+
+        # 日本語対応設定
+        setup_japanese_support(app)
 
         # アプリケーションの設定
         app.setApplicationName("VLog字幕ツール")
