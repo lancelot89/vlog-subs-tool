@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QFileDialog, QMessageBox, QProgressBar, QLabel
 )
 from PySide6.QtCore import Qt, Signal, QTimer
-from PySide6.QtGui import QAction, QIcon
+from PySide6.QtGui import QAction, QIcon, QKeySequence, QShortcut
 
 from .views.player_view import PlayerView
 from .views.table_view import SubtitleTableView
@@ -44,7 +44,8 @@ class MainWindow(QMainWindow):
         
         self.init_ui()
         self.connect_signals()
-        
+        self.setup_shortcuts()
+
         # ステータス更新タイマー
         self.status_timer = QTimer()
         self.status_timer.timeout.connect(self.update_status)
@@ -265,10 +266,52 @@ class MainWindow(QMainWindow):
         # 新しい同期機能
         self.table_view.seek_requested.connect(self.player_view.seek_to_time)
         self.table_view.loop_region_set.connect(self.player_view.set_loop_region)
-        
+
         # 字幕変更時の更新
         self.table_view.subtitle_changed.connect(self.on_subtitle_changed)
         self.table_view.subtitles_reordered.connect(self.on_subtitles_reordered)
+
+    def setup_shortcuts(self):
+        """ショートカットキーの設定"""
+        # Space: 再生/一時停止
+        self.play_pause_shortcut = QShortcut(QKeySequence(Qt.Key_Space), self)
+        self.play_pause_shortcut.activated.connect(self.toggle_playback)
+
+        # S: 字幕分割
+        self.split_shortcut = QShortcut(QKeySequence(Qt.Key_S), self)
+        self.split_shortcut.activated.connect(self.table_view.split_subtitle)
+
+        # M: 字幕結合
+        self.merge_shortcut = QShortcut(QKeySequence(Qt.Key_M), self)
+        self.merge_shortcut.activated.connect(self.table_view.merge_subtitle)
+
+        # Ctrl+Q: QCチェック
+        self.qc_shortcut = QShortcut(QKeySequence("Ctrl+Q"), self)
+        self.qc_shortcut.activated.connect(self.run_qc_check)
+
+        # 左右矢印: フレーム移動
+        self.frame_back_shortcut = QShortcut(QKeySequence(Qt.Key_Left), self)
+        self.frame_back_shortcut.activated.connect(self.seek_frame_back)
+
+        self.frame_forward_shortcut = QShortcut(QKeySequence(Qt.Key_Right), self)
+        self.frame_forward_shortcut.activated.connect(self.seek_frame_forward)
+
+    def toggle_playback(self):
+        """再生/一時停止の切り替え（ショートカット用）"""
+        if hasattr(self.player_view, 'toggle_play'):
+            self.player_view.toggle_play()
+
+    def seek_frame_back(self):
+        """1フレーム戻る"""
+        if hasattr(self.player_view, 'current_frame') and self.player_view.current_frame > 0:
+            self.player_view.seek_to_frame(self.player_view.current_frame - 1)
+
+    def seek_frame_forward(self):
+        """1フレーム進む"""
+        if (hasattr(self.player_view, 'current_frame') and
+            hasattr(self.player_view, 'total_frames') and
+            self.player_view.current_frame < self.player_view.total_frames - 1):
+            self.player_view.seek_to_frame(self.player_view.current_frame + 1)
     
     def open_video(self):
         """動画ファイルを開く"""
