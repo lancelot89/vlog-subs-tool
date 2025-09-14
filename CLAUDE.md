@@ -31,8 +31,10 @@
     - `fix/ocr-timing-bug`
     - `feat/translation-tab-ui`
     - `refactor/subtitle-merger`
+    - `feature/p1-core-implementation` (P1機能実装)
 - **main へ直接 push することは禁止**。
 - 機能単位・目的ごとに小さなブランチを分けること。
+- **⚠️ 重要**: ClaudeCodeは修正作業を開始する前に**必ずブランチを作成**すること。既存ファイルの編集、新規ファイル作成など、すべての作業において適用される。
 
 ### ✅ プルリクエスト（PR）運用ルール
 - PRは **意味のある単位で細かく作成**すること。
