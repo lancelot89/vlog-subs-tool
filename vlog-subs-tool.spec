@@ -33,6 +33,9 @@ hidden_imports = [
     'paddle',
     'paddle.fluid',
     'paddle.inference',
+    'paddlex',  # PaddleXモジュール
+    'paddlex.utils',
+    'paddlex.utils.version',
 
     # OpenCV関連
     'cv2',
@@ -81,6 +84,48 @@ hidden_imports = [
 datas = [
     ('README.md', '.'),
 ]
+
+# PaddleOCR / PaddlePaddle関連のデータファイルを動的に検出・追加
+try:
+    import site
+    import paddleocr
+    import paddle
+    from pathlib import Path
+
+    # site-packages内のpaddleディレクトリを探索
+    for site_dir in site.getsitepackages():
+        site_path = Path(site_dir)
+
+        # paddlexディレクトリがあれば.versionファイルをコピー
+        paddlex_dir = site_path / 'paddlex'
+        if paddlex_dir.exists():
+            version_file = paddlex_dir / '.version'
+            if version_file.exists():
+                datas.append((str(version_file), 'paddlex'))
+                print(f"Found PaddleX version file: {version_file}")
+
+        # paddleディレクトリの重要ファイルをコピー
+        paddle_dir = site_path / 'paddle'
+        if paddle_dir.exists():
+            # バージョン情報ファイル
+            for version_pattern in ['version.py', '__version__.py', '.version', 'version']:
+                version_file = paddle_dir / version_pattern
+                if version_file.exists():
+                    datas.append((str(version_file), f'paddle/{version_pattern}'))
+                    print(f"Found Paddle version file: {version_file}")
+
+            # paddlex subdirectoryがあればそれもコピー
+            paddlex_subdir = paddle_dir / 'paddlex'
+            if paddlex_subdir.exists():
+                paddlex_version = paddlex_subdir / '.version'
+                if paddlex_version.exists():
+                    datas.append((str(paddlex_version), 'paddle/paddlex'))
+                    print(f"Found Paddle/PaddleX version file: {paddlex_version}")
+
+except ImportError as e:
+    print(f"Warning: Could not import paddle modules: {e}")
+except Exception as e:
+    print(f"Warning: Error while detecting paddle data files: {e}")
 
 # バイナリの定義（PaddleOCRモデルなど）
 binaries = []
@@ -132,6 +177,17 @@ a = Analysis(
         'app.core.format',
         'app.core.translate',
         'app.core.qc',
+    ],
+    # Paddleデータファイルの明示的収集
+    collect_data=[
+        'paddleocr',
+        'paddle',
+        'paddlex',
+    ],
+    collect_submodules=[
+        'paddleocr',
+        'paddle',
+        'paddlex',
     ],
 )
 
