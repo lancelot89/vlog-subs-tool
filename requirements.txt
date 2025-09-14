@@ -36,3 +36,6 @@ loguru>=0.7.0
 
 # Progress bars for GUI
 tqdm>=4.65.0
+
+# Network requests (for enhanced download functionality)
+requests>=2.31.0

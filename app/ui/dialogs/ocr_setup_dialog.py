@@ -79,7 +79,9 @@ class OCRSetupDialog(QDialog):
         description = QLabel(
             "字幕抽出を行うために、PaddleOCRの日本語認識モデルが必要です。\n"
             "初回のみ、インターネットからモデルファイル（約50MB）をダウンロードします。\n"
-            "ダウンロード完了後、オフラインでも字幕抽出が可能になります。"
+            "ダウンロード完了後、オフラインでも字幕抽出が可能になります。\n\n"
+            "※ ダウンロードに失敗する場合は、ネットワーク接続やファイアウォール設定を\n"
+            "　 確認してください。また、Tesseractエンジンも利用可能です。"
         )
         description.setWordWrap(True)
         description.setAlignment(Qt.AlignLeft)
@@ -188,6 +190,23 @@ class OCRSetupDialog(QDialog):
             )
             return
 
+        # 確認ダイアログ（初回のみ）
+        if not hasattr(self, '_setup_confirmed'):
+            reply = QMessageBox.question(
+                self,
+                "セットアップ確認",
+                "PaddleOCRモデルのダウンロードを開始します。\n\n"
+                "- ダウンロードサイズ: 約50MB\n"
+                "- 所要時間: 1-5分程度\n"
+                "- 3回まで自動リトライします\n\n"
+                "続行しますか？",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes
+            )
+            if reply != QMessageBox.Yes:
+                return
+            self._setup_confirmed = True
+
         # UI状態を更新
         self.setup_btn.setEnabled(False)
         self.skip_btn.setEnabled(False)
@@ -202,7 +221,7 @@ class OCRSetupDialog(QDialog):
         self.worker.error_occurred.connect(self.on_error_occurred)
         self.worker.start()
 
-        self.add_log("PaddleOCRモデルのダウンロードを開始します...")
+        self.add_log("PaddleOCRモデルのダウンロードを開始します（リトライ機能付き）...")
 
     def skip_setup(self):
         """セットアップをスキップ"""
@@ -256,12 +275,37 @@ class OCRSetupDialog(QDialog):
     def on_error_occurred(self, error_message: str):
         """エラー発生"""
         self.add_log(f"エラー: {error_message}")
-        QMessageBox.critical(
-            self,
-            "セットアップエラー",
-            f"PaddleOCRのセットアップに失敗しました：\n\n{error_message}\n\n"
-            "インターネット接続を確認するか、Tesseractエンジンをご利用ください。"
-        )
+
+        # エラーメッセージの表示（詳細なトラブルシューティング情報付き）
+        detailed_message = self._format_error_message(error_message)
+
+        error_dialog = QMessageBox(self)
+        error_dialog.setIcon(QMessageBox.Critical)
+        error_dialog.setWindowTitle("PaddleOCRセットアップエラー")
+        error_dialog.setText("PaddleOCRのセットアップに失敗しました")
+        error_dialog.setDetailedText(detailed_message)
+        error_dialog.setStandardButtons(QMessageBox.Ok)
+        error_dialog.exec()
+
+    def _format_error_message(self, error_message: str) -> str:
+        """エラーメッセージを詳細な形式に整形"""
+        formatted_msg = f"エラー詳細:\n{error_message}\n\n"
+
+        # 一般的な解決方法
+        formatted_msg += "解決方法:\n"
+        formatted_msg += "1. インターネット接続を確認してください\n"
+        formatted_msg += "2. ファイアウォールやアンチウイルスソフトの設定を確認してください\n"
+        formatted_msg += "3. 企業ネットワークの場合、プロキシ設定を確認してください\n"
+        formatted_msg += "4. 'セットアップ開始'ボタンで再試行してください\n"
+        formatted_msg += "5. 問題が解決しない場合は、'スキップ（Tesseractを使用）'をお試しください\n\n"
+
+        # システム情報
+        import platform
+        formatted_msg += f"システム情報:\n"
+        formatted_msg += f"- OS: {platform.system()} {platform.release()}\n"
+        formatted_msg += f"- Python: {platform.python_version()}\n"
+
+        return formatted_msg
 
     def add_log(self, message: str):
         """ログ追加"""
