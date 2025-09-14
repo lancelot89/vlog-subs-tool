@@ -77,7 +77,7 @@ build_windows() {
     else
         log_warn "specファイルが見つかりません。従来の方法でビルド..."
         pyinstaller \
-            --onefile \
+            --onedir \
             --windowed \
             --name "vlog-subs-tool" \
             --distpath "$DIST_DIR/windows" \
@@ -92,10 +92,11 @@ build_windows() {
             --hidden-import "numpy" \
             --exclude-module "tkinter" \
             --exclude-module "matplotlib" \
+            --noupx \
             app/main.py
     fi
 
-    log_info "Windows用バイナリ完成: $DIST_DIR/windows/vlog-subs-tool.exe"
+    log_info "Windows用バイナリ完成: $DIST_DIR/windows/vlog-subs-tool/"
 }
 
 # macOSビルド
@@ -135,6 +136,7 @@ build_macos() {
             --hidden-import "numpy" \
             --exclude-module "tkinter" \
             --exclude-module "matplotlib" \
+            --noupx \
             --osx-bundle-identifier "com.vlogsubs.tool" \
             app/main.py
     fi
@@ -156,7 +158,7 @@ build_linux() {
     else
         log_warn "specファイルが見つかりません。従来の方法でビルド..."
         pyinstaller \
-            --onefile \
+            --onedir \
             --windowed \
             --name "vlog-subs-tool" \
             --distpath "$DIST_DIR/linux" \
@@ -171,6 +173,7 @@ build_linux() {
             --hidden-import "numpy" \
             --exclude-module "tkinter" \
             --exclude-module "matplotlib" \
+            --noupx \
             app/main.py
     fi
 
@@ -182,7 +185,7 @@ build_linux() {
         log_warn "AppImageToolが見つかりません。通常のバイナリのみ作成"
     fi
 
-    log_info "Linux用バイナリ完成: $DIST_DIR/linux/vlog-subs-tool"
+    log_info "Linux用バイナリ完成: $DIST_DIR/linux/vlog-subs-tool/"
 }
 
 # AppImage作成
