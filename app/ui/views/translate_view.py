@@ -13,10 +13,130 @@ from typing import List, Dict, Optional
 
 from app.core.models import SubtitleItem, Project
 from app.core.csv import (
-    SubtitleCSVExporter, SubtitleCSVImporter, 
+    SubtitleCSVExporter, SubtitleCSVImporter,
     TranslationWorkflowManager, CSVExportSettings
 )
 from app.core.format.srt import SRTFormatter
+from app.core.translate.provider_google import GoogleTranslateProvider, GoogleTranslateSettings, GoogleTranslateError
+from app.core.translate.provider_deepl import DeepLProvider, DeepLSettings, DeepLError
+
+
+class TranslationWorker(QThread):
+    """翻訳バックグラウンドワーカー"""
+
+    progress_updated = Signal(str, int)  # message, progress
+    translation_completed = Signal(dict)  # translations: Dict[lang, List[SubtitleItem]]
+    translation_error = Signal(str)  # error_message
+
+    def __init__(self, subtitles: List[SubtitleItem], target_languages: List[str],
+                 provider_type: str, provider_settings: dict):
+        super().__init__()
+        self.subtitles = subtitles
+        self.target_languages = target_languages
+        self.provider_type = provider_type
+        self.provider_settings = provider_settings
+
+    def run(self):
+        """翻訳実行"""
+        try:
+            translations = {}
+
+            # プロバイダーの初期化
+            if self.provider_type == "google":
+                provider = self._init_google_provider()
+            elif self.provider_type == "deepl":
+                provider = self._init_deepl_provider()
+            else:
+                raise Exception(f"未対応の翻訳プロバイダ: {self.provider_type}")
+
+            # 翻訳テキスト準備
+            texts_to_translate = [subtitle.text for subtitle in self.subtitles]
+
+            total_languages = len(self.target_languages)
+
+            for i, target_lang in enumerate(self.target_languages):
+                lang_progress = int((i * 100) / total_languages)
+                self.progress_updated.emit(f"{target_lang}への翻訳を開始...", lang_progress)
+
+                def progress_callback(message: str, progress: int):
+                    # 言語単位の進捗を全体進捗に変換
+                    total_progress = lang_progress + int(progress / total_languages)
+                    self.progress_updated.emit(f"{target_lang}: {message}", total_progress)
+
+                # 翻訳実行
+                translated_texts = provider.translate_batch(
+                    texts_to_translate,
+                    target_lang,
+                    "ja",
+                    progress_callback
+                )
+
+                # 翻訳結果をSubtitleItemに変換
+                translated_subtitles = []
+                for j, translated_text in enumerate(translated_texts):
+                    original_subtitle = self.subtitles[j]
+                    translated_subtitle = SubtitleItem(
+                        index=original_subtitle.index,
+                        start_ms=original_subtitle.start_ms,
+                        end_ms=original_subtitle.end_ms,
+                        text=translated_text,
+                        bbox=original_subtitle.bbox
+                    )
+                    translated_subtitles.append(translated_subtitle)
+
+                translations[target_lang] = translated_subtitles
+
+            self.translation_completed.emit(translations)
+
+        except (GoogleTranslateError, DeepLError) as e:
+            # 翻訳プロバイダー固有エラー
+            if hasattr(e, 'error_code'):
+                guidance = ""
+                if isinstance(e, GoogleTranslateError):
+                    from app.core.translate.provider_google import GoogleTranslateProvider
+                    temp_provider = GoogleTranslateProvider(GoogleTranslateSettings(""))
+                    guidance = temp_provider.get_error_guidance(e)
+                elif isinstance(e, DeepLError):
+                    from app.core.translate.provider_deepl import DeepLProvider
+                    temp_provider = DeepLProvider(DeepLSettings(""))
+                    guidance = temp_provider.get_error_guidance(e)
+
+                self.translation_error.emit(f"{str(e)}\\n\\n{guidance}")
+            else:
+                self.translation_error.emit(str(e))
+
+        except Exception as e:
+            self.translation_error.emit(f"予期しないエラーが発生しました: {str(e)}")
+
+    def _init_google_provider(self) -> GoogleTranslateProvider:
+        """Google翻訳プロバイダーの初期化"""
+        settings = GoogleTranslateSettings(
+            project_id=self.provider_settings.get("project_id", ""),
+            location=self.provider_settings.get("location", "global"),
+            api_key=self.provider_settings.get("api_key"),
+            service_account_path=self.provider_settings.get("service_account_path"),
+            glossary_id=self.provider_settings.get("glossary_id")
+        )
+
+        provider = GoogleTranslateProvider(settings)
+        if not provider.initialize():
+            raise Exception("Google翻訳プロバイダーの初期化に失敗しました")
+
+        return provider
+
+    def _init_deepl_provider(self) -> DeepLProvider:
+        """DeepL翻訳プロバイダーの初期化"""
+        settings = DeepLSettings(
+            api_key=self.provider_settings.get("api_key", ""),
+            formality=self.provider_settings.get("formality"),
+            use_pro_api=self.provider_settings.get("use_pro_api", False)
+        )
+
+        provider = DeepLProvider(settings)
+        if not provider.initialize():
+            raise Exception("DeepL翻訳プロバイダーの初期化に失敗しました")
+
+        return provider
 
 
 class TranslateView(QDialog):
@@ -236,21 +356,180 @@ class TranslateView(QDialog):
         """翻訳を開始"""
         if self.none_radio.isChecked():
             QMessageBox.information(
-                self, 
-                "情報", 
+                self,
+                "情報",
                 "CSV外部連携モードです。\\n「CSVに書き出し」で外部翻訳用ファイルを作成してください。"
             )
             return
-        
-        self.log_text.append("翻訳を開始しています...")
+
+        # 選択された翻訳言語をチェック
+        selected_languages = self.get_selected_languages()
+        if not selected_languages:
+            QMessageBox.warning(
+                self,
+                "警告",
+                "翻訳する言語が選択されていません。\\n言語のチェックボックスを有効にしてください。"
+            )
+            return
+
+        # 翻訳プロバイダーを確認
+        if self.google_radio.isChecked():
+            if not self.validate_google_settings():
+                return
+            provider_name = "Google Translate"
+        elif self.deepl_radio.isChecked():
+            if not self.validate_deepl_settings():
+                return
+            provider_name = "DeepL"
+        else:
+            QMessageBox.warning(self, "警告", "翻訳プロバイダが選択されていません。")
+            return
+
+        # UI状態を更新
+        self.log_text.append(f"{provider_name}を使用して翻訳を開始しています...")
         self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
         self.translate_btn.setEnabled(False)
-        
-        # TODO: 実際の翻訳処理を別スレッドで実行
-        # 現在は仮の処理
-        self.log_text.append("翻訳が完了しました（仮処理）")
+        self.close_btn.setEnabled(False)
+
+        try:
+            # 翻訳ワーカーを開始
+            self.translation_worker = TranslationWorker(
+                subtitles=self.subtitles,
+                target_languages=selected_languages,
+                provider_type="google" if self.google_radio.isChecked() else "deepl",
+                provider_settings=self.get_provider_settings()
+            )
+
+            self.translation_worker.progress_updated.connect(self.on_translation_progress)
+            self.translation_worker.translation_completed.connect(self.on_translation_completed)
+            self.translation_worker.translation_error.connect(self.on_translation_error)
+            self.translation_worker.start()
+
+        except Exception as e:
+            self.on_translation_error(f"翻訳初期化エラー: {str(e)}")
+
+    def validate_google_settings(self) -> bool:
+        """Google Translate設定検証"""
+        # TODO: 実際の設定チェックを実装
+        # 設定画面からGoogle APIの設定を取得してチェック
+        self.log_text.append("Google Translate設定を確認中...")
+        return True
+
+    def validate_deepl_settings(self) -> bool:
+        """DeepL設定検証"""
+        # TODO: 実際の設定チェックを実装
+        # 設定画面からDeepL APIの設定を取得してチェック
+        self.log_text.append("DeepL設定を確認中...")
+        return True
+
+    def get_selected_languages(self) -> List[str]:
+        """選択された翻訳言語一覧を取得"""
+        selected = []
+        if hasattr(self, 'en_check') and self.en_check.isChecked():
+            selected.append('en')
+        if hasattr(self, 'zh_check') and self.zh_check.isChecked():
+            selected.append('zh')
+        if hasattr(self, 'ko_check') and self.ko_check.isChecked():
+            selected.append('ko')
+        if hasattr(self, 'ar_check') and self.ar_check.isChecked():
+            selected.append('ar')
+        return selected
+
+    def get_provider_settings(self) -> dict:
+        """プロバイダ設定を取得"""
+        # TODO: 設定画面から実際の設定を取得
+        return {}
+
+    def on_translation_progress(self, message: str, progress: int):
+        """翻訳進捗更新"""
+        self.log_text.append(message)
+        self.progress_bar.setValue(progress)
+
+    def on_translation_completed(self, translations: Dict[str, List]):
+        """翻訳完了"""
+        self.translated_subtitles = translations
+        self.log_text.append("翻訳が正常に完了しました！")
+
+        # UI状態を復元
         self.progress_bar.setVisible(False)
         self.translate_btn.setEnabled(True)
+        self.close_btn.setEnabled(True)
+        self.save_srt_btn.setEnabled(True)
+
+        # 結果を表示
+        total_translations = sum(len(subs) for subs in translations.values())
+        self.log_text.append(f"翻訳済み字幕数: {total_translations}件")
+
+        # シグナルを発信
+        self.translations_updated.emit(translations)
+
+    def on_translation_error(self, error_message: str):
+        """翻訳エラー処理"""
+        self.log_text.append(f"エラー: {error_message}")
+
+        # UI状態を復元
+        self.progress_bar.setVisible(False)
+        self.translate_btn.setEnabled(True)
+        self.close_btn.setEnabled(True)
+
+        # 詳細なエラーダイアログを表示
+        self.show_translation_error_dialog(error_message)
+
+    def show_translation_error_dialog(self, error_message: str):
+        """翻訳エラーダイアログ表示"""
+        # エラータイプを判定してユーザー向けガイダンスを表示
+        if "API" in error_message or "認証" in error_message:
+            title = "API認証エラー"
+            guidance = (
+                "翻訳APIの認証に失敗しました。\\n\\n"
+                "確認事項：\\n"
+                "1. APIキーが正しく設定されているか\\n"
+                "2. インターネット接続が安定しているか\\n"
+                "3. API使用制限に達していないか\\n\\n"
+                "設定画面でAPI設定を確認してください。"
+            )
+        elif "制限" in error_message or "quota" in error_message.lower():
+            title = "API制限エラー"
+            guidance = (
+                "翻訳APIの使用制限に達しました。\\n\\n"
+                "対処方法：\\n"
+                "1. しばらく時間をおいてから再試行\\n"
+                "2. 一度に翻訳する字幕数を減らす\\n"
+                "3. 有料プランへのアップグレードを検討\\n\\n"
+                "または、CSV出力で外部翻訳をご利用ください。"
+            )
+        elif "ネットワーク" in error_message or "接続" in error_message:
+            title = "ネットワークエラー"
+            guidance = (
+                "ネットワーク接続に問題があります。\\n\\n"
+                "確認事項：\\n"
+                "1. インターネット接続が有効か\\n"
+                "2. ファイアウォール設定が適切か\\n"
+                "3. プロキシ設定が正しいか\\n\\n"
+                "接続を確認してから再試行してください。"
+            )
+        else:
+            title = "翻訳エラー"
+            guidance = (
+                "翻訳処理中にエラーが発生しました。\\n\\n"
+                "対処方法：\\n"
+                "1. しばらく時間をおいて再試行\\n"
+                "2. 字幕テキストに特殊文字が含まれていないか確認\\n"
+                "3. 翻訳する言語数を減らして試行\\n\\n"
+                "問題が継続する場合は、CSV出力をご利用ください。"
+            )
+
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle(title)
+        msg_box.setText(guidance)
+        msg_box.setDetailedText(f"詳細エラー情報:\\n{error_message}")
+        msg_box.setStandardButtons(QMessageBox.Ok | QMessageBox.Help)
+
+        # ヘルプボタンで設定画面を開く
+        result = msg_box.exec()
+        if result == QMessageBox.Help:
+            self.open_settings_dialog()
     
     def export_csv(self):
         """CSVに書き出し"""

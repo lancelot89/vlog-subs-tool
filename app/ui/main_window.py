@@ -19,10 +19,12 @@ from .views.player_view import PlayerView
 from .views.table_view import SubtitleTableView
 from .views.translate_view import TranslateView
 from .views.settings_view import SettingsView
+from .dialogs.ocr_setup_dialog import OCRSetupDialog
 from .extraction_worker import ExtractionWorker
 from app.core.models import Project, SubtitleItem
 from app.core.format.srt import SRTFormatter, SRTFormatSettings
 from app.core.qc.rules import QCChecker
+from app.core.extractor.ocr import OCRModelDownloader, PADDLEOCR_AVAILABLE
 
 
 class MainWindow(QMainWindow):
@@ -326,29 +328,102 @@ class MainWindow(QMainWindow):
             self.load_video(file_path)
     
     def load_video(self, file_path: str):
-        """動画を読み込む"""
+        """動画を読み込む（エラーハンドリング強化版）"""
         try:
+            # ファイルの存在確認
+            if not Path(file_path).exists():
+                QMessageBox.warning(
+                    self,
+                    "ファイルエラー",
+                    f"指定されたファイルが見つかりません:\n{file_path}"
+                )
+                return
+
+            # ファイルサイズ確認
+            file_size = Path(file_path).stat().st_size
+            if file_size == 0:
+                QMessageBox.warning(
+                    self,
+                    "ファイルエラー",
+                    "ファイルサイズが0バイトです。破損している可能性があります。"
+                )
+                return
+
+            # 対応形式の確認
+            supported_formats = ['.mp4', '.mov', '.avi', '.mkv', '.flv', '.wmv', '.webm']
+            file_ext = Path(file_path).suffix.lower()
+            if file_ext not in supported_formats:
+                reply = QMessageBox.question(
+                    self,
+                    "形式確認",
+                    f"ファイル形式 '{file_ext}' は推奨されていません。\n"
+                    f"推奨形式: {', '.join(supported_formats)}\n\n"
+                    f"続行しますか？",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No
+                )
+                if reply == QMessageBox.No:
+                    return
+
             self.current_video_path = file_path
-            
+
             # プレイヤーに動画を読み込み
             self.player_view.load_video(file_path)
-            
+
             # プロジェクトを作成
             self.current_project = Project.create_new(file_path)
-            
+
             # UIの更新
             self.extract_btn.setEnabled(True)
             self.save_btn.setEnabled(True)
-            
+
             # ファイル情報の更新
             file_name = Path(file_path).name
-            self.file_info_label.setText(f"動画: {file_name}")
-            
+            file_size_mb = file_size / (1024 * 1024)
+            self.file_info_label.setText(f"動画: {file_name} ({file_size_mb:.1f}MB)")
+
             self.video_loaded.emit(file_path)
             self.status_label.setText("動画を読み込みました")
-            
+
+        except cv2.error as e:
+            self.handle_video_codec_error(file_path, str(e))
         except Exception as e:
-            QMessageBox.critical(self, "エラー", f"動画の読み込みに失敗しました: {str(e)}")
+            self.handle_general_video_error(file_path, str(e))
+
+    def handle_video_codec_error(self, file_path: str, error_msg: str):
+        """動画コーデック関連エラーの処理"""
+        file_ext = Path(file_path).suffix.lower()
+
+        error_dialog = QMessageBox(self)
+        error_dialog.setWindowTitle("動画コーデックエラー")
+        error_dialog.setIcon(QMessageBox.Critical)
+
+        error_text = f"動画ファイルを開けませんでした。\n\n"
+        error_text += f"ファイル: {Path(file_path).name}\n"
+        error_text += f"形式: {file_ext}\n\n"
+        error_text += "考えられる原因:\n"
+        error_text += "• サポートされていないコーデック\n"
+        error_text += "• ファイルの破損\n"
+        error_text += "• DRMによる保護\n\n"
+        error_text += "対処法:\n"
+        error_text += "• mp4, mov形式への変換をお試しください\n"
+        error_text += "• ffmpegやHandBrakeなどを利用してください\n"
+        error_text += f"• 推奨形式: mp4 (H.264 + AAC)"
+
+        error_dialog.setText(error_text)
+        error_dialog.exec()
+
+    def handle_general_video_error(self, file_path: str, error_msg: str):
+        """一般的な動画読み込みエラーの処理"""
+        QMessageBox.critical(
+            self,
+            "動画読み込みエラー",
+            f"動画の読み込みに失敗しました。\n\n"
+            f"ファイル: {Path(file_path).name}\n"
+            f"エラー詳細: {error_msg}\n\n"
+            f"• ファイルが使用中でないか確認してください\n"
+            f"• ファイル形式が対応しているか確認してください"
+        )
     
     def on_video_loaded(self, file_path: str):
         """動画読み込み完了時の処理"""
@@ -358,12 +433,16 @@ class MainWindow(QMainWindow):
         """字幕抽出を開始"""
         if not self.current_project or not self.current_video_path:
             return
-        
+
+        # OCRモデルの存在確認
+        if not self.check_ocr_setup():
+            return
+
         # 既存の抽出処理をキャンセル
         if self.extraction_worker and self.extraction_worker.isRunning():
             self.extraction_worker.cancel()
             self.extraction_worker.wait()
-        
+
         # UI状態の更新
         self.extraction_started.emit()
         self.status_label.setText("字幕抽出を開始しています...")
@@ -434,6 +513,30 @@ class MainWindow(QMainWindow):
     def re_extract(self):
         """再抽出"""
         self.start_extraction()
+
+    def check_ocr_setup(self) -> bool:
+        """OCRセットアップの確認"""
+        # PaddleOCRが利用可能でモデルも存在する場合はOK
+        if PADDLEOCR_AVAILABLE and OCRModelDownloader.is_paddleocr_model_available():
+            return True
+
+        # セットアップダイアログを表示
+        setup_dialog = OCRSetupDialog(self)
+        result = setup_dialog.exec()
+
+        if result == setup_dialog.Accepted:
+            # セットアップ完了
+            return True
+        else:
+            # セットアップをスキップ - Tesseractまたはキャンセル
+            QMessageBox.information(
+                self,
+                "情報",
+                "PaddleOCRセットアップがスキップされました。\n"
+                "Tesseractエンジンで字幕抽出を行います。\n\n"
+                "※後で設定画面からPaddleOCRを有効化できます"
+            )
+            return True
     
     def run_qc_check(self):
         """QCチェックを実行"""
@@ -662,17 +765,55 @@ class MainWindow(QMainWindow):
             self.player_view.set_subtitles(self.current_project.subtitles)
     
     def dragEnterEvent(self, event):
-        """ドラッグ開始イベント"""
+        """ドラッグ開始イベント（強化版）"""
         if event.mimeData().hasUrls():
-            event.acceptProposedAction()
-    
+            urls = event.mimeData().urls()
+            if urls:
+                file_path = urls[0].toLocalFile()
+                file_ext = Path(file_path).suffix.lower()
+
+                # 動画ファイルかプロジェクトファイルの場合のみ受け入れ
+                video_formats = ['.mp4', '.mov', '.avi', '.mkv', '.flv', '.wmv', '.webm']
+                project_formats = ['.subproj']
+
+                if file_ext in video_formats + project_formats:
+                    event.acceptProposedAction()
+                    self.status_label.setText(f"ドロップして {file_ext} ファイルを開く")
+
     def dropEvent(self, event):
-        """ドロップイベント"""
+        """ドロップイベント（強化版）"""
         urls = event.mimeData().urls()
-        if urls:
-            file_path = urls[0].toLocalFile()
-            if Path(file_path).suffix.lower() in ['.mp4', '.mov', '.avi', '.mkv']:
+        if not urls:
+            return
+
+        file_path = urls[0].toLocalFile()
+        file_ext = Path(file_path).suffix.lower()
+
+        try:
+            if file_ext == '.subproj':
+                # プロジェクトファイルの読み込み
+                self.load_project(file_path)
+            else:
+                # 動画ファイルの読み込み
                 self.load_video(file_path)
+
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "ドラッグ&ドロップエラー",
+                f"ファイルの読み込みに失敗しました:\n{str(e)}"
+            )
+        finally:
+            self.status_label.setText("準備完了")
+
+    def load_project(self, file_path: str):
+        """プロジェクトファイルを読み込む"""
+        # TODO: プロジェクトファイル読み込み実装
+        QMessageBox.information(
+            self,
+            "プロジェクト読み込み",
+            f"プロジェクトファイル読み込み機能は後のバージョンで実装予定です:\n{Path(file_path).name}"
+        )
 
 
 def main():
