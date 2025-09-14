@@ -4,11 +4,16 @@ OCRエンジンの実装（PaddleOCR / Tesseract対応）
 
 import cv2
 import numpy as np
-from typing import List, Tuple, Optional, Dict, Any
+import os
+import sys
+import subprocess
+from typing import List, Tuple, Optional, Dict, Any, Callable
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from pathlib import Path
 import logging
+import tempfile
+import shutil
 
 # PaddleOCR（推奨）
 try:
@@ -25,6 +30,86 @@ try:
 except ImportError:
     TESSERACT_AVAILABLE = False
     logging.warning("Tesseractが利用できません。pip install pytesseractでインストールしてください。")
+
+
+class OCRModelDownloader:
+    """OCRモデルのダウンロード管理"""
+
+    @staticmethod
+    def get_paddleocr_cache_dir() -> Path:
+        """PaddleOCRのキャッシュディレクトリ取得"""
+        home_dir = Path.home()
+        # Windows/macOS/Linuxで共通のキャッシュ場所
+        cache_dir = home_dir / ".paddleocr"
+        return cache_dir
+
+    @staticmethod
+    def is_paddleocr_model_available(lang: str = "ja") -> bool:
+        """PaddleOCRモデルが利用可能かチェック"""
+        if not PADDLEOCR_AVAILABLE:
+            return False
+
+        try:
+            cache_dir = OCRModelDownloader.get_paddleocr_cache_dir()
+
+            # 日本語モデルの主要コンポーネント確認
+            if lang == "ja":
+                required_files = [
+                    "whl/det/ja/ja_PP-OCRv4_det_infer.tar",
+                    "whl/rec/japan/japan_PP-OCRv4_rec_infer.tar",
+                    "whl/cls/ch_ppocr_mobile_v2.0_cls_infer.tar"
+                ]
+
+                for file_pattern in required_files:
+                    # パターンに一致するファイルがあるかチェック
+                    files = list(cache_dir.glob(f"**/{Path(file_pattern).name}*"))
+                    if not files:
+                        logging.debug(f"PaddleOCRモデルファイル未検出: {file_pattern}")
+                        return False
+
+                return True
+
+            # 他の言語は基本的なチェック
+            return cache_dir.exists() and any(cache_dir.iterdir())
+
+        except Exception as e:
+            logging.error(f"PaddleOCRモデル確認エラー: {e}")
+            return False
+
+    @staticmethod
+    def download_paddleocr_model(lang: str = "ja", progress_callback: Optional[Callable[[str, int], None]] = None):
+        """PaddleOCRモデルをダウンロード"""
+        if not PADDLEOCR_AVAILABLE:
+            raise Exception("PaddleOCRがインストールされていません")
+
+        try:
+            if progress_callback:
+                progress_callback("PaddleOCRモデルの初期化を開始...", 10)
+
+            # 一時的なPaddleOCRインスタンスを作成してモデルをダウンロード
+            ocr = PaddleOCR(
+                use_angle_cls=True,
+                lang=lang,
+                show_log=True,
+                use_gpu=False  # CPU使用で安定性を確保
+            )
+
+            if progress_callback:
+                progress_callback("モデルダウンロード中...", 50)
+
+            # ダミー画像でモデル初期化を確実に実行
+            dummy_image = np.ones((100, 100, 3), dtype=np.uint8) * 255
+            ocr.ocr(dummy_image, cls=True)
+
+            if progress_callback:
+                progress_callback("モデル初期化完了", 100)
+
+            logging.info(f"PaddleOCRモデル({lang})のダウンロードが完了しました")
+
+        except Exception as e:
+            error_msg = f"PaddleOCRモデルのダウンロードに失敗しました: {str(e)}"
+            logging.error(error_msg)
+            raise Exception(error_msg)
 
 
 @dataclass
@@ -112,29 +197,47 @@ class OCREngine(ABC):
 
 class PaddleOCREngine(OCREngine):
     """PaddleOCRエンジン実装"""
-    
+
     def __init__(self, language: str = "ja"):
         super().__init__(language)
         self.ocr_model = None
         self.confidence_threshold = 0.7
-    
-    def initialize(self) -> bool:
-        """PaddleOCRの初期化"""
+
+    def initialize(self, download_callback: Optional[Callable[[str, int], None]] = None) -> bool:
+        """PaddleOCRの初期化（モデル自動ダウンロード付き）"""
         if not PADDLEOCR_AVAILABLE:
             logging.error("PaddleOCRが利用できません")
             return False
-        
+
         try:
+            # モデル存在チェック
+            if not OCRModelDownloader.is_paddleocr_model_available(self.language):
+                logging.info("PaddleOCRモデルが見つかりません。ダウンロードを開始します...")
+
+                if download_callback:
+                    download_callback("PaddleOCRモデルをダウンロード中...", 0)
+
+                # モデルダウンロード実行
+                OCRModelDownloader.download_paddleocr_model(self.language, download_callback)
+
             # PaddleOCRモデルの初期化
+            if download_callback:
+                download_callback("PaddleOCRエンジンを初期化中...", 90)
+
             self.ocr_model = PaddleOCR(
                 use_angle_cls=True,
                 lang=self.language,
-                show_log=False
+                show_log=False,
+                use_gpu=False
             )
+
+            if download_callback:
+                download_callback("初期化完了", 100)
+
             self.is_initialized = True
             logging.info("PaddleOCRの初期化が完了しました")
             return True
-            
+
         except Exception as e:
             logging.error(f"PaddleOCRの初期化に失敗しました: {e}")
             return False
@@ -277,18 +380,25 @@ class OCRManager:
         """利用可能なエンジン一覧"""
         return list(self.engines.keys())
     
-    def initialize_engine(self, engine_name: str) -> bool:
+    def initialize_engine(self, engine_name: str, download_callback: Optional[Callable[[str, int], None]] = None) -> bool:
         """指定エンジンの初期化"""
         if engine_name not in self.engines:
             logging.error(f"未対応のOCRエンジン: {engine_name}")
             return False
-        
+
         engine = self.engines[engine_name]
-        if engine.initialize():
+
+        # PaddleOCRの場合はダウンロードコールバックを渡す
+        if isinstance(engine, PaddleOCREngine):
+            success = engine.initialize(download_callback)
+        else:
+            success = engine.initialize()
+
+        if success:
             self.current_engine = engine
             logging.info(f"OCRエンジンを切り替えました: {engine_name}")
             return True
-        
+
         return False
     
     def extract_text(self, image: np.ndarray) -> List[OCRResult]:
