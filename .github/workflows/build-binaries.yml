@@ -56,18 +56,19 @@ jobs:
         cd dist/linux
         tar -czf "vlog-subs-tool-linux.tar.gz" vlog-subs-tool/
         # READMEファイルを追加
-        echo "VLog字幕ツール Linux版
+        cat > README_Linux.txt << 'EOF'
+        VLog字幕ツール Linux版
 
-使用方法:
-1. tar.gzファイルを展開: tar -xzf vlog-subs-tool-linux.tar.gz
-2. 実行権限を付与: chmod +x vlog-subs-tool/vlog-subs-tool
-3. 実行: ./vlog-subs-tool/vlog-subs-tool
+        使用方法:
+        1. tar.gzファイルを展開: tar -xzf vlog-subs-tool-linux.tar.gz
+        2. 実行権限を付与: chmod +x vlog-subs-tool/vlog-subs-tool
+        3. 実行: ./vlog-subs-tool/vlog-subs-tool
 
-注意事項:
-- フォルダ内のファイルを削除しないでください
-- 実行ファイルのみを移動すると動作しません
-- Ubuntu 20.04+ または同等のディストリビューションが必要です
-" > README_Linux.txt
+        注意事項:
+        - フォルダ内のファイルを削除しないでください
+        - 実行ファイルのみを移動すると動作しません
+        - Ubuntu 20.04+ または同等のディストリビューションが必要です
+        EOF
         tar -czf "vlog-subs-tool-linux.tar.gz" README_Linux.txt
 
     - name: Upload Linux binary
@@ -105,17 +106,18 @@ jobs:
         cd dist/windows
         zip -r "vlog-subs-tool-windows.zip" vlog-subs-tool/
         # READMEファイルを追加
-        echo "VLog字幕ツール Windows版
+        cat > README_Windows.txt << 'EOF'
+        VLog字幕ツール Windows版
 
-使用方法:
-1. ZIPファイルを適当なフォルダに展開
-2. フォルダ内の vlog-subs-tool.exe をダブルクリックして実行
-3. Windows Defenderの警告が出た場合は「詳細情報」→「実行」をクリック
+        使用方法:
+        1. ZIPファイルを適当なフォルダに展開
+        2. フォルダ内の vlog-subs-tool.exe をダブルクリックして実行
+        3. Windows Defenderの警告が出た場合は「詳細情報」→「実行」をクリック
 
-注意事項:
-- フォルダ内のファイルを削除しないでください
-- 実行ファイルのみを移動すると動作しません
-" > README_Windows.txt
+        注意事項:
+        - フォルダ内のファイルを削除しないでください
+        - 実行ファイルのみを移動すると動作しません
+        EOF
         zip "vlog-subs-tool-windows.zip" README_Windows.txt
 
     - name: Upload Windows binary
@@ -161,19 +163,20 @@ jobs:
         cd dist/macos
         zip -r "vlog-subs-tool-macos.zip" "VLog字幕ツール.app"
         # READMEファイルを追加
-        echo "VLog字幕ツール macOS版
+        cat > README_macOS.txt << 'EOF'
+        VLog字幕ツール macOS版
 
-使用方法:
-1. ZIPファイルを展開
-2. VLog字幕ツール.appをアプリケーションフォルダに移動（推奨）
-3. 右クリックで「開く」を選択（初回のみ）
-4. セキュリティ警告で「開く」をクリック
-5. 以降はダブルクリックで起動可能
+        使用方法:
+        1. ZIPファイルを展開
+        2. VLog字幕ツール.appをアプリケーションフォルダに移動（推奨）
+        3. 右クリックで「開く」を選択（初回のみ）
+        4. セキュリティ警告で「開く」をクリック
+        5. 以降はダブルクリックで起動可能
 
-注意事項:
-- .appファイルは単一のファイルです
-- macOS 10.15 (Catalina) 以上が必要です
-" > README_macOS.txt
+        注意事項:
+        - .appファイルは単一のファイルです
+        - macOS 10.15 (Catalina) 以上が必要です
+        EOF
         zip "vlog-subs-tool-macos.zip" README_macOS.txt
 
     - name: Upload macOS binary
