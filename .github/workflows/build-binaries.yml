@@ -103,23 +103,16 @@ jobs:
         ./scripts/build_binary.sh windows
     
     - name: Create Windows ZIP archive
-      shell: bash
+      shell: pwsh
       run: |
-        cd dist/windows
+        Set-Location dist/windows
+
         # READMEファイルを作成
-        cat > README_Windows.txt << 'EOF'
-        VLog字幕ツール Windows版
+        $readmeContent = "VLog字幕ツール Windows版`n`n使用方法:`n1. ZIPファイルを適当なフォルダに展開`n2. フォルダ内の vlog-subs-tool.exe をダブルクリックして実行`n3. Windows Defenderの警告が出た場合は「詳細情報」→「実行」をクリック`n`n注意事項:`n- フォルダ内のファイルを削除しないでください`n- 実行ファイルのみを移動すると動作しません"
+        $readmeContent | Out-File -FilePath "README_Windows.txt" -Encoding UTF8
 
-        使用方法:
-        1. ZIPファイルを適当なフォルダに展開
-        2. フォルダ内の vlog-subs-tool.exe をダブルクリックして実行
-        3. Windows Defenderの警告が出た場合は「詳細情報」→「実行」をクリック
-
-        注意事項:
-        - フォルダ内のファイルを削除しないでください
-        - 実行ファイルのみを移動すると動作しません
-        EOF
-        zip -r "vlog-subs-tool-windows.zip" vlog-subs-tool/ README_Windows.txt
+        # PowerShellのCompress-Archiveを使用してZIP作成
+        Compress-Archive -Path "vlog-subs-tool", "README_Windows.txt" -DestinationPath "vlog-subs-tool-windows.zip" -Force
 
     - name: Upload Windows binary
       uses: actions/upload-artifact@v4
