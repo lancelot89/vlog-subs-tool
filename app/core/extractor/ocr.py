@@ -24,9 +24,20 @@ import shutil
 
 # PaddleOCR（推奨）
 try:
-    from paddleocr import PaddleOCR
-    PADDLEOCR_AVAILABLE = True
+    # 新しいPaddleX v3.2+を先に試行
+    try:
+        from paddlex import create_pipeline
+        PADDLEX_AVAILABLE = True
+        PADDLEOCR_AVAILABLE = True
+        logging.info("PaddleX v3.2+ が利用可能です")
+    except ImportError:
+        # 従来のPaddleOCRにフォールバック
+        from paddleocr import PaddleOCR
+        PADDLEX_AVAILABLE = False
+        PADDLEOCR_AVAILABLE = True
+        logging.info("従来のPaddleOCR が利用可能です")
 except ImportError:
+    PADDLEX_AVAILABLE = False
     PADDLEOCR_AVAILABLE = False
     logging.warning("PaddleOCRが利用できません。pip install paddleocrでインストールしてください。")
 
@@ -204,13 +215,55 @@ class OCRModelDownloader:
                 # PaddleOCRの言語コード変換
                 paddle_lang = "japan" if lang in ["ja", "japanese"] else lang
 
-                # 最も基本的なパラメータでPaddleOCRインスタンス作成
-                ocr = PaddleOCR(lang=paddle_lang)
+                # 新しいPaddleX v3.2+を優先して試行
+                if PADDLEX_AVAILABLE:
+                    try:
+                        # 新しいPaddleXのパイプライン作成（複数の方法を試行）
+                        paddle_pipeline = None
 
-                if progress_callback:
-                    progress_callback("モデルダウンロード完了", 70 + (attempt * 5))
+                        # 方法1: 直接OCRタスクを指定
+                        try:
+                            paddle_pipeline = create_pipeline(task="OCR")
+                        except:
+                            pass
 
-                return ocr
+                        # 方法2: 設定ファイルパスを指定
+                        if paddle_pipeline is None:
+                            try:
+                                paddle_pipeline = create_pipeline(pipeline="OCR")
+                            except:
+                                pass
+
+                        # 方法3: 明示的な設定で作成
+                        if paddle_pipeline is None:
+                            paddle_pipeline = create_pipeline(
+                                task="OCR",
+                                pipeline="OCR-B",
+                                device="cpu"
+                            )
+
+                        if paddle_pipeline:
+                            if progress_callback:
+                                progress_callback("PaddleXパイプライン作成完了", 70 + (attempt * 5))
+                            return paddle_pipeline
+
+                    except Exception as e:
+                        logging.warning(f"PaddleXパイプライン作成失敗、従来APIを試行: {e}")
+                        # 従来のPaddleOCRにフォールバック
+                        pass
+
+                # 従来のPaddleOCRを使用（フォールバック）
+                if PADDLEOCR_AVAILABLE:
+                    try:
+                        from paddleocr import PaddleOCR
+                        ocr = PaddleOCR(lang=paddle_lang)
+                        if progress_callback:
+                            progress_callback("従来PaddleOCR作成完了", 70 + (attempt * 5))
+                        return ocr
+                    except Exception as e:
+                        logging.warning(f"従来PaddleOCR作成も失敗: {e}")
+
+                raise Exception("PaddleOCRインスタンスの作成に失敗しました（全ての方法が失敗）")
 
             finally:
                 # タイムアウトを元に戻す
@@ -336,6 +389,7 @@ class PaddleOCREngine(OCREngine):
         super().__init__(language)
         self.ocr_model = None
         self.confidence_threshold = 0.7
+        self.is_paddlex = False  # PaddleXパイプラインを使用しているかのフラグ
 
     def initialize(self, download_callback: Optional[Callable[[str, int], None]] = None) -> bool:
         """PaddleOCRの初期化（モデル自動ダウンロード付き）"""
@@ -361,8 +415,56 @@ class PaddleOCREngine(OCREngine):
             # PaddleOCRの言語コード変換
             paddle_lang = "japan" if self.language in ["ja", "japanese"] else self.language
 
-            # 最も基本的なパラメータでPaddleOCRインスタンス作成
-            self.ocr_model = PaddleOCR(lang=paddle_lang)
+            # 新しいPaddleX v3.2+を優先して試行
+            if PADDLEX_AVAILABLE:
+                try:
+                    # 新しいPaddleXのパイプライン作成（複数の方法を試行）
+                    paddle_pipeline = None
+
+                    # 方法1: 直接OCRタスクを指定
+                    try:
+                        paddle_pipeline = create_pipeline(task="OCR")
+                    except:
+                        pass
+
+                    # 方法2: 設定ファイルパスを指定
+                    if paddle_pipeline is None:
+                        try:
+                            paddle_pipeline = create_pipeline(pipeline="OCR")
+                        except:
+                            pass
+
+                    # 方法3: 明示的な設定で作成
+                    if paddle_pipeline is None:
+                        paddle_pipeline = create_pipeline(
+                            task="OCR",
+                            pipeline="OCR-B",
+                            device="cpu"
+                        )
+
+                    if paddle_pipeline:
+                        self.ocr_model = paddle_pipeline
+                        self.is_paddlex = True
+                        logging.info("PaddleXパイプラインで初期化完了")
+                    else:
+                        raise Exception("PaddleXパイプラインの作成に失敗")
+
+                except Exception as e:
+                    logging.warning(f"PaddleXパイプライン作成失敗、従来APIを使用: {e}")
+                    # フォールバックして従来のPaddleOCRを使用
+                    if PADDLEOCR_AVAILABLE:
+                        from paddleocr import PaddleOCR
+                        self.ocr_model = PaddleOCR(lang=paddle_lang)
+                        self.is_paddlex = False
+                        logging.info("従来のPaddleOCRで初期化完了")
+                    else:
+                        raise e
+            else:
+                # 従来のPaddleOCRを使用
+                from paddleocr import PaddleOCR
+                self.ocr_model = PaddleOCR(lang=paddle_lang)
+                self.is_paddlex = False
+                logging.info("従来のPaddleOCRで初期化完了")
 
             if download_callback:
                 download_callback("初期化完了", 100)
@@ -384,18 +486,22 @@ class PaddleOCREngine(OCREngine):
             # 前処理
             processed_image = self.preprocess_image(image)
             
-            # OCR実行（新しいAPIに対応）
-            try:
-                results = self.ocr_model.predict(processed_image)
-                # 新しいAPIの結果を旧APIの形式に変換
-                if hasattr(results, 'json') and results.json:
-                    # 新しい形式の結果を解析
-                    results = self._convert_new_api_results(results)
-                else:
-                    results = [[]]  # 結果がない場合
-            except AttributeError:
-                # 旧APIを使用
-                results = self.ocr_model.ocr(processed_image)
+            # OCR実行（PaddleXとPaddleOCRの両方に対応）
+            if self.is_paddlex:
+                # PaddleXパイプラインを使用
+                try:
+                    paddle_result = self.ocr_model.predict(processed_image)
+                    results = self._convert_paddlex_results(paddle_result)
+                except Exception as e:
+                    logging.error(f"PaddleX実行エラー: {e}")
+                    results = [[]]
+            else:
+                # 従来のPaddleOCRを使用
+                try:
+                    results = self.ocr_model.ocr(processed_image)
+                except Exception as e:
+                    logging.error(f"PaddleOCR実行エラー: {e}")
+                    results = [[]]
             
             ocr_results = []
             
@@ -433,26 +539,41 @@ class PaddleOCREngine(OCREngine):
             logging.error(f"PaddleOCR実行エラー: {e}")
             return []
 
-    def _convert_new_api_results(self, api_result):
-        """新しいPaddleOCRのAPI結果を旧形式に変換"""
+    def _convert_paddlex_results(self, paddle_result):
+        """PaddleXパイプラインの結果を従来のPaddleOCR形式に変換"""
         try:
             converted_results = [[]]
 
-            # 新しいAPIの結果構造を解析して旧形式に変換
-            if hasattr(api_result, 'json') and api_result.json:
-                for item in api_result.json.get('dt_polys', []):
+            # PaddleXの結果構造を解析
+            if hasattr(paddle_result, 'json') and paddle_result.json:
+                # OCRパイプラインの結果から情報を抽出
+                for item in paddle_result.json.get('dt_polys', []):
                     bbox_points = item.get('poly', [])
                     text = item.get('text', '')
                     confidence = item.get('score', 0.0)
 
                     if text and confidence > 0.5:
                         converted_results[0].append([bbox_points, [text, confidence]])
+            elif hasattr(paddle_result, 'result'):
+                # 別の形式の結果構造
+                result = paddle_result.result
+                if isinstance(result, dict) and 'texts' in result:
+                    for i, text in enumerate(result['texts']):
+                        if text.strip():
+                            # 簡易的なbboxを生成（実際の座標がない場合）
+                            bbox = [[0, i*20], [100, i*20], [100, (i+1)*20], [0, (i+1)*20]]
+                            confidence = result.get('scores', [0.9])[i] if i < len(result.get('scores', [])) else 0.9
+                            converted_results[0].append([bbox, [text, confidence]])
 
             return converted_results
 
         except Exception as e:
-            logging.debug(f"API結果変換エラー: {e}")
+            logging.debug(f"PaddleX結果変換エラー: {e}")
             return [[]]
+
+    def _convert_new_api_results(self, api_result):
+        """旧メソッド名の互換性維持"""
+        return self._convert_paddlex_results(api_result)
 
 
 class TesseractEngine(OCREngine):
