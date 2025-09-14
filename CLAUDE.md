@@ -24,27 +24,53 @@
 
 ## 🧭 作業時のルール（Gitブランチ／PR運用）
 
+### 🔄 **標準開発フロー（必須遵守）**
+ClaudeCodeは以下の順序で作業を行うこと：
+
+1. **📝 Issue作成**
+   - 問題・機能・改善点を必ずIssueとして先に登録
+   - タイトルは具体的で理解しやすく（例: 「Windows実行時にPaddleX .versionファイルが見つからない」）
+   - 以下の項目を含める：
+     - 問題の概要/期待する機能
+     - 原因分析（バグの場合）
+     - 受け入れ条件（チェックリスト形式）
+     - Priority（Critical/High/Medium/Low）
+     - 適切なLabels（bug/feature/enhancement など）
+
+2. **🌿 ブランチ作成**
+   - Issueに対応する新しいブランチを作成
+   - 命名規則: `{type}/{issue-number}-{short-description}`
+     - 例: `fix/47-paddlex-version-file`, `feat/48-translation-ui`
+
+3. **🔧 実装・修正作業**
+   - 作業内容はIssueの受け入れ条件に沿って実施
+   - コミットメッセージは意味のある単位で分割
+
+4. **📤 PR作成**
+   - **必ず「Closes #XX」でIssueを紐づける**
+   - PRテンプレートに従って詳細な説明を記載
+
 ### ✅ ブランチ運用ポリシー
 - `main` ブランチは **常に安定した状態**を保つこと。
 - すべての変更は **新しいブランチを作成して作業**すること。
   - 命名例：
-    - `fix/ocr-timing-bug`
-    - `feat/translation-tab-ui`
-    - `refactor/subtitle-merger`
-    - `feature/p1-core-implementation` (P1機能実装)
+    - `fix/47-paddlex-version-file`
+    - `feat/48-translation-tab-ui`
+    - `refactor/49-subtitle-merger`
+    - `feature/50-p1-core-implementation`
 - **main へ直接 push することは禁止**。
 - 機能単位・目的ごとに小さなブランチを分けること。
-- **⚠️ 重要**: ClaudeCodeは修正作業を開始する前に**必ずブランチを作成**すること。既存ファイルの編集、新規ファイル作成など、すべての作業において適用される。
+- **⚠️ 重要**: ClaudeCodeは修正作業を開始する前に**必ずIssue作成→ブランチ作成**の順序を遵守すること。
 
 ### ✅ プルリクエスト（PR）運用ルール
 - PRは **意味のある単位で細かく作成**すること。
-- **⚠️ 重要**: 基本的に **1 Issue = 1 PR** で作成する。複数のIssueを含むPRは避ける。
+- **⚠️ 必須**: **1 Issue = 1 PR** で作成する。複数のIssueを含むPRは禁止。
 - PRには以下の情報を含める：
+  - **解決するIssue番号**（先頭に `Closes #XX` を記載）
   - **変更概要（What）**
   - **背景・目的（Why）**
   - **動作確認内容（How）**
   - **影響範囲（UI、入出力ファイルなど）**
-  - **対応するIssue番号**（例: `Closes #15`）
 - 作業中のPRは **Draft PR として提出**し、完成後にレビュー依頼。
 - **破壊的変更を含むPRは、必ずレビューを受けてからマージすること**。
 
