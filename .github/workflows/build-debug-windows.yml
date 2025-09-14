@@ -1,0 +1,100 @@
+name: Build Debug Windows Binary
+
+on:
+  workflow_dispatch:  # 手動実行のみ
+  push:
+    branches:
+      - 'fix/windows-exe-silent-failure-44'  # このブランチのみ
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  build-debug-windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: Build Debug Windows binary
+      shell: bash
+      run: |
+        # デバッグ版specファイルでビルド
+        export GITHUB_ACTIONS=true
+        pyinstaller --clean vlog-subs-tool-debug.spec
+
+    - name: Create Debug Windows ZIP archive
+      shell: pwsh
+      run: |
+        Set-Location dist/vlog-subs-tool-debug
+
+        # デバッグ用READMEファイルを作成
+        $readmeContent = @"
+VLog字幕ツール デバッグ版
+
+■ このファイルについて
+このはv1.0.5のexeファイルがWindows環境で起動しない問題を調査するためのデバッグ版です。
+
+■ 使用方法
+1. vlog-subs-tool-debug.exe をダブルクリックして実行
+2. コンソールウィンドウが開き、詳細な診断情報が表示されます
+3. 実行後、同じフォルダに「vlog-subs-tool-debug.log」ファイルが作成されます
+
+■ 期待される動作
+正常な場合：
+✅ Stage 1: 基本Pythonモジュール - OK
+✅ Stage 2: PySide6インポート - OK (version: 6.x.x)
+✅ Stage 3: PySide6.QtWidgets - OK
+✅ Stage 4: OpenCV, NumPy, PIL - OK
+✅ Stage 5: アプリケーションモジュール - OK
+→ アプリケーションGUIが起動
+
+問題がある場合：
+✅ Stage 1: 基本Pythonモジュール - OK
+❌ Stage 2: PySide6インポート - [エラーメッセージが表示]
+→ どの段階で失敗したかが明確になります
+
+■ ログファイルについて
+vlog-subs-tool-debug.log には以下の情報が記録されます：
+- Python バージョン情報
+- プラットフォーム情報
+- 実行環境の詳細
+- インポートテストの結果
+- エラーの詳細（発生した場合）
+
+■ エラー発生時の対処
+1. コンソールに表示されたエラーメッセージをメモ
+2. vlog-subs-tool-debug.log ファイルの内容を確認
+3. 問題をGitHub Issueに報告：
+   https://github.com/lancelot89/vlog-subs-tool/issues/44
+
+■ 注意事項
+- デバッグ版のため、通常版よりも起動が遅い場合があります
+- エラー確認のため「Press Enter to continue...」と表示される場合があります
+- フォルダ内のファイル構成を変更しないでください
+
+■ システム要件
+- Windows 10/11 (64bit)
+- インターネット接続（初回OCRモデルダウンロード時）
+"@
+        $readmeContent | Out-File -FilePath "README_Debug.txt" -Encoding UTF8
+
+        # PowerShellのCompress-Archiveを使用してZIP作成
+        Compress-Archive -Path "vlog-subs-tool-debug.exe", "_internal", "README_Debug.txt" -DestinationPath "vlog-subs-tool-debug-windows.zip" -Force
+
+    - name: Upload Debug Windows binary
+      uses: actions/upload-artifact@v4
+      with:
+        name: vlog-subs-tool-debug-windows
+        path: dist/vlog-subs-tool-debug/vlog-subs-tool-debug-windows.zip
