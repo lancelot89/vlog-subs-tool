@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QLabel, QCheckBox, QGroupBox
 )
 from PySide6.QtCore import Qt, Signal, QTimer
-from PySide6.QtGui import QPixmap, QPainter, QPen
+from PySide6.QtGui import QPixmap, QPainter, QPen, QImage
 import cv2
 import numpy as np
 from pathlib import Path
@@ -207,23 +207,25 @@ class PlayerView(QWidget):
         """フレーム更新（再生時）"""
         if not self.cap or not self.cap.isOpened():
             return
-        
+
         next_frame = self.current_frame + 1
         next_time_ms = int(next_frame * 1000 / self.fps)
-        
-        # ループ再生チェック
+
+        # ループ再生チェック（改良版）
         if self.loop_check.isChecked() and self.loop_end_ms > 0:
             if next_time_ms >= self.loop_end_ms:
-                # ループ開始点に戻る
-                self.seek_to_time(self.loop_start_ms)
+                # ループ開始点に戻る（より正確に）
+                loop_start_frame = int(self.loop_start_ms * self.fps / 1000)
+                self.seek_to_frame(loop_start_frame)
+                self.seek_slider.setValue(loop_start_frame)
                 return
-        
+
         # 通常の終了チェック
         if next_frame >= self.total_frames:
             self.timer.stop()
             self.play_btn.setText("再生")
             return
-        
+
         self.seek_to_frame(next_frame)
         self.seek_slider.setValue(next_frame)
     

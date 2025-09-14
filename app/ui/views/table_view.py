@@ -111,6 +111,7 @@ class SubtitleTableView(QWidget):
         self.table.itemSelectionChanged.connect(self.on_selection_changed)
         self.table.customContextMenuRequested.connect(self.show_context_menu)
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.table.cellDoubleClicked.connect(self.on_cell_double_clicked)
         
         layout.addWidget(self.table)
     
@@ -234,12 +235,30 @@ class SubtitleTableView(QWidget):
         self.preview_btn.setEnabled(has_selection)
         self.loop_btn.setEnabled(has_selection)
         
-        # 選択された行の字幕時間にシーク
+        # 選択された行の字幕時間にシーク（自動）
         if selected_rows:
             row = min(selected_rows)
             if 0 <= row < len(self.subtitles):
                 subtitle = self.subtitles[row]
                 self.subtitle_selected.emit(subtitle.start_ms)
+
+    def on_cell_double_clicked(self, row: int, column: int):
+        """セルダブルクリック時の処理"""
+        if row < 0 or row >= len(self.subtitles):
+            return
+
+        subtitle = self.subtitles[row]
+
+        if column == 1 or column == 2:  # 開始時間・終了時間列をダブルクリック
+            # その時間でシーク
+            time_ms = subtitle.start_ms if column == 1 else subtitle.end_ms
+            self.seek_requested.emit(time_ms)
+        elif column == 3:  # 本文列をダブルクリック
+            # ループ再生設定
+            self.loop_region_set.emit(subtitle.start_ms, subtitle.end_ms)
+
+        # いずれの場合も該当位置にシーク
+        self.seek_requested.emit(subtitle.start_ms)
     
     def highlight_current_subtitle(self, time_ms: int):
         """現在時間の字幕をハイライト"""
