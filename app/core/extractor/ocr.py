@@ -7,6 +7,13 @@ import numpy as np
 import os
 import sys
 import subprocess
+import time
+import ssl
+try:
+    import requests
+    REQUESTS_AVAILABLE = True
+except ImportError:
+    REQUESTS_AVAILABLE = False
 from typing import List, Tuple, Optional, Dict, Any, Callable
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
@@ -35,12 +42,26 @@ except ImportError:
 class OCRModelDownloader:
     """OCRモデルのダウンロード管理"""
 
+    # ダウンロード設定
+    MAX_RETRIES = 3
+    RETRY_DELAY = 2.0  # 秒
+    DOWNLOAD_TIMEOUT = 300  # 5分
+    CHUNK_SIZE = 8192
+
     @staticmethod
     def get_paddleocr_cache_dir() -> Path:
         """PaddleOCRのキャッシュディレクトリ取得"""
         home_dir = Path.home()
-        # Windows/macOS/Linuxで共通のキャッシュ場所
-        cache_dir = home_dir / ".paddleocr"
+        # 新しいPaddleXは.paddlexディレクトリを使用
+        cache_dir = home_dir / ".paddlex"
+
+        # キャッシュディレクトリが存在しない場合は作成
+        try:
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            logging.debug(f"PaddleXキャッシュディレクトリ: {cache_dir}")
+        except Exception as e:
+            logging.error(f"キャッシュディレクトリ作成エラー: {e}")
+
         return cache_dir
 
     @staticmethod
@@ -52,25 +73,27 @@ class OCRModelDownloader:
         try:
             cache_dir = OCRModelDownloader.get_paddleocr_cache_dir()
 
-            # 日本語モデルの主要コンポーネント確認
-            if lang == "ja":
-                required_files = [
-                    "whl/det/ja/ja_PP-OCRv4_det_infer.tar",
-                    "whl/rec/japan/japan_PP-OCRv4_rec_infer.tar",
-                    "whl/cls/ch_ppocr_mobile_v2.0_cls_infer.tar"
+            # 日本語モデルの場合、PaddleXのofficial_modelsディレクトリを確認
+            if lang in ["ja", "japan", "japanese"]:
+                official_models_dir = cache_dir / "official_models"
+
+                # PaddleXの日本語OCRに必要なモデル
+                required_models = [
+                    "PP-OCRv5_server_det",  # テキスト検出
+                    "PP-OCRv5_server_rec",  # テキスト認識
                 ]
 
-                for file_pattern in required_files:
-                    # パターンに一致するファイルがあるかチェック
-                    files = list(cache_dir.glob(f"**/{Path(file_pattern).name}*"))
-                    if not files:
-                        logging.debug(f"PaddleOCRモデルファイル未検出: {file_pattern}")
+                for model_name in required_models:
+                    model_dir = official_models_dir / model_name
+                    if not model_dir.exists() or not any(model_dir.iterdir()):
+                        logging.debug(f"PaddleXモデル未検出: {model_name}")
                         return False
 
+                logging.debug(f"PaddleXモデルが利用可能: {required_models}")
                 return True
 
             # 他の言語は基本的なチェック
-            return cache_dir.exists() and any(cache_dir.iterdir())
+            return cache_dir.exists() and (cache_dir / "official_models").exists()
 
         except Exception as e:
             logging.error(f"PaddleOCRモデル確認エラー: {e}")
@@ -78,38 +101,149 @@ class OCRModelDownloader:
 
     @staticmethod
     def download_paddleocr_model(lang: str = "ja", progress_callback: Optional[Callable[[str, int], None]] = None):
-        """PaddleOCRモデルをダウンロード"""
+        """PaddleOCRモデルをダウンロード（リトライ機能付き）"""
         if not PADDLEOCR_AVAILABLE:
             raise Exception("PaddleOCRがインストールされていません")
 
+        last_error = None
+
+        for attempt in range(OCRModelDownloader.MAX_RETRIES):
+            try:
+                if progress_callback:
+                    if attempt == 0:
+                        progress_callback("PaddleOCRモデルの初期化を開始...", 10)
+                    else:
+                        progress_callback(f"再試行中... ({attempt + 1}/{OCRModelDownloader.MAX_RETRIES})", 10 + (attempt * 20))
+
+                # SSL設定を調整（Windows環境対応）
+                OCRModelDownloader._configure_ssl_for_windows()
+
+                # プロキシ設定を確認・適用
+                OCRModelDownloader._configure_proxy_settings()
+
+                # タイムアウト設定付きでPaddleOCRインスタンスを作成
+                ocr = OCRModelDownloader._create_paddleocr_with_timeout(
+                    lang=lang,
+                    progress_callback=progress_callback,
+                    attempt=attempt
+                )
+
+                if progress_callback:
+                    progress_callback("モデル初期化テスト中...", 80 + (attempt * 5))
+
+                # ダミー画像でモデル初期化を確実に実行
+                dummy_image = np.ones((100, 100, 3), dtype=np.uint8) * 255
+                # 新しいPaddleOCRバージョンではpredictメソッドを使用
+                try:
+                    result = ocr.predict(dummy_image)
+                except AttributeError:
+                    # predict メソッドが無い場合は旧APIを試す
+                    result = ocr.ocr(dummy_image)
+
+                if progress_callback:
+                    progress_callback("モデル初期化完了", 100)
+
+                logging.info(f"PaddleOCRモデル({lang})のダウンロードが完了しました (試行回数: {attempt + 1})")
+                return
+
+            except Exception as e:
+                last_error = e
+                error_msg = str(e)
+                logging.warning(f"PaddleOCRダウンロード試行 {attempt + 1} 失敗: {error_msg}")
+
+                if attempt < OCRModelDownloader.MAX_RETRIES - 1:
+                    if progress_callback:
+                        progress_callback(f"エラー発生、{OCRModelDownloader.RETRY_DELAY}秒後に再試行...", 30 + (attempt * 20))
+                    time.sleep(OCRModelDownloader.RETRY_DELAY)
+                else:
+                    # 最終試行も失敗した場合
+                    detailed_error = OCRModelDownloader._analyze_download_error(error_msg)
+                    final_error = f"PaddleOCRモデルのダウンロードに失敗しました（{OCRModelDownloader.MAX_RETRIES}回試行）:\n{detailed_error}"
+                    logging.error(final_error)
+                    raise Exception(final_error)
+
+    @staticmethod
+    def _configure_ssl_for_windows():
+        """Windows環境向けSSL設定"""
         try:
-            if progress_callback:
-                progress_callback("PaddleOCRモデルの初期化を開始...", 10)
+            # Windows環境でのSSL証明書検証問題を解決
+            if sys.platform == 'win32':
+                import ssl
+                ssl._create_default_https_context = ssl._create_unverified_context
+                logging.debug("Windows環境向けSSL設定を適用しました")
+        except Exception as e:
+            logging.debug(f"SSL設定の適用に失敗: {e}")
 
-            # 一時的なPaddleOCRインスタンスを作成してモデルをダウンロード
-            ocr = PaddleOCR(
-                use_angle_cls=True,
-                lang=lang,
-                show_log=True,
-                use_gpu=False  # CPU使用で安定性を確保
-            )
+    @staticmethod
+    def _configure_proxy_settings():
+        """プロキシ設定の確認と適用"""
+        try:
+            # 環境変数からプロキシ設定を確認
+            http_proxy = os.environ.get('HTTP_PROXY') or os.environ.get('http_proxy')
+            https_proxy = os.environ.get('HTTPS_PROXY') or os.environ.get('https_proxy')
 
-            if progress_callback:
-                progress_callback("モデルダウンロード中...", 50)
-
-            # ダミー画像でモデル初期化を確実に実行
-            dummy_image = np.ones((100, 100, 3), dtype=np.uint8) * 255
-            ocr.ocr(dummy_image, cls=True)
-
-            if progress_callback:
-                progress_callback("モデル初期化完了", 100)
-
-            logging.info(f"PaddleOCRモデル({lang})のダウンロードが完了しました")
+            if http_proxy or https_proxy:
+                logging.info(f"プロキシ設定を検出: HTTP={http_proxy}, HTTPS={https_proxy}")
 
         except Exception as e:
-            error_msg = f"PaddleOCRモデルのダウンロードに失敗しました: {str(e)}"
-            logging.error(error_msg)
-            raise Exception(error_msg)
+            logging.debug(f"プロキシ設定確認エラー: {e}")
+
+    @staticmethod
+    def _create_paddleocr_with_timeout(lang: str, progress_callback: Optional[Callable], attempt: int):
+        """タイムアウト設定付きPaddleOCRインスタンス作成"""
+        try:
+            if progress_callback:
+                progress_callback(f"PaddleOCRインスタンス作成中... (試行 {attempt + 1})", 30 + (attempt * 20))
+
+            # タイムアウト設定
+            import socket
+            original_timeout = socket.getdefaulttimeout()
+            socket.setdefaulttimeout(OCRModelDownloader.DOWNLOAD_TIMEOUT)
+
+            try:
+                # PaddleOCRの言語コード変換
+                paddle_lang = "japan" if lang in ["ja", "japanese"] else lang
+
+                # 最も基本的なパラメータでPaddleOCRインスタンス作成
+                ocr = PaddleOCR(lang=paddle_lang)
+
+                if progress_callback:
+                    progress_callback("モデルダウンロード完了", 70 + (attempt * 5))
+
+                return ocr
+
+            finally:
+                # タイムアウトを元に戻す
+                socket.setdefaulttimeout(original_timeout)
+
+        except Exception as e:
+            raise Exception(f"PaddleOCRインスタンス作成エラー: {str(e)}")
+
+    @staticmethod
+    def _analyze_download_error(error_msg: str) -> str:
+        """ダウンロードエラーの詳細分析"""
+        error_suggestions = []
+
+        if "timeout" in error_msg.lower() or "timed out" in error_msg.lower():
+            error_suggestions.append("• ネットワーク接続が不安定です。安定したインターネット環境で再試行してください。")
+
+        if "ssl" in error_msg.lower() or "certificate" in error_msg.lower():
+            error_suggestions.append("• SSL証明書の問題です。セキュリティソフトまたはファイアウォール設定を確認してください。")
+
+        if "proxy" in error_msg.lower():
+            error_suggestions.append("• プロキシ環境が原因の可能性があります。ネットワーク管理者に相談してください。")
+
+        if "connection" in error_msg.lower() or "network" in error_msg.lower():
+            error_suggestions.append("• インターネット接続を確認してください。")
+
+        if "permission" in error_msg.lower() or "access" in error_msg.lower():
+            error_suggestions.append("• ファイル書き込み権限の問題です。管理者権限で実行してください。")
+
+        if not error_suggestions:
+            error_suggestions.append("• 不明なエラーです。Tesseractエンジンをご利用ください。")
+
+        suggestions_text = "\n".join(error_suggestions)
+        return f"エラー詳細: {error_msg}\n\n解決方法:\n{suggestions_text}"
 
 
 @dataclass
@@ -224,12 +358,11 @@ class PaddleOCREngine(OCREngine):
             if download_callback:
                 download_callback("PaddleOCRエンジンを初期化中...", 90)
 
-            self.ocr_model = PaddleOCR(
-                use_angle_cls=True,
-                lang=self.language,
-                show_log=False,
-                use_gpu=False
-            )
+            # PaddleOCRの言語コード変換
+            paddle_lang = "japan" if self.language in ["ja", "japanese"] else self.language
+
+            # 最も基本的なパラメータでPaddleOCRインスタンス作成
+            self.ocr_model = PaddleOCR(lang=paddle_lang)
 
             if download_callback:
                 download_callback("初期化完了", 100)
@@ -251,8 +384,18 @@ class PaddleOCREngine(OCREngine):
             # 前処理
             processed_image = self.preprocess_image(image)
             
-            # OCR実行
-            results = self.ocr_model.ocr(processed_image, cls=True)
+            # OCR実行（新しいAPIに対応）
+            try:
+                results = self.ocr_model.predict(processed_image)
+                # 新しいAPIの結果を旧APIの形式に変換
+                if hasattr(results, 'json') and results.json:
+                    # 新しい形式の結果を解析
+                    results = self._convert_new_api_results(results)
+                else:
+                    results = [[]]  # 結果がない場合
+            except AttributeError:
+                # 旧APIを使用
+                results = self.ocr_model.ocr(processed_image)
             
             ocr_results = []
             
@@ -289,6 +432,27 @@ class PaddleOCREngine(OCREngine):
         except Exception as e:
             logging.error(f"PaddleOCR実行エラー: {e}")
             return []
+
+    def _convert_new_api_results(self, api_result):
+        """新しいPaddleOCRのAPI結果を旧形式に変換"""
+        try:
+            converted_results = [[]]
+
+            # 新しいAPIの結果構造を解析して旧形式に変換
+            if hasattr(api_result, 'json') and api_result.json:
+                for item in api_result.json.get('dt_polys', []):
+                    bbox_points = item.get('poly', [])
+                    text = item.get('text', '')
+                    confidence = item.get('score', 0.0)
+
+                    if text and confidence > 0.5:
+                        converted_results[0].append([bbox_points, [text, confidence]])
+
+            return converted_results
+
+        except Exception as e:
+            logging.debug(f"API結果変換エラー: {e}")
+            return [[]]
 
 
 class TesseractEngine(OCREngine):
