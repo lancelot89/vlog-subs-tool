@@ -92,6 +92,70 @@ python -m pytest tests/unit/test_models.py -v
 4. **品質チェック**: 「QCチェック」で問題箇所を確認
 5. **出力**: 「SRT出力」で字幕ファイルを保存
 
+## 🚨 トラブルシューティング
+
+### よくある問題と解決方法
+
+#### 🐛 「ModuleNotFoundError: No module named 'ui'」エラー
+
+**症状**: GitHubからZIPをダウンロードして直接実行すると以下のエラーが発生
+```
+Traceback (most recent call last):
+  File "main.py", line 16, in <module>
+ModuleNotFoundError: No module named 'ui'
+```
+
+**解決方法**:
+```bash
+# 1. 依存関係をインストール
+pip install -e .
+
+# 2. 推奨実行方法で起動
+python -m app.main
+```
+
+**Windows環境の場合**:
+```cmd
+# コマンドプロンプトまたはPowerShellで実行
+cd vlog-subs-tool-main
+pip install -e .
+python -m app.main
+```
+
+#### 🐛 「ImportError: No module named 'PySide6'」エラー
+
+**原因**: PySide6やその他の依存パッケージがインストールされていない
+
+**解決方法**:
+```bash
+# 仮想環境を作成（推奨）
+python -m venv venv
+source venv/bin/activate  # Linux/macOS
+# venv\Scripts\activate   # Windows
+
+# 依存関係をインストール
+pip install -e .
+```
+
+#### 🐛 Linux環境での日本語文字化け
+
+**解決方法**:
+```bash
+# 日本語フォントをインストール
+sudo apt install fonts-noto-cjk fonts-noto-cjk-extra  # Ubuntu/Debian
+sudo yum install google-noto-cjk-fonts                # CentOS/RHEL
+
+# ロケール設定（オプション）
+export LANG=ja_JP.UTF-8
+export LC_ALL=ja_JP.UTF-8
+```
+
+#### 📋 実行方法の優先順位
+
+1. **推奨**: `python -m app.main` （プロジェクトルートから）
+2. **次善**: `python app/main.py` （プロジェクトルートから）
+3. **非推奨**: `cd app && python main.py` （エラーの原因となりやすい）
+
 ## 📖 詳細機能
 
 ### OCR字幕抽出
