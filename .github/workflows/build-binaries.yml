@@ -51,11 +51,30 @@ jobs:
         chmod +x scripts/build_binary.sh
         ./scripts/build_binary.sh linux
     
+    - name: Create Linux archive
+      run: |
+        cd dist/linux
+        tar -czf "vlog-subs-tool-linux.tar.gz" vlog-subs-tool/
+        # READMEファイルを追加
+        echo "VLog字幕ツール Linux版
+
+使用方法:
+1. tar.gzファイルを展開: tar -xzf vlog-subs-tool-linux.tar.gz
+2. 実行権限を付与: chmod +x vlog-subs-tool/vlog-subs-tool
+3. 実行: ./vlog-subs-tool/vlog-subs-tool
+
+注意事項:
+- フォルダ内のファイルを削除しないでください
+- 実行ファイルのみを移動すると動作しません
+- Ubuntu 20.04+ または同等のディストリビューションが必要です
+" > README_Linux.txt
+        tar -czf "vlog-subs-tool-linux.tar.gz" README_Linux.txt
+
     - name: Upload Linux binary
       uses: actions/upload-artifact@v4
       with:
         name: vlog-subs-tool-linux
-        path: dist/linux/vlog-subs-tool
+        path: dist/linux/vlog-subs-tool-linux.tar.gz
 
   build-windows:
     runs-on: windows-latest
@@ -81,11 +100,29 @@ jobs:
         chmod +x scripts/build_binary.sh
         ./scripts/build_binary.sh windows
     
+    - name: Create Windows ZIP archive
+      run: |
+        cd dist/windows
+        zip -r "vlog-subs-tool-windows.zip" vlog-subs-tool/
+        # READMEファイルを追加
+        echo "VLog字幕ツール Windows版
+
+使用方法:
+1. ZIPファイルを適当なフォルダに展開
+2. フォルダ内の vlog-subs-tool.exe をダブルクリックして実行
+3. Windows Defenderの警告が出た場合は「詳細情報」→「実行」をクリック
+
+注意事項:
+- フォルダ内のファイルを削除しないでください
+- 実行ファイルのみを移動すると動作しません
+" > README_Windows.txt
+        zip "vlog-subs-tool-windows.zip" README_Windows.txt
+
     - name: Upload Windows binary
       uses: actions/upload-artifact@v4
       with:
         name: vlog-subs-tool-windows
-        path: dist/windows/vlog-subs-tool.exe
+        path: dist/windows/vlog-subs-tool-windows.zip
 
   build-macos:
     runs-on: macos-latest
@@ -119,11 +156,31 @@ jobs:
           xattr -cr "dist/macos/VLog字幕ツール.app" || true
         fi
     
+    - name: Create macOS ZIP archive
+      run: |
+        cd dist/macos
+        zip -r "vlog-subs-tool-macos.zip" "VLog字幕ツール.app"
+        # READMEファイルを追加
+        echo "VLog字幕ツール macOS版
+
+使用方法:
+1. ZIPファイルを展開
+2. VLog字幕ツール.appをアプリケーションフォルダに移動（推奨）
+3. 右クリックで「開く」を選択（初回のみ）
+4. セキュリティ警告で「開く」をクリック
+5. 以降はダブルクリックで起動可能
+
+注意事項:
+- .appファイルは単一のファイルです
+- macOS 10.15 (Catalina) 以上が必要です
+" > README_macOS.txt
+        zip "vlog-subs-tool-macos.zip" README_macOS.txt
+
     - name: Upload macOS binary
       uses: actions/upload-artifact@v4
       with:
         name: vlog-subs-tool-macos
-        path: dist/macos/VLog字幕ツール.app
+        path: dist/macos/vlog-subs-tool-macos.zip
 
   create-release:
     needs: [build-linux, build-windows, build-macos]
@@ -137,30 +194,39 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          vlog-subs-tool-linux/vlog-subs-tool
-          vlog-subs-tool-windows/vlog-subs-tool.exe
-          vlog-subs-tool-macos/VLog字幕ツール.app
+          vlog-subs-tool-linux/vlog-subs-tool-linux.tar.gz
+          vlog-subs-tool-windows/vlog-subs-tool-windows.zip
+          vlog-subs-tool-macos/vlog-subs-tool-macos.zip
         body: |
           ## 🎬 VLog字幕ツール ${{ github.ref_name }}
 
           ### 📦 ダウンロード
-          
-          - **Linux**: `vlog-subs-tool` (実行可能ファイル)
-          - **Windows**: `vlog-subs-tool.exe`
-          - **macOS**: `VLog字幕ツール.app` (アプリケーションバンドル)
+
+          - **Linux**: `vlog-subs-tool-linux.tar.gz` (実行ディレクトリのアーカイブ)
+          - **Windows**: `vlog-subs-tool-windows.zip` (実行ディレクトリのZIP)
+          - **macOS**: `vlog-subs-tool-macos.zip` (アプリケーションバンドルのZIP)
 
           ### 🚀 使用方法
 
-          #### Windows・Linux
-          1. お使いのOS用のファイルをダウンロード
-          2. ダウンロードしたファイルを適当なフォルダに配置
-          3. ファイルをダブルクリックして実行
+          #### Windows
+          1. `vlog-subs-tool-windows.zip` をダウンロード
+          2. ZIPファイルを適当なフォルダに展開
+          3. フォルダ内の `vlog-subs-tool.exe` をダブルクリックして実行
+          4. Windows Defenderの警告が出た場合は「詳細情報」→「実行」をクリック
+          5. ⚠️ **重要**: フォルダ内のファイルを削除せず、実行ファイルのみ移動しないでください
 
           #### macOS
-          1. `VLog字幕ツール.app` をダウンロード
-          2. ダウンロードしたファイルをアプリケーションフォルダに移動（推奨）
-          3. 右クリックで「開く」を選択（初回のみ）
-          4. セキュリティ警告で「開く」をクリック
+          1. `vlog-subs-tool-macos.zip` をダウンロード
+          2. ZIPファイルを展開
+          3. `VLog字幕ツール.app` をアプリケーションフォルダに移動（推奨）
+          4. 右クリックで「開く」を選択（初回のみ）
+          5. セキュリティ警告で「開く」をクリック
+
+          #### Linux
+          1. `vlog-subs-tool-linux.tar.gz` をダウンロード
+          2. アーカイブを展開: `tar -xzf vlog-subs-tool-linux.tar.gz`
+          3. 実行権限を付与: `chmod +x vlog-subs-tool/vlog-subs-tool`
+          4. 実行: `./vlog-subs-tool/vlog-subs-tool`
 
           ### 📋 システム要件
           
