@@ -7,6 +7,45 @@ PyInstaller バイナリとソースコード実行の両方に対応
 import sys
 import os
 from pathlib import Path
+import logging
+import traceback
+from datetime import datetime
+
+def setup_logging():
+    """
+    デバッグ用ロギング設定
+    """
+    # ログファイルのパス設定
+    if getattr(sys, 'frozen', False):
+        # PyInstallerでビルドされた場合、実行ファイルと同じディレクトリに
+        log_dir = Path(sys.executable).parent
+    else:
+        # 開発環境では現在のディレクトリに
+        log_dir = Path.cwd()
+
+    log_file = log_dir / "vlog-subs-tool-debug.log"
+
+    # ロガー設定
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(log_file, encoding='utf-8'),
+            logging.StreamHandler(sys.stdout)  # コンソール出力
+        ]
+    )
+
+    logger = logging.getLogger(__name__)
+    logger.info("=== VLog字幕ツール デバッグログ開始 ===")
+    logger.info(f"Python version: {sys.version}")
+    logger.info(f"Platform: {sys.platform}")
+    logger.info(f"Executable: {sys.executable}")
+    logger.info(f"Frozen: {getattr(sys, 'frozen', False)}")
+    if hasattr(sys, '_MEIPASS'):
+        logger.info(f"_MEIPASS: {sys._MEIPASS}")
+    logger.info(f"Log file: {log_file}")
+
+    return logger
 
 def setup_paths():
     """
@@ -34,47 +73,128 @@ def setup_paths():
 
         return False  # 開発環境実行
 
+def test_imports(logger):
+    """段階的インポートテスト"""
+    logger.info("=== 段階的インポートテスト開始 ===")
+
+    # Stage 1: 基本Pythonモジュール
+    try:
+        import sys, os, pathlib, json, csv
+        logger.info("✅ Stage 1: 基本Pythonモジュール - OK")
+    except Exception as e:
+        logger.error(f"❌ Stage 1: 基本Pythonモジュール - {e}")
+        return False
+
+    # Stage 2: PySide6基本インポート
+    try:
+        import PySide6
+        logger.info(f"✅ Stage 2: PySide6インポート - OK (version: {PySide6.__version__})")
+    except Exception as e:
+        logger.error(f"❌ Stage 2: PySide6インポート - {e}")
+        return False
+
+    # Stage 3: PySide6.QtWidgets
+    try:
+        from PySide6.QtWidgets import QApplication, QMainWindow
+        logger.info("✅ Stage 3: PySide6.QtWidgets - OK")
+    except Exception as e:
+        logger.error(f"❌ Stage 3: PySide6.QtWidgets - {e}")
+        return False
+
+    # Stage 4: 重要ライブラリ
+    try:
+        import cv2, numpy, PIL
+        logger.info("✅ Stage 4: OpenCV, NumPy, PIL - OK")
+    except Exception as e:
+        logger.error(f"❌ Stage 4: 重要ライブラリ - {e}")
+        return False
+
+    # Stage 5: アプリケーションモジュール
+    try:
+        if getattr(sys, 'frozen', False):
+            from ui.main_window import main as app_main
+        else:
+            try:
+                from app.ui.main_window import main as app_main
+            except (ImportError, ModuleNotFoundError):
+                from ui.main_window import main as app_main
+        logger.info("✅ Stage 5: アプリケーションモジュール - OK")
+        return True
+    except Exception as e:
+        logger.error(f"❌ Stage 5: アプリケーションモジュール - {e}")
+        return False
+
 def main():
-    """メインエントリーポイント"""
+    """メインエントリーポイント（デバッグ機能統合版）"""
+    logger = setup_logging()
+    logger.info("メインエントリーポイント開始")
+
     is_standalone = setup_paths()
+    logger.info(f"実行環境: {'スタンドアロン' if is_standalone else 'ソースコード'}")
 
     try:
-        # スタンドアロンバイナリの場合は直接インポート
+        # デバッグ: 段階的インポートテスト
+        if not test_imports(logger):
+            logger.error("段階的インポートテストに失敗しました")
+            if getattr(sys, 'frozen', False):
+                input("Press Enter to continue...")  # コンソール版で確認
+            sys.exit(1)
+
+        # メインアプリケーション起動
+        logger.info("アプリケーション起動開始")
+
         if is_standalone:
             from ui.main_window import main as app_main
         else:
-            # ソースコード実行の場合はパッケージインポートを試行
             try:
                 from app.ui.main_window import main as app_main
             except (ImportError, ModuleNotFoundError):
                 from ui.main_window import main as app_main
 
-        # アプリケーション起動
+        logger.info("UIモジュール読み込み完了、アプリケーション起動中...")
         app_main()
+        logger.info("アプリケーション正常終了")
 
     except ModuleNotFoundError as e:
+        logger.error(f"ModuleNotFoundError: {e}")
+        logger.error(traceback.format_exc())
         if is_standalone:
-            # スタンドアロンバイナリでこのエラーが発生する場合はビルドエラー
             show_standalone_error(e)
         else:
-            # ソースコード実行時の依存関係エラー
             show_source_error(e)
+
+        if getattr(sys, 'frozen', False):
+            input("Press Enter to continue...")
         sys.exit(1)
 
     except ImportError as e:
+        logger.error(f"ImportError: {e}")
+        logger.error(traceback.format_exc())
         if is_standalone:
             show_standalone_error(e)
         else:
             show_package_error(e)
+
+        if getattr(sys, 'frozen', False):
+            input("Press Enter to continue...")
         sys.exit(1)
 
     except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        logger.error(traceback.format_exc())
+
         print(f"❌ 予期しないエラーが発生しました: {e}")
+        print()
+        print("🔧 詳細ログ:")
+        print(f"   ログファイル: vlog-subs-tool-debug.log")
         print()
         print("🔧 解決方法:")
         print("- アプリケーションを再起動してください")
         print("- 問題が続く場合は以下にご報告ください:")
         print("  https://github.com/lancelot89/vlog-subs-tool/issues")
+
+        if getattr(sys, 'frozen', False):
+            input("Press Enter to continue...")
         sys.exit(1)
 
 def show_standalone_error(error):

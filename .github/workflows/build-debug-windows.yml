@@ -1,0 +1,64 @@
+name: Build Debug Windows Binary
+
+on:
+  workflow_dispatch:  # 手動実行のみ
+  push:
+    branches:
+      - 'fix/windows-exe-silent-failure-44'  # このブランチのみ
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  build-debug-windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: Build Debug Windows binary
+      shell: bash
+      run: |
+        # デバッグ版specファイルでビルド
+        export GITHUB_ACTIONS=true
+        pyinstaller --clean vlog-subs-tool-debug.spec
+
+    - name: Create Debug Windows ZIP archive
+      shell: pwsh
+      run: |
+        Set-Location dist/vlog-subs-tool-debug
+
+        # デバッグ用READMEファイルを作成
+        "VLog字幕ツール デバッグ版" | Out-File -FilePath "README_Debug.txt" -Encoding UTF8
+        "" | Out-File -FilePath "README_Debug.txt" -Encoding UTF8 -Append
+        "このファイルについて:" | Out-File -FilePath "README_Debug.txt" -Encoding UTF8 -Append
+        "v1.0.5のexeファイルがWindows環境で起動しない問題を調査するためのデバッグ版です。" | Out-File -FilePath "README_Debug.txt" -Encoding UTF8 -Append
+        "" | Out-File -FilePath "README_Debug.txt" -Encoding UTF8 -Append
+        "使用方法:" | Out-File -FilePath "README_Debug.txt" -Encoding UTF8 -Append
+        "1. vlog-subs-tool-debug.exe をダブルクリックして実行" | Out-File -FilePath "README_Debug.txt" -Encoding UTF8 -Append
+        "2. コンソールウィンドウが開き、詳細な診断情報が表示されます" | Out-File -FilePath "README_Debug.txt" -Encoding UTF8 -Append
+        "3. 実行後、同じフォルダにvlog-subs-tool-debug.logファイルが作成されます" | Out-File -FilePath "README_Debug.txt" -Encoding UTF8 -Append
+        "" | Out-File -FilePath "README_Debug.txt" -Encoding UTF8 -Append
+        "期待される動作:" | Out-File -FilePath "README_Debug.txt" -Encoding UTF8 -Append
+        "正常な場合 - Stage 1-5がすべてOKになり、アプリケーションGUIが起動" | Out-File -FilePath "README_Debug.txt" -Encoding UTF8 -Append
+        "問題がある場合 - どの段階で失敗したかが明確に表示されます" | Out-File -FilePath "README_Debug.txt" -Encoding UTF8 -Append
+
+        # PowerShellのCompress-Archiveを使用してZIP作成
+        Compress-Archive -Path "vlog-subs-tool-debug.exe", "_internal", "README_Debug.txt" -DestinationPath "vlog-subs-tool-debug-windows.zip" -Force
+
+    - name: Upload Debug Windows binary
+      uses: actions/upload-artifact@v4
+      with:
+        name: vlog-subs-tool-debug-windows
+        path: dist/vlog-subs-tool-debug/vlog-subs-tool-debug-windows.zip
