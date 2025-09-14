@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QLabel, QCheckBox, QGroupBox
 )
 from PySide6.QtCore import Qt, Signal, QTimer
-from PySide6.QtGui import QPixmap, QPainter, QPen
+from PySide6.QtGui import QPixmap, QPainter, QPen, QImage
 import cv2
 import numpy as np
 from pathlib import Path
