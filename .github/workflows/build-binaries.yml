@@ -69,7 +69,7 @@ jobs:
         - 実行ファイルのみを移動すると動作しません
         - Ubuntu 20.04+ または同等のディストリビューションが必要です
         EOF
-        tar -czf "vlog-subs-tool-linux.tar.gz" README_Linux.txt
+        tar -czf "vlog-subs-tool-linux.tar.gz" vlog-subs-tool/ README_Linux.txt
 
     - name: Upload Linux binary
       uses: actions/upload-artifact@v4
@@ -104,8 +104,7 @@ jobs:
     - name: Create Windows ZIP archive
       run: |
         cd dist/windows
-        zip -r "vlog-subs-tool-windows.zip" vlog-subs-tool/
-        # READMEファイルを追加
+        # READMEファイルを作成
         cat > README_Windows.txt << 'EOF'
         VLog字幕ツール Windows版
 
@@ -118,7 +117,7 @@ jobs:
         - フォルダ内のファイルを削除しないでください
         - 実行ファイルのみを移動すると動作しません
         EOF
-        zip "vlog-subs-tool-windows.zip" README_Windows.txt
+        zip -r "vlog-subs-tool-windows.zip" vlog-subs-tool/ README_Windows.txt
 
     - name: Upload Windows binary
       uses: actions/upload-artifact@v4
@@ -161,8 +160,7 @@ jobs:
     - name: Create macOS ZIP archive
       run: |
         cd dist/macos
-        zip -r "vlog-subs-tool-macos.zip" "VLog字幕ツール.app"
-        # READMEファイルを追加
+        # READMEファイルを作成
         cat > README_macOS.txt << 'EOF'
         VLog字幕ツール macOS版
 
@@ -177,7 +175,7 @@ jobs:
         - .appファイルは単一のファイルです
         - macOS 10.15 (Catalina) 以上が必要です
         EOF
-        zip "vlog-subs-tool-macos.zip" README_macOS.txt
+        zip -r "vlog-subs-tool-macos.zip" "VLog字幕ツール.app" README_macOS.txt
 
     - name: Upload macOS binary
       uses: actions/upload-artifact@v4
