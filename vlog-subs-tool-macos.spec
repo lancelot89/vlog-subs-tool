@@ -124,7 +124,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=False,  # UPX圧縮を無効化（誤検知回避）
+    upx=True,
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -140,7 +140,7 @@ coll = COLLECT(
     a.zipfiles,
     a.datas,
     strip=False,
-    upx=False,  # UPX圧縮を無効化（誤検知回避）
+    upx=True,
     upx_exclude=[],
     name='VLog字幕ツール',
 )
@@ -167,20 +167,5 @@ app = BUNDLE(
         'NSHumanReadableCopyright': '© 2024 VLog字幕ツール',
         'NSRequiresAquaSystemAppearance': False,
         'NSSupportsAutomaticGraphicsSwitching': True,
-
-        # セキュリティ・プライバシー設定
-        'NSCameraUsageDescription': 'このアプリケーションはカメラを使用しません',
-        'NSMicrophoneUsageDescription': 'このアプリケーションはマイクロフォンを使用しません',
-        'NSLocationUsageDescription': 'このアプリケーションは位置情報を使用しません',
-
-        # ネットワーク関連
-        'NSAppTransportSecurity': {
-            'NSAllowsArbitraryLoads': False,
-            'NSExceptionDomains': {}
-        },
-
-        # Gatekeeper対応
-        'CFBundleExecutable': 'VLog字幕ツール',
-        'CFBundleInfoDictionaryVersion': '6.0',
     },
 )
