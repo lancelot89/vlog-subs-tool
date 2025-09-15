@@ -80,6 +80,8 @@ hidden_imports = [
 # データファイルの定義
 datas = [
     ('README.md', '.'),
+    # 組み込みPaddleOCRモデルファイル
+    ('app/models', 'models'),
 ]
 
 # バイナリの定義（PaddleOCRモデルなど）

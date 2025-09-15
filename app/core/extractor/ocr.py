@@ -807,6 +807,180 @@ class PaddleOCREngine(OCREngine):
         return self._convert_paddlex_results(api_result)
 
 
+class BundledPaddleOCREngine(OCREngine):
+    """組み込みモデルを使用するPaddleOCRエンジン実装"""
+
+    def __init__(self, language: str = "ja"):
+        super().__init__(language)
+        self.ocr_model = None
+        self.confidence_threshold = 0.7
+        self.is_paddlex = False
+
+    def get_bundled_model_path(self) -> Optional[Path]:
+        """組み込みモデルのパスを取得"""
+        try:
+            # 実行ファイルからの相対パス（PyInstaller対応）
+            if getattr(sys, 'frozen', False):
+                # PyInstallerでビルドされた実行ファイルの場合
+                base_path = Path(sys._MEIPASS)
+            else:
+                # 開発環境の場合
+                base_path = Path(__file__).parent.parent.parent
+
+            models_path = base_path / "models" / "paddleocr"
+
+            if models_path.exists():
+                logging.info(f"組み込みモデルパス: {models_path}")
+                return models_path
+            else:
+                logging.warning(f"組み込みモデルが見つかりません: {models_path}")
+                return None
+
+        except Exception as e:
+            logging.error(f"組み込みモデルパス取得エラー: {e}")
+            return None
+
+    def initialize(self, download_callback: Optional[Callable[[str, int], None]] = None) -> bool:
+        """組み込みモデルを使用したPaddleOCRの初期化"""
+        if not PADDLEOCR_AVAILABLE:
+            logging.error("PaddleOCRが利用できません")
+            return False
+
+        try:
+            if download_callback:
+                download_callback("組み込みモデルを読み込み中...", 10)
+
+            # 組み込みモデルパスを取得
+            models_path = self.get_bundled_model_path()
+            if not models_path:
+                raise Exception("組み込みモデルが見つかりません")
+
+            # モデルディレクトリの確認
+            det_model_path = models_path / "PP-OCRv5_server_det"
+            rec_model_path = models_path / "PP-OCRv5_server_rec"
+
+            if not det_model_path.exists():
+                raise Exception(f"テキスト検出モデルが見つかりません: {det_model_path}")
+            if not rec_model_path.exists():
+                raise Exception(f"テキスト認識モデルが見つかりません: {rec_model_path}")
+
+            logging.info(f"検出モデル: {det_model_path}")
+            logging.info(f"認識モデル: {rec_model_path}")
+
+            if download_callback:
+                download_callback("PaddleOCRエンジンを初期化中...", 50)
+
+            # Windows環境向け設定の適用
+            OCRModelDownloader._apply_windows_specific_settings()
+
+            # PaddleOCRの言語コード変換
+            paddle_lang = "japan" if self.language in ["ja", "japanese"] else self.language
+
+            # 組み込みモデルを使用してPaddleOCRを初期化
+            try:
+                from paddleocr import PaddleOCR
+
+                # 組み込みモデルを指定した設定
+                paddleocr_kwargs = {
+                    "det_model_dir": str(det_model_path),
+                    "rec_model_dir": str(rec_model_path),
+                    "use_angle_cls": False,  # 角度分類は無効（クラシフィケーションモデルなし）
+                    "lang": paddle_lang,
+                    "use_gpu": False,  # CPU使用を強制
+                    "show_log": False
+                }
+
+                # macOS/Windows共通の追加設定
+                paddleocr_kwargs.update({
+                    "cls_model_dir": None,
+                    "use_space_char": True,
+                    "drop_score": 0.5
+                })
+
+                logging.debug(f"組み込みPaddleOCR設定: {paddleocr_kwargs}")
+
+                if download_callback:
+                    download_callback("PaddleOCRインスタンス作成中...", 80)
+
+                self.ocr_model = PaddleOCR(**paddleocr_kwargs)
+                self.is_paddlex = False
+
+                if download_callback:
+                    download_callback("初期化完了", 100)
+
+                self.is_initialized = True
+                logging.info("組み込みモデルでのPaddleOCR初期化が完了しました")
+                return True
+
+            except Exception as e:
+                error_msg = f"組み込みPaddleOCR初期化失敗: {type(e).__name__}: {str(e)}"
+                logging.error(error_msg)
+                raise Exception(error_msg)
+
+        except Exception as e:
+            # エラー情報を含める
+            error_msg = f"組み込みPaddleOCRの初期化に失敗しました: {e}"
+
+            if sys.platform == 'win32':
+                system_info = OCRModelDownloader._get_windows_system_info()
+                error_msg += f"\n\n{system_info}"
+
+            logging.error(error_msg)
+            return False
+
+    def extract_text(self, image: np.ndarray) -> List[OCRResult]:
+        """組み込みPaddleOCRでテキスト抽出"""
+        if not self.is_initialized or not self.ocr_model:
+            return []
+
+        try:
+            # 前処理
+            processed_image = self.preprocess_image(image)
+
+            # OCR実行（従来のPaddleOCRを使用）
+            try:
+                results = self.ocr_model.ocr(processed_image)
+            except Exception as e:
+                logging.error(f"組み込みPaddleOCR実行エラー: {e}")
+                results = [[]]
+
+            ocr_results = []
+
+            if results and results[0]:
+                for result in results[0]:
+                    # PaddleOCR結果の解析
+                    bbox_points = result[0]  # 4点の座標
+                    text_info = result[1]    # (text, confidence)
+
+                    text = text_info[0]
+                    confidence = text_info[1]
+
+                    # 信頼度フィルタ
+                    if confidence < self.confidence_threshold:
+                        continue
+
+                    # 4点から矩形を計算
+                    x_coords = [p[0] for p in bbox_points]
+                    y_coords = [p[1] for p in bbox_points]
+
+                    x = int(min(x_coords))
+                    y = int(min(y_coords))
+                    width = int(max(x_coords) - x)
+                    height = int(max(y_coords) - y)
+
+                    ocr_results.append(OCRResult(
+                        text=text,
+                        confidence=confidence,
+                        bbox=(x, y, width, height)
+                    ))
+
+            return ocr_results
+
+        except Exception as e:
+            logging.error(f"組み込みPaddleOCR実行エラー: {e}")
+            return []
+
+
 class TesseractEngine(OCREngine):
     """Tesseractエンジン実装"""
     
@@ -884,11 +1058,14 @@ class OCRManager:
     def __init__(self):
         self.engines: Dict[str, OCREngine] = {}
         self.current_engine: Optional[OCREngine] = None
-        
-        # 利用可能なエンジンを登録
+
+        # 利用可能なエンジンを登録（組み込みモデル優先）
         if PADDLEOCR_AVAILABLE:
+            # 組み込みモデルエンジンを優先
+            self.engines['paddleocr_bundled'] = BundledPaddleOCREngine()
+            # フォールバック用に従来のダウンロード版も登録
             self.engines['paddleocr'] = PaddleOCREngine()
-        
+
         if TESSERACT_AVAILABLE:
             self.engines['tesseract'] = TesseractEngine()
     
@@ -904,8 +1081,8 @@ class OCRManager:
 
         engine = self.engines[engine_name]
 
-        # PaddleOCRの場合はダウンロードコールバックを渡す
-        if isinstance(engine, PaddleOCREngine):
+        # PaddleOCRエンジンの場合はダウンロードコールバックを渡す
+        if isinstance(engine, (PaddleOCREngine, BundledPaddleOCREngine)):
             success = engine.initialize(download_callback)
         else:
             success = engine.initialize()
@@ -916,7 +1093,40 @@ class OCRManager:
             return True
 
         return False
-    
+
+    def initialize_best_available_engine(self, download_callback: Optional[Callable[[str, int], None]] = None) -> bool:
+        """最適なエンジンを自動選択して初期化"""
+        # 1. 組み込みPaddleOCRを最優先で試行
+        if 'paddleocr_bundled' in self.engines:
+            if download_callback:
+                download_callback("組み込みPaddleOCRを初期化中...", 0)
+            if self.initialize_engine('paddleocr_bundled', download_callback):
+                logging.info("組み込みPaddleOCRエンジンで初期化成功")
+                return True
+            else:
+                logging.warning("組み込みPaddleOCRエンジンの初期化に失敗、フォールバックします")
+
+        # 2. 従来のPaddleOCR（ダウンロード版）を試行
+        if 'paddleocr' in self.engines:
+            if download_callback:
+                download_callback("従来PaddleOCRを初期化中...", 0)
+            if self.initialize_engine('paddleocr', download_callback):
+                logging.info("従来PaddleOCRエンジンで初期化成功")
+                return True
+            else:
+                logging.warning("従来PaddleOCRエンジンの初期化に失敗")
+
+        # 3. 最後にTesseractを試行
+        if 'tesseract' in self.engines:
+            if download_callback:
+                download_callback("Tesseractエンジンを初期化中...", 0)
+            if self.initialize_engine('tesseract'):
+                logging.info("Tesseractエンジンで初期化成功")
+                return True
+
+        logging.error("利用可能なOCRエンジンがありません")
+        return False
+
     def extract_text(self, image: np.ndarray) -> List[OCRResult]:
         """現在のエンジンでテキスト抽出"""
         if not self.current_engine:
