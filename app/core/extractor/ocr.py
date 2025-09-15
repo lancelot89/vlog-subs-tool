@@ -50,6 +50,34 @@ except ImportError:
     logging.warning("Tesseractが利用できません。pip install pytesseractでインストールしてください。")
 
 
+def _create_safe_paddleocr_kwargs(base_kwargs: dict) -> dict:
+    """PaddleOCRの設定を安全に作成（バージョン依存パラメータを動的に処理）"""
+    try:
+        from paddleocr import PaddleOCR
+        import inspect
+
+        # PaddleOCRのコンストラクタの引数を確認
+        signature = inspect.signature(PaddleOCR.__init__)
+        params = signature.parameters.keys()
+
+        # 安全な設定辞書を作成
+        safe_kwargs = base_kwargs.copy()
+
+        # GPU設定をバージョンに応じて追加
+        if "use_gpu" in params:
+            safe_kwargs["use_gpu"] = False
+        elif "gpu" in params:
+            safe_kwargs["gpu"] = False
+        # GPU関連パラメータがない場合は何もしない
+
+        return safe_kwargs
+
+    except Exception as e:
+        logging.debug(f"PaddleOCRパラメータ確認失敗: {e}")
+        # エラー時は元の設定をそのまま返す
+        return base_kwargs
+
+
 class OCRModelDownloader:
     """OCRモデルのダウンロード管理"""
 
@@ -383,12 +411,14 @@ class OCRModelDownloader:
                         logging.info("従来PaddleOCRでのフォールバックを開始...")
                         from paddleocr import PaddleOCR
 
-                        # Windows環境向けの追加設定
-                        paddleocr_kwargs = {
+                        # Windows環境向けの基本設定
+                        base_kwargs = {
                             "lang": paddle_lang,
                             "use_angle_cls": True,
-                            "use_gpu": False,  # Windows環境ではCPUを強制
                         }
+
+                        # 安全なPaddleOCR設定を作成
+                        paddleocr_kwargs = _create_safe_paddleocr_kwargs(base_kwargs)
 
                         # Windows環境でのメモリ使用量制限
                         if sys.platform == 'win32':
@@ -643,12 +673,14 @@ class PaddleOCREngine(OCREngine):
                     if PADDLEOCR_AVAILABLE:
                         from paddleocr import PaddleOCR
 
-                        # Windows環境向けの追加設定
-                        paddleocr_kwargs = {
+                        # Windows環境向けの基本設定
+                        base_kwargs = {
                             "lang": paddle_lang,
                             "use_angle_cls": True,
-                            "use_gpu": False,  # Windows環境ではCPUを強制
                         }
+
+                        # 安全なPaddleOCR設定を作成
+                        paddleocr_kwargs = _create_safe_paddleocr_kwargs(base_kwargs)
 
                         # Windows環境でのメモリ使用量制限
                         if sys.platform == 'win32':
@@ -669,12 +701,14 @@ class PaddleOCREngine(OCREngine):
                 # 従来のPaddleOCRを使用
                 from paddleocr import PaddleOCR
 
-                # Windows環境向けの追加設定
-                paddleocr_kwargs = {
+                # Windows環境向けの基本設定
+                base_kwargs = {
                     "lang": paddle_lang,
                     "use_angle_cls": True,
-                    "use_gpu": False,  # Windows環境ではCPUを強制
                 }
+
+                # 安全なPaddleOCR設定を作成
+                paddleocr_kwargs = _create_safe_paddleocr_kwargs(base_kwargs)
 
                 # Windows環境でのメモリ使用量制限
                 if sys.platform == 'win32':
@@ -880,22 +914,20 @@ class BundledPaddleOCREngine(OCREngine):
             try:
                 from paddleocr import PaddleOCR
 
-                # 組み込みモデルを指定した設定
-                paddleocr_kwargs = {
+                # 基本的な組み込みモデル設定
+                base_kwargs = {
                     "det_model_dir": str(det_model_path),
                     "rec_model_dir": str(rec_model_path),
-                    "use_angle_cls": False,  # 角度分類は無効（クラシフィケーションモデルなし）
+                    "use_angle_cls": False,
                     "lang": paddle_lang,
-                    "use_gpu": False,  # CPU使用を強制
-                    "show_log": False
-                }
-
-                # macOS/Windows共通の追加設定
-                paddleocr_kwargs.update({
+                    "show_log": False,
                     "cls_model_dir": None,
                     "use_space_char": True,
                     "drop_score": 0.5
-                })
+                }
+
+                # 安全なPaddleOCR設定を作成
+                paddleocr_kwargs = _create_safe_paddleocr_kwargs(base_kwargs)
 
                 logging.debug(f"組み込みPaddleOCR設定: {paddleocr_kwargs}")
 
