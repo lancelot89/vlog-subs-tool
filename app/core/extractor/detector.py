@@ -34,25 +34,41 @@ class SubtitleDetector:
         # ログ設定
         self.logger = logging.getLogger(__name__)
         
-        # OCRエンジンの初期化
-        engine_name = self._get_ocr_engine_name()
-        if not self.ocr_manager.initialize_engine(engine_name):
-            raise RuntimeError(f"OCRエンジンの初期化に失敗しました: {engine_name}")
-        
-        self.logger.info(f"字幕検出器を初期化しました（OCR: {engine_name}）")
+        # OCRエンジンの初期化（組み込みモデル優先で自動選択）
+        preferred_engine = self._get_preferred_ocr_engine()
+
+        if preferred_engine:
+            # 設定で特定のエンジンが指定されている場合は、それを試行
+            if not self.ocr_manager.initialize_engine(preferred_engine):
+                self.logger.warning(f"設定されたOCRエンジンの初期化に失敗: {preferred_engine}")
+                # フォールバックして自動選択
+                if not self.ocr_manager.initialize_best_available_engine():
+                    raise RuntimeError("利用可能なOCRエンジンがありません")
+            else:
+                self.logger.info(f"設定されたOCRエンジンで初期化: {preferred_engine}")
+        else:
+            # 設定がない場合は自動選択
+            if not self.ocr_manager.initialize_best_available_engine():
+                raise RuntimeError("利用可能なOCRエンジンがありません")
+
+        current_engine_info = self.ocr_manager.get_engine_info()
+        self.logger.info(f"字幕検出器を初期化しました: {current_engine_info}")
     
-    def _get_ocr_engine_name(self) -> str:
-        """設定からOCRエンジン名を取得"""
+    def _get_preferred_ocr_engine(self) -> Optional[str]:
+        """設定から優先OCRエンジン名を取得"""
         ocr_engine = self.settings.ocr_engine
-        
+
         if ocr_engine == "paddleocr_ja":
-            return "paddleocr"
+            # 組み込みモデルがあれば優先、なければ従来版
+            if 'paddleocr_bundled' in self.ocr_manager.get_available_engines():
+                return "paddleocr_bundled"
+            else:
+                return "paddleocr"
         elif ocr_engine == "tesseract_jpn":
             return "tesseract"
         else:
-            # デフォルトはPaddleOCR
-            available = self.ocr_manager.get_available_engines()
-            return available[0] if available else "paddleocr"
+            # 設定がない場合はNone（自動選択）
+            return None
     
     def set_progress_callback(self, callback: Callable[[int, str], None]):
         """プログレスコールバックを設定"""
