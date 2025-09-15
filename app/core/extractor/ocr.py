@@ -22,24 +22,22 @@ import logging
 import tempfile
 import shutil
 
-# PaddleOCR（推奨）
+PADDLEOCR_AVAILABLE = False
+PADDLEX_AVAILABLE = False
+# まず PaddleOCR の可否を厳密に判定
 try:
-    # 新しいPaddleX v3.2+を先に試行
-    try:
-        from paddlex import create_pipeline
-        PADDLEX_AVAILABLE = True
-        PADDLEOCR_AVAILABLE = True
-        logging.info("PaddleX v3.2+ が利用可能です")
-    except ImportError:
-        # 従来のPaddleOCRにフォールバック
-        from paddleocr import PaddleOCR
-        PADDLEX_AVAILABLE = False
-        PADDLEOCR_AVAILABLE = True
-        logging.info("従来のPaddleOCR が利用可能です")
+    from paddleocr import PaddleOCR
+    PADDLEOCR_AVAILABLE = True
+    logging.info("PaddleOCR が利用可能です")
 except ImportError:
-    PADDLEX_AVAILABLE = False
-    PADDLEOCR_AVAILABLE = False
-    logging.warning("PaddleOCRが利用できません。pip install paddleocrでインストールしてください。")
+    logging.warning("PaddleOCR が利用できません。pip install paddleocr を実行してください。")
+# 任意: PaddleX はあくまでオプション
+try:
+    from paddlex import create_pipeline
+    PADDLEX_AVAILABLE = True
+    logging.info("PaddleX v3.2+ が利用可能です（任意機能）")
+except ImportError:
+    pass
 
 # Tesseract（オプション）
 try:
@@ -50,97 +48,48 @@ except ImportError:
     logging.warning("Tesseractが利用できません。pip install pytesseractでインストールしてください。")
 
 
-def _test_kwargs_combination(kwargs: dict) -> dict:
-    """PaddleOCR設定の組み合わせをテストし、問題のあるパラメータを除外"""
-    try:
-        from paddleocr import PaddleOCR
-
-        # まず全体の設定で試行
-        try:
-            logging.debug(f"全設定での初期化を試行: {kwargs}")
-            test_ocr = PaddleOCR(**kwargs)
-            del test_ocr
-            logging.debug("全設定での初期化成功")
-            return kwargs
-        except Exception as e:
-            if "Unknown argument" in str(e):
-                # エラーメッセージから問題のパラメータ名を抽出
-                error_msg = str(e)
-                if "Unknown argument:" in error_msg:
-                    problem_param = error_msg.split("Unknown argument:")[1].strip().split()[0]
-                    logging.debug(f"問題のパラメータを特定: {problem_param}")
-
-                    # 問題のパラメータを除外して再試行
-                    safe_kwargs = {k: v for k, v in kwargs.items() if k != problem_param}
-                    logging.debug(f"パラメータ {problem_param} を除外して再試行")
-                    return _test_kwargs_combination(safe_kwargs)
-                else:
-                    raise e
-            else:
-                raise e
-
-    except Exception as e:
-        logging.warning(f"PaddleOCR設定テスト失敗: {e}")
-        # 最小限の設定にフォールバック
-        return {
-            'lang': kwargs.get('lang', 'japan'),
-            'use_gpu': False,
-            'show_log': False
-        }
-
-
 def _create_safe_paddleocr_kwargs(base_kwargs: dict) -> dict:
-    """PaddleOCRの設定を安全に作成（新旧バージョン両対応）"""
-    try:
-        from paddleocr import PaddleOCR
-        import inspect
+    """
+    PaddleOCR への kwargs を安全に整形する。
+    - base_kwargs を尊重しつつ、新しいPaddleOCRでサポートされていないパラメータを除外
+    - 新旧パラメータの変換も実行
+    """
+    merged = dict(base_kwargs) if base_kwargs else {}
 
-        # PaddleOCRのコンストラクタのシグネチャを確認
-        signature = inspect.signature(PaddleOCR.__init__)
-        explicit_params = set(signature.parameters.keys())
+    # 新旧PaddleOCRパラメータの互換性対応
+    if "use_angle_cls" in merged:
+        # use_angle_cls → use_textline_orientation に変換（新しいPaddleOCR対応）
+        use_angle_value = merged.pop("use_angle_cls")
+        merged["use_textline_orientation"] = use_angle_value
+        logging.debug(f"use_angle_cls={use_angle_value} → use_textline_orientation={use_angle_value} に変換")
 
-        # **kwargsがサポートされているかチェック
-        has_kwargs = any(p.kind == p.VAR_KEYWORD for p in signature.parameters.values())
+    # 新しいPaddleOCRでサポートされていないパラメータを除外
+    unsupported_params = [
+        "show_log",           # ログ制御パラメータ（内部的に処理）
+        "use_space_char",     # 空白文字認識パラメータ（廃止）
+        "drop_score",         # スコア閾値パラメータ（text_rec_score_threshに統合）
+        "use_gpu",            # GPU使用フラグ（デバイス指定に変更）
+        "cls_model_dir",      # 分類モデルディレクトリ（廃止）
+    ]
 
-        logging.debug(f"PaddleOCR明示的パラメータ: {list(explicit_params)}")
-        logging.debug(f"**kwargsサポート: {has_kwargs}")
+    removed_params = []
+    for param in unsupported_params:
+        if param in merged:
+            removed_params.append(f"{param}={merged.pop(param)}")
 
-        # 明示的にサポートされているパラメータを追加
-        safe_kwargs = {}
-        for key, value in base_kwargs.items():
-            if key in explicit_params:
-                safe_kwargs[key] = value
-                logging.debug(f"明示的パラメータを追加: {key}")
+    if removed_params:
+        logging.debug(f"新PaddleOCRでサポート外のパラメータを除外: {', '.join(removed_params)}")
 
-        # **kwargsがサポートされている場合、従来パラメータも含める
-        if has_kwargs:
-            # よく使われる従来パラメータのホワイトリスト
-            legacy_params = {
-                'det_model_dir', 'rec_model_dir', 'cls_model_dir',
-                'use_angle_cls', 'use_space_char', 'drop_score',
-                'show_log', 'use_gpu', 'enable_mkldnn', 'cpu_threads'
-            }
+    # 基本パラメータの設定
+    merged.setdefault("lang", "japan")         # 既定は日本語
 
-            for key, value in base_kwargs.items():
-                if key in legacy_params and key not in safe_kwargs:
-                    safe_kwargs[key] = value
-                    logging.debug(f"従来パラメータを追加: {key}")
+    # drop_scoreの代替としてtext_rec_score_threshを設定
+    if "drop_score" in base_kwargs and "text_rec_score_thresh" not in merged:
+        merged["text_rec_score_thresh"] = base_kwargs["drop_score"]
+        logging.debug(f"drop_score → text_rec_score_thresh に変換")
 
-        # CPUモード強制設定
-        safe_kwargs['use_gpu'] = False
-
-        # 段階的に初期化を試行し、問題のあるパラメータを除外
-        final_kwargs = _test_kwargs_combination(safe_kwargs)
-
-        logging.debug(f"最終PaddleOCR設定: {final_kwargs}")
-        return final_kwargs
-
-    except Exception as e:
-        logging.warning(f"PaddleOCRパラメータ設定失敗: {e}")
-        # 最小構成で確実に動作する設定
-        fallback_kwargs = {"lang": base_kwargs.get("lang", "japan")}
-        logging.debug(f"フォールバック設定: {fallback_kwargs}")
-        return fallback_kwargs
+    logging.info(f"PaddleOCR 初期化設定: {merged}")
+    return merged
 
 
 class OCRModelDownloader:
@@ -154,15 +103,14 @@ class OCRModelDownloader:
 
     @staticmethod
     def get_paddleocr_cache_dir() -> Path:
-        """PaddleOCRのキャッシュディレクトリ取得"""
+        """PaddleOCRのキャッシュディレクトリ取得（標準: ~/.paddleocr）"""
         home_dir = Path.home()
-        # 新しいPaddleXは.paddlexディレクトリを使用
-        cache_dir = home_dir / ".paddlex"
+        cache_dir = home_dir / ".paddleocr"
 
         # キャッシュディレクトリが存在しない場合は作成
         try:
             cache_dir.mkdir(parents=True, exist_ok=True)
-            logging.debug(f"PaddleXキャッシュディレクトリ: {cache_dir}")
+            logging.debug(f"PaddleOCRキャッシュディレクトリ: {cache_dir}")
         except Exception as e:
             logging.error(f"キャッシュディレクトリ作成エラー: {e}")
 
@@ -175,29 +123,16 @@ class OCRModelDownloader:
             return False
 
         try:
-            cache_dir = OCRModelDownloader.get_paddleocr_cache_dir()
-
-            # 日本語モデルの場合、PaddleXのofficial_modelsディレクトリを確認
-            if lang in ["ja", "japan", "japanese"]:
-                official_models_dir = cache_dir / "official_models"
-
-                # PaddleXの日本語OCRに必要なモデル
-                required_models = [
-                    "PP-OCRv5_server_det",  # テキスト検出
-                    "PP-OCRv5_server_rec",  # テキスト認識
-                ]
-
-                for model_name in required_models:
-                    model_dir = official_models_dir / model_name
-                    if not model_dir.exists() or not any(model_dir.iterdir()):
-                        logging.debug(f"PaddleXモデル未検出: {model_name}")
-                        return False
-
-                logging.debug(f"PaddleXモデルが利用可能: {required_models}")
+            # PaddleOCR の既定キャッシュ
+            poc = OCRModelDownloader.get_paddleocr_cache_dir()
+            # 代表的なディレクトリが生成されているかでざっくり判定
+            if poc.exists() and any(poc.rglob("inference.*")):
                 return True
-
-            # 他の言語は基本的なチェック
-            return cache_dir.exists() and (cache_dir / "official_models").exists()
+            # 任意: PaddleX 側の公式モデルも見る（存在すれば OK とみなす）
+            px = Path.home() / ".paddlex" / "official_models"
+            if px.exists() and any(px.iterdir()):
+                return True
+            return False
 
         except Exception as e:
             logging.error(f"PaddleOCRモデル確認エラー: {e}")
@@ -485,14 +420,9 @@ class OCRModelDownloader:
                         # 安全なPaddleOCR設定を作成
                         paddleocr_kwargs = _create_safe_paddleocr_kwargs(base_kwargs)
 
-                        # Windows環境でのメモリ使用量制限
+                        # Windows でも上位設定を尊重。必要があれば追加で setdefault のみ行う
                         if sys.platform == 'win32':
-                            paddleocr_kwargs.update({
-                                "det_model_dir": None,
-                                "rec_model_dir": None,
-                                "cls_model_dir": None,
-                                "show_log": False
-                            })
+                            paddleocr_kwargs.setdefault('use_gpu', False)
 
                         logging.debug(f"PaddleOCR設定: {paddleocr_kwargs}")
                         ocr = PaddleOCR(**paddleocr_kwargs)
@@ -747,14 +677,9 @@ class PaddleOCREngine(OCREngine):
                         # 安全なPaddleOCR設定を作成
                         paddleocr_kwargs = _create_safe_paddleocr_kwargs(base_kwargs)
 
-                        # Windows環境でのメモリ使用量制限
+                        # Windows でも上位設定を尊重。必要があれば追加で setdefault のみ行う
                         if sys.platform == 'win32':
-                            paddleocr_kwargs.update({
-                                "det_model_dir": None,
-                                "rec_model_dir": None,
-                                "cls_model_dir": None,
-                                "show_log": False
-                            })
+                            paddleocr_kwargs.setdefault('use_gpu', False)
 
                         logging.debug(f"従来PaddleOCR設定: {paddleocr_kwargs}")
                         self.ocr_model = PaddleOCR(**paddleocr_kwargs)
@@ -775,14 +700,9 @@ class PaddleOCREngine(OCREngine):
                 # 安全なPaddleOCR設定を作成
                 paddleocr_kwargs = _create_safe_paddleocr_kwargs(base_kwargs)
 
-                # Windows環境でのメモリ使用量制限
+                # Windows でも上位設定を尊重。必要があれば追加で setdefault のみ行う
                 if sys.platform == 'win32':
-                    paddleocr_kwargs.update({
-                        "det_model_dir": None,
-                        "rec_model_dir": None,
-                        "cls_model_dir": None,
-                        "show_log": False
-                    })
+                    paddleocr_kwargs.setdefault('use_gpu', False)
 
                 logging.debug(f"従来PaddleOCR設定: {paddleocr_kwargs}")
                 self.ocr_model = PaddleOCR(**paddleocr_kwargs)
@@ -983,10 +903,9 @@ class BundledPaddleOCREngine(OCREngine):
                 base_kwargs = {
                     "det_model_dir": str(det_model_path),
                     "rec_model_dir": str(rec_model_path),
-                    "use_angle_cls": False,
+                    "use_angle_cls": True,          # 角度補正は既定で有効
                     "lang": paddle_lang,
                     "show_log": False,
-                    "cls_model_dir": None,
                     "use_space_char": True,
                     "drop_score": 0.5
                 }
