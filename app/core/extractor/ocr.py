@@ -50,46 +50,18 @@ except ImportError:
 
 def _create_safe_paddleocr_kwargs(base_kwargs: dict) -> dict:
     """
-    PaddleOCR への kwargs を安全に整形する。
-    - base_kwargs を尊重しつつ、新しいPaddleOCRでサポートされていないパラメータを除外
-    - 新旧パラメータの変換も実行
+    PaddleOCR に渡す kwargs を安全に整形する。
+    - 渡されたキーを尊重（上書き・削除しない）
+    - 最小限の既定のみ補う
     """
     merged = dict(base_kwargs) if base_kwargs else {}
-
-    # 新旧PaddleOCRパラメータの互換性対応
-    if "use_angle_cls" in merged:
-        # use_angle_cls → use_textline_orientation に変換（新しいPaddleOCR対応）
-        use_angle_value = merged.pop("use_angle_cls")
-        merged["use_textline_orientation"] = use_angle_value
-        logging.debug(f"use_angle_cls={use_angle_value} → use_textline_orientation={use_angle_value} に変換")
-
-    # 新しいPaddleOCRでサポートされていないパラメータを除外
-    unsupported_params = [
-        "show_log",           # ログ制御パラメータ（内部的に処理）
-        "use_space_char",     # 空白文字認識パラメータ（廃止）
-        "drop_score",         # スコア閾値パラメータ（text_rec_score_threshに統合）
-        "use_gpu",            # GPU使用フラグ（デバイス指定に変更）
-        "cls_model_dir",      # 分類モデルディレクトリ（廃止）
-    ]
-
-    removed_params = []
-    for param in unsupported_params:
-        if param in merged:
-            removed_params.append(f"{param}={merged.pop(param)}")
-
-    if removed_params:
-        logging.debug(f"新PaddleOCRでサポート外のパラメータを除外: {', '.join(removed_params)}")
-
-    # 基本パラメータの設定
-    merged.setdefault("lang", "japan")         # 既定は日本語
-
-    # drop_scoreの代替としてtext_rec_score_threshを設定
-    if "drop_score" in base_kwargs and "text_rec_score_thresh" not in merged:
-        merged["text_rec_score_thresh"] = base_kwargs["drop_score"]
-        logging.debug(f"drop_score → text_rec_score_thresh に変換")
-
-    logging.info(f"PaddleOCR 初期化設定: {merged}")
+    # 既定
+    merged.setdefault("lang", "japan")
+    merged.setdefault("use_gpu", False)   # CPU 既定
+    # 勝手なキー変換はしない（use_angle_cls をそのまま温存）
+    # drop_score / show_log / use_space_char / det_model_dir / rec_model_dir 等も削除しない
     return merged
+
 
 
 class OCRModelDownloader:
@@ -333,82 +305,10 @@ class OCRModelDownloader:
                 # PaddleOCRの言語コード変換
                 paddle_lang = "japan" if lang in ["ja", "japanese"] else lang
 
-                # 新しいPaddleX v3.2+を優先して試行
-                if PADDLEX_AVAILABLE:
-                    try:
-                        logging.info("PaddleX v3.2+でのパイプライン作成を開始...")
-                        paddle_pipeline = None
-                        paddlex_errors = []
-
-                        # 方法1: 直接OCRタスクを指定
-                        try:
-                            logging.debug("PaddleX方法1: create_pipeline(task='OCR')を試行...")
-                            paddle_pipeline = create_pipeline(task="OCR")
-                            logging.info("PaddleX方法1: 成功")
-                        except Exception as e1:
-                            error_msg = f"方法1失敗: {type(e1).__name__}: {str(e1)}"
-                            paddlex_errors.append(error_msg)
-                            logging.debug(error_msg)
-
-                        # 方法2: 設定ファイルパスを指定
-                        if paddle_pipeline is None:
-                            try:
-                                logging.debug("PaddleX方法2: create_pipeline(pipeline='OCR')を試行...")
-                                paddle_pipeline = create_pipeline(pipeline="OCR")
-                                logging.info("PaddleX方法2: 成功")
-                            except Exception as e2:
-                                error_msg = f"方法2失敗: {type(e2).__name__}: {str(e2)}"
-                                paddlex_errors.append(error_msg)
-                                logging.debug(error_msg)
-
-                        # 方法3: 明示的な設定で作成
-                        if paddle_pipeline is None:
-                            try:
-                                logging.debug("PaddleX方法3: 明示的設定でパイプライン作成を試行...")
-                                paddle_pipeline = create_pipeline(
-                                    task="OCR",
-                                    pipeline="OCR-B",
-                                    device="cpu"
-                                )
-                                logging.info("PaddleX方法3: 成功")
-                            except Exception as e3:
-                                error_msg = f"方法3失敗: {type(e3).__name__}: {str(e3)}"
-                                paddlex_errors.append(error_msg)
-                                logging.debug(error_msg)
-
-                        # 方法4: Windows環境向け最小設定
-                        if paddle_pipeline is None:
-                            try:
-                                logging.debug("PaddleX方法4: Windows向け最小設定を試行...")
-                                paddle_pipeline = create_pipeline(
-                                    task="OCR",
-                                    device="cpu",
-                                    precision="fp32"
-                                )
-                                logging.info("PaddleX方法4: 成功")
-                            except Exception as e4:
-                                error_msg = f"方法4失敗: {type(e4).__name__}: {str(e4)}"
-                                paddlex_errors.append(error_msg)
-                                logging.debug(error_msg)
-
-                        if paddle_pipeline:
-                            if progress_callback:
-                                progress_callback("PaddleXパイプライン作成完了", 70 + (attempt * 5))
-                            logging.info("PaddleXパイプライン作成成功")
-                            return paddle_pipeline
-                        else:
-                            paddlex_error_summary = "; ".join(paddlex_errors)
-                            errors_log.append(f"PaddleX全失敗: {paddlex_error_summary}")
-
-                    except Exception as e:
-                        error_msg = f"PaddleX初期化例外: {type(e).__name__}: {str(e)}"
-                        errors_log.append(error_msg)
-                        logging.warning(error_msg)
-
-                # 従来のPaddleOCRを使用（フォールバック）
+                # PaddleOCRを直接使用
                 if PADDLEOCR_AVAILABLE:
                     try:
-                        logging.info("従来PaddleOCRでのフォールバックを開始...")
+                        logging.info("PaddleOCRでの初期化を開始...")
                         from paddleocr import PaddleOCR
 
                         # Windows環境向けの基本設定
@@ -417,23 +317,23 @@ class OCRModelDownloader:
                             "use_angle_cls": True,
                         }
 
-                        # 安全なPaddleOCR設定を作成
-                        paddleocr_kwargs = _create_safe_paddleocr_kwargs(base_kwargs)
-
                         # Windows でも上位設定を尊重。必要があれば追加で setdefault のみ行う
                         if sys.platform == 'win32':
-                            paddleocr_kwargs.setdefault('use_gpu', False)
+                            base_kwargs.setdefault('use_gpu', False)
+
+                        # 安全なPaddleOCR設定を作成
+                        paddleocr_kwargs = _create_safe_paddleocr_kwargs(base_kwargs)
 
                         logging.debug(f"PaddleOCR設定: {paddleocr_kwargs}")
                         ocr = PaddleOCR(**paddleocr_kwargs)
 
                         if progress_callback:
-                            progress_callback("従来PaddleOCR作成完了", 70 + (attempt * 5))
-                        logging.info("従来PaddleOCR作成成功")
+                            progress_callback("PaddleOCR作成完了", 70 + (attempt * 5))
+                        logging.info("PaddleOCR作成成功")
                         return ocr
 
                     except Exception as e:
-                        error_msg = f"従来PaddleOCR失敗: {type(e).__name__}: {str(e)}"
+                        error_msg = f"PaddleOCR失敗: {type(e).__name__}: {str(e)}"
                         errors_log.append(error_msg)
                         logging.warning(error_msg)
 
@@ -596,118 +496,26 @@ class PaddleOCREngine(OCREngine):
             # Windows環境向け設定の適用
             OCRModelDownloader._apply_windows_specific_settings()
 
-            # 新しいPaddleX v3.2+を優先して試行
-            if PADDLEX_AVAILABLE:
-                try:
-                    logging.info("PaddleX v3.2+での初期化を開始...")
-                    paddle_pipeline = None
-                    paddlex_errors = []
+            # PaddleOCRを直接使用（優先）
+            from paddleocr import PaddleOCR
 
-                    # 方法1: 直接OCRタスクを指定
-                    try:
-                        logging.debug("PaddleX方法1: create_pipeline(task='OCR')を試行...")
-                        paddle_pipeline = create_pipeline(task="OCR")
-                        logging.info("PaddleX方法1: 成功")
-                    except Exception as e1:
-                        error_msg = f"方法1失敗: {type(e1).__name__}: {str(e1)}"
-                        paddlex_errors.append(error_msg)
-                        logging.debug(error_msg)
+            # Windows環境向けの基本設定
+            base_kwargs = {
+                "lang": paddle_lang,
+                "use_angle_cls": True,
+            }
 
-                    # 方法2: 設定ファイルパスを指定
-                    if paddle_pipeline is None:
-                        try:
-                            logging.debug("PaddleX方法2: create_pipeline(pipeline='OCR')を試行...")
-                            paddle_pipeline = create_pipeline(pipeline="OCR")
-                            logging.info("PaddleX方法2: 成功")
-                        except Exception as e2:
-                            error_msg = f"方法2失敗: {type(e2).__name__}: {str(e2)}"
-                            paddlex_errors.append(error_msg)
-                            logging.debug(error_msg)
+            # 安全なPaddleOCR設定を作成
+            paddleocr_kwargs = _create_safe_paddleocr_kwargs(base_kwargs)
 
-                    # 方法3: 明示的な設定で作成
-                    if paddle_pipeline is None:
-                        try:
-                            logging.debug("PaddleX方法3: 明示的設定でパイプライン作成を試行...")
-                            paddle_pipeline = create_pipeline(
-                                task="OCR",
-                                pipeline="OCR-B",
-                                device="cpu"
-                            )
-                            logging.info("PaddleX方法3: 成功")
-                        except Exception as e3:
-                            error_msg = f"方法3失敗: {type(e3).__name__}: {str(e3)}"
-                            paddlex_errors.append(error_msg)
-                            logging.debug(error_msg)
+            # Windows でも上位設定を尊重。必要があれば追加で setdefault のみ行う
+            if sys.platform == 'win32':
+                paddleocr_kwargs.setdefault('use_gpu', False)
 
-                    # 方法4: Windows環境向け最小設定
-                    if paddle_pipeline is None:
-                        try:
-                            logging.debug("PaddleX方法4: Windows向け最小設定を試行...")
-                            paddle_pipeline = create_pipeline(
-                                task="OCR",
-                                device="cpu",
-                                precision="fp32"
-                            )
-                            logging.info("PaddleX方法4: 成功")
-                        except Exception as e4:
-                            error_msg = f"方法4失敗: {type(e4).__name__}: {str(e4)}"
-                            paddlex_errors.append(error_msg)
-                            logging.debug(error_msg)
-
-                    if paddle_pipeline:
-                        self.ocr_model = paddle_pipeline
-                        self.is_paddlex = True
-                        logging.info("PaddleXパイプラインで初期化完了")
-                    else:
-                        paddlex_error_summary = "; ".join(paddlex_errors)
-                        raise Exception(f"PaddleXパイプラインの作成に失敗: {paddlex_error_summary}")
-
-                except Exception as e:
-                    logging.warning(f"PaddleXパイプライン作成失敗、従来APIを使用: {e}")
-                    # フォールバックして従来のPaddleOCRを使用
-                    if PADDLEOCR_AVAILABLE:
-                        from paddleocr import PaddleOCR
-
-                        # Windows環境向けの基本設定
-                        base_kwargs = {
-                            "lang": paddle_lang,
-                            "use_angle_cls": True,
-                        }
-
-                        # 安全なPaddleOCR設定を作成
-                        paddleocr_kwargs = _create_safe_paddleocr_kwargs(base_kwargs)
-
-                        # Windows でも上位設定を尊重。必要があれば追加で setdefault のみ行う
-                        if sys.platform == 'win32':
-                            paddleocr_kwargs.setdefault('use_gpu', False)
-
-                        logging.debug(f"従来PaddleOCR設定: {paddleocr_kwargs}")
-                        self.ocr_model = PaddleOCR(**paddleocr_kwargs)
-                        self.is_paddlex = False
-                        logging.info("従来のPaddleOCRで初期化完了")
-                    else:
-                        raise e
-            else:
-                # 従来のPaddleOCRを使用
-                from paddleocr import PaddleOCR
-
-                # Windows環境向けの基本設定
-                base_kwargs = {
-                    "lang": paddle_lang,
-                    "use_angle_cls": True,
-                }
-
-                # 安全なPaddleOCR設定を作成
-                paddleocr_kwargs = _create_safe_paddleocr_kwargs(base_kwargs)
-
-                # Windows でも上位設定を尊重。必要があれば追加で setdefault のみ行う
-                if sys.platform == 'win32':
-                    paddleocr_kwargs.setdefault('use_gpu', False)
-
-                logging.debug(f"従来PaddleOCR設定: {paddleocr_kwargs}")
-                self.ocr_model = PaddleOCR(**paddleocr_kwargs)
-                self.is_paddlex = False
-                logging.info("従来のPaddleOCRで初期化完了")
+            logging.debug(f"PaddleOCR設定: {paddleocr_kwargs}")
+            self.ocr_model = PaddleOCR(**paddleocr_kwargs)
+            self.is_paddlex = False
+            logging.info("PaddleOCRで初期化完了")
 
             if download_callback:
                 download_callback("初期化完了", 100)
@@ -731,8 +539,14 @@ class PaddleOCREngine(OCREngine):
         """PaddleOCRでテキスト抽出"""
         if not self.is_initialized or not self.ocr_model:
             return []
-        
+
         try:
+            # dtype/shape を正規化：uint8, 3ch(BGR)
+            if image.dtype != np.uint8:
+                image = image.astype(np.uint8)
+            if image.ndim == 2:
+                image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+
             # 前処理
             processed_image = self.preprocess_image(image)
             
@@ -895,10 +709,8 @@ class BundledPaddleOCREngine(OCREngine):
             # PaddleOCRの言語コード変換
             paddle_lang = "japan" if self.language in ["ja", "japanese"] else self.language
 
-            # 組み込みモデルを使用してPaddleOCRを初期化
+            # 組み込みモデルを使用してPaddleOCRを初期化 - 安全な初期化方式を使用
             try:
-                from paddleocr import PaddleOCR
-
                 # 基本的な組み込みモデル設定
                 base_kwargs = {
                     "det_model_dir": str(det_model_path),
@@ -910,14 +722,15 @@ class BundledPaddleOCREngine(OCREngine):
                     "drop_score": 0.5
                 }
 
+                if download_callback:
+                    download_callback("PaddleOCRインスタンス作成中...", 80)
+
                 # 安全なPaddleOCR設定を作成
                 paddleocr_kwargs = _create_safe_paddleocr_kwargs(base_kwargs)
 
                 logging.debug(f"組み込みPaddleOCR設定: {paddleocr_kwargs}")
 
-                if download_callback:
-                    download_callback("PaddleOCRインスタンス作成中...", 80)
-
+                from paddleocr import PaddleOCR
                 self.ocr_model = PaddleOCR(**paddleocr_kwargs)
                 self.is_paddlex = False
 
@@ -950,6 +763,12 @@ class BundledPaddleOCREngine(OCREngine):
             return []
 
         try:
+            # dtype/shape を正規化：uint8, 3ch(BGR)
+            if image.dtype != np.uint8:
+                image = image.astype(np.uint8)
+            if image.ndim == 2:
+                image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+
             # 前処理
             processed_image = self.preprocess_image(image)
 
