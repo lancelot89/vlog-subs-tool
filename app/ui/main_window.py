@@ -276,25 +276,12 @@ class MainWindow(QMainWindow):
         self.re_extract_btn.setEnabled(False)
         toolbar.addWidget(self.re_extract_btn)
 
-        # キャンセル（抽出中のみ表示）
-        self.cancel_btn = QPushButton("キャンセル")
+        # 旧キャンセルボタン（下位互換のため残すが、使用は停止）
+        self.cancel_btn = QPushButton("🛑 抽出停止")
         self.cancel_btn.clicked.connect(self.cancel_extraction)
-        self.cancel_btn.setVisible(False)  # 初期は非表示
-        self.cancel_btn.setMinimumWidth(100)  # より大きな最小幅
-        self.cancel_btn.setMinimumHeight(30)  # 最小高さも設定
-        # より目立つ初期スタイル
-        self.cancel_btn.setStyleSheet("""
-            QPushButton {
-                color: red;
-                font-weight: bold;
-                font-size: 12px;
-                background-color: #fff5f5;
-                border: 2px solid red;
-                border-radius: 5px;
-                padding: 5px 10px;
-            }
-        """)
-        toolbar.addWidget(self.cancel_btn)
+        self.cancel_btn.setVisible(False)  # 常に非表示
+        # NOTE: 新しい実装では自動抽出ボタン自体がキャンセルボタンに変化するため、
+        # この独立したキャンセルボタンは表示されません
         
         toolbar.addSeparator()
         
@@ -581,11 +568,9 @@ class MainWindow(QMainWindow):
         # プログレスバーを非表示
         self.progress_bar.setVisible(False)
 
-        # キャンセルボタンを非表示
-        logging.info("キャンセルボタンを非表示にします")
-        self.cancel_btn.setVisible(False)
-        self.cancel_btn.setText("キャンセル")
-        self.cancel_btn.setEnabled(True)
+        # 自動抽出ボタンを元の状態に戻す
+        logging.info("自動抽出ボタンを元の状態に戻します")
+        self._restore_extract_button()
 
         # UI状態の更新
         self.extract_btn.setEnabled(True)
@@ -603,11 +588,9 @@ class MainWindow(QMainWindow):
         # プログレスバーを非表示
         self.progress_bar.setVisible(False)
 
-        # キャンセルボタンを非表示
-        logging.info("キャンセルボタンを非表示にします")
-        self.cancel_btn.setVisible(False)
-        self.cancel_btn.setText("キャンセル")
-        self.cancel_btn.setEnabled(True)
+        # 自動抽出ボタンを元の状態に戻す
+        logging.info("エラー時: 自動抽出ボタンを元の状態に戻します")
+        self._restore_extract_button()
 
         QMessageBox.critical(self, "抽出エラー", f"字幕の抽出に失敗しました:\\n{error_message}")
 
@@ -621,11 +604,9 @@ class MainWindow(QMainWindow):
         # プログレスバーを非表示
         self.progress_bar.setVisible(False)
 
-        # キャンセルボタンを非表示
-        logging.info("キャンセルボタンを非表示にします")
-        self.cancel_btn.setVisible(False)
-        self.cancel_btn.setText("キャンセル")
-        self.cancel_btn.setEnabled(True)
+        # 自動抽出ボタンを元の状態に戻す
+        logging.info("キャンセル時: 自動抽出ボタンを元の状態に戻します")
+        self._restore_extract_button()
 
         # UI状態をリセット
         self.extract_btn.setEnabled(True)
@@ -636,10 +617,9 @@ class MainWindow(QMainWindow):
         """抽出処理終了時の共通処理"""
         self.progress_bar.setVisible(False)
 
-        # キャンセルボタンを非表示（念のため）
-        self.cancel_btn.setVisible(False)
-        self.cancel_btn.setText("キャンセル")
-        self.cancel_btn.setEnabled(True)
+        # 自動抽出ボタンを元の状態に戻す（念のため）
+        logging.info("終了時: 自動抽出ボタンを元の状態に戻します")
+        self._restore_extract_button()
 
         # ワーカーのクリーンアップ
         if self.extraction_worker:
@@ -668,20 +648,25 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(0)
         self.progress_bar.setFormat("0% - 準備中...")
 
-        # ボタン状態更新
-        self.extract_btn.setEnabled(False)
+        # 自動抽出ボタンをキャンセルボタンに変更
+        logging.info("=== 🛑 自動抽出ボタンをキャンセルボタンに変更開始 ===")
+
+        # 元のボタンの接続を切断
+        self.extract_btn.clicked.disconnect()
+
+        # キャンセル機能に変更
+        self.extract_btn.setText("🛑 抽出停止")
+        self.extract_btn.setEnabled(True)
+        self.extract_btn.clicked.connect(self.cancel_extraction)
+
+        # デフォルトスタイルを維持（他のボタンと同じ見た目）
+        self.extract_btn.setStyleSheet("")
+
+        # 再抽出ボタンも無効化
         self.re_extract_btn.setEnabled(False)
 
-        # キャンセルボタンを表示（強化版）
-        logging.info("=== キャンセルボタン表示処理開始 ===")
-        logging.info(f"表示前の状態: visible={self.cancel_btn.isVisible()}, enabled={self.cancel_btn.isEnabled()}")
-        logging.info(f"ボタンのサイズ: {self.cancel_btn.size()}")
-        logging.info(f"ボタンの位置: {self.cancel_btn.pos()}")
-
-        self._show_cancel_button_with_force()
-
-        logging.info(f"表示後の状態: visible={self.cancel_btn.isVisible()}, enabled={self.cancel_btn.isEnabled()}")
-        logging.info("=== キャンセルボタン表示処理完了 ===")
+        logging.info("自動抽出ボタンが🛑抽出停止ボタンに変更されました")
+        logging.info("=== 🛑 ボタン変更処理完了 ===")
 
         # ワーカースレッド作成・開始
         self.extraction_worker = ExtractionWorker(
@@ -721,8 +706,11 @@ class MainWindow(QMainWindow):
         if reply == QMessageBox.Yes:
             # キャンセル実行
             logging.info("ユーザーがキャンセルを確定しました")
-            self.cancel_btn.setEnabled(False)  # 連打防止
-            self.cancel_btn.setText("キャンセル中...")
+            # 自動抽出ボタン（現在はキャンセルボタン）を「キャンセル中...」に変更
+            self.extract_btn.setEnabled(False)  # 連打防止
+            self.extract_btn.setText("⏳ キャンセル中...")
+            # デフォルトスタイルを維持（無効化時の標準的な見た目）
+            self.extract_btn.setStyleSheet("")
             self.status_label.setText("処理を中止しています...")
 
             # ワーカーにキャンセル要請
@@ -787,21 +775,30 @@ class MainWindow(QMainWindow):
         # 複数のアプローチで確実に表示
         self.cancel_btn.setVisible(True)
         self.cancel_btn.setEnabled(True)
-        self.cancel_btn.setText("キャンセル")
+        self.cancel_btn.setText("🛑 抽出停止")
 
-        # スタイルシートを再適用
+        # スタイルシートを再適用（絵文字版、より目立つデザイン）
         self.cancel_btn.setStyleSheet("""
             QPushButton {
-                color: red;
+                color: white;
                 font-weight: bold;
-                background-color: #fff5f5;
-                border: 2px solid red;
-                border-radius: 5px;
-                padding: 5px 10px;
-                min-width: 80px;
+                font-size: 16px;
+                background-color: #d32f2f;
+                border: 3px solid #b71c1c;
+                border-radius: 8px;
+                padding: 10px 15px;
+                text-align: center;
+                min-width: 120px;
+                max-width: 120px;
+                min-height: 35px;
+                max-height: 35px;
             }
             QPushButton:hover {
-                background-color: #ffe5e5;
+                background-color: #f44336;
+                border-color: #d32f2f;
+            }
+            QPushButton:pressed {
+                background-color: #b71c1c;
             }
             QPushButton:disabled {
                 color: #999;
@@ -810,25 +807,72 @@ class MainWindow(QMainWindow):
             }
         """)
 
-        # 強制更新の複数アプローチ
+        # 強制更新の複数アプローチ（詳細ログ付き）
+        logging.info("段階1: ボタン直接更新")
+        self.cancel_btn.show()  # show()も明示的に呼び出し
+        self.cancel_btn.raise_()  # 前面に持ってくる
         self.cancel_btn.repaint()
         self.cancel_btn.update()
+        logging.info(f"段階1後のvisible状態: {self.cancel_btn.isVisible()}")
 
         # ツールバー全体を更新
+        logging.info("段階2: ツールバー更新")
         toolbar = self.cancel_btn.parent()
         if toolbar:
+            toolbar.show()
             toolbar.repaint()
             toolbar.update()
+            # ツールバー内のウィジェット数をログ出力
+            toolbar_children = toolbar.children()
+            logging.info(f"ツールバー子要素数: {len(toolbar_children)}")
+            # キャンセルボタンがツールバーの子要素に含まれているかチェック
+            is_in_toolbar = self.cancel_btn in toolbar_children
+            logging.info(f"キャンセルボタンはツールバーに含まれる: {is_in_toolbar}")
+        else:
+            logging.warning("キャンセルボタンの親ウィジェット（ツールバー）が見つかりません")
 
         # 全体UI更新
+        logging.info("段階3: ウィンドウ全体更新")
         self.update()
         self.repaint()
+        QApplication.processEvents()  # イベント処理を明示的に実行
 
-        # QTimerで遅延チェック
+        # QTimerで遅延チェック（複数回）
         from PySide6.QtCore import QTimer
-        QTimer.singleShot(100, self._verify_cancel_button_visibility)
+        QTimer.singleShot(50, self._verify_cancel_button_visibility)
+        QTimer.singleShot(200, self._verify_cancel_button_visibility)
+        QTimer.singleShot(500, self._verify_cancel_button_visibility)
 
-        logging.info(f"キャンセルボタン強制表示完了: visible={self.cancel_btn.isVisible()}, enabled={self.cancel_btn.isEnabled()}")
+        final_visible = self.cancel_btn.isVisible()
+        final_enabled = self.cancel_btn.isEnabled()
+        final_size = self.cancel_btn.size()
+        final_pos = self.cancel_btn.pos()
+
+        logging.info(f"🛑 強制表示完了 - visible: {final_visible}, enabled: {final_enabled}")
+        logging.info(f"🛑 最終状態 - size: {final_size}, pos: {final_pos}")
+
+        if not final_visible:
+            logging.error("⚠️ 警告: すべての処理を実行してもキャンセルボタンが表示されていません")
+
+    def _restore_extract_button(self):
+        """自動抽出ボタンを元の状態に戻す"""
+        logging.info("🔄 自動抽出ボタンを元の状態に復元開始")
+
+        # 既存の接続を切断
+        try:
+            self.extract_btn.clicked.disconnect()
+        except Exception:
+            pass  # 既に切断されている場合は無視
+
+        # 元の機能に戻す
+        self.extract_btn.setText("字幕抽出")
+        self.extract_btn.setEnabled(True)
+        self.extract_btn.clicked.connect(self.start_extraction)
+
+        # 元のスタイルに戻す（デフォルトスタイル）
+        self.extract_btn.setStyleSheet("")
+
+        logging.info("🔄 自動抽出ボタンの復元完了")
 
     def _verify_cancel_button_visibility(self):
         """キャンセルボタンの表示を検証"""
