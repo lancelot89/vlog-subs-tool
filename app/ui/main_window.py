@@ -280,8 +280,20 @@ class MainWindow(QMainWindow):
         self.cancel_btn = QPushButton("キャンセル")
         self.cancel_btn.clicked.connect(self.cancel_extraction)
         self.cancel_btn.setVisible(False)  # 初期は非表示
-        self.cancel_btn.setMinimumWidth(80)  # 最小幅を設定
-        self.cancel_btn.setStyleSheet("QPushButton { color: red; font-weight: bold; }")
+        self.cancel_btn.setMinimumWidth(100)  # より大きな最小幅
+        self.cancel_btn.setMinimumHeight(30)  # 最小高さも設定
+        # より目立つ初期スタイル
+        self.cancel_btn.setStyleSheet("""
+            QPushButton {
+                color: red;
+                font-weight: bold;
+                font-size: 12px;
+                background-color: #fff5f5;
+                border: 2px solid red;
+                border-radius: 5px;
+                padding: 5px 10px;
+            }
+        """)
         toolbar.addWidget(self.cancel_btn)
         
         toolbar.addSeparator()
@@ -660,14 +672,16 @@ class MainWindow(QMainWindow):
         self.extract_btn.setEnabled(False)
         self.re_extract_btn.setEnabled(False)
 
-        # キャンセルボタンを表示（デバッグログ付き）
-        logging.info("キャンセルボタンを表示します")
-        self.cancel_btn.setVisible(True)
-        self.cancel_btn.setEnabled(True)
-        self.cancel_btn.setText("キャンセル")
-        self.cancel_btn.repaint()  # 即座に再描画を強制
-        self.update()  # UI全体の更新を強制
-        logging.info(f"キャンセルボタン状態: visible={self.cancel_btn.isVisible()}, enabled={self.cancel_btn.isEnabled()}")
+        # キャンセルボタンを表示（強化版）
+        logging.info("=== キャンセルボタン表示処理開始 ===")
+        logging.info(f"表示前の状態: visible={self.cancel_btn.isVisible()}, enabled={self.cancel_btn.isEnabled()}")
+        logging.info(f"ボタンのサイズ: {self.cancel_btn.size()}")
+        logging.info(f"ボタンの位置: {self.cancel_btn.pos()}")
+
+        self._show_cancel_button_with_force()
+
+        logging.info(f"表示後の状態: visible={self.cancel_btn.isVisible()}, enabled={self.cancel_btn.isEnabled()}")
+        logging.info("=== キャンセルボタン表示処理完了 ===")
 
         # ワーカースレッド作成・開始
         self.extraction_worker = ExtractionWorker(
@@ -767,6 +781,69 @@ class MainWindow(QMainWindow):
         )
 
         return reply == QMessageBox.Yes
+
+    def _show_cancel_button_with_force(self):
+        """キャンセルボタンを確実に表示する強化メソッド"""
+        # 複数のアプローチで確実に表示
+        self.cancel_btn.setVisible(True)
+        self.cancel_btn.setEnabled(True)
+        self.cancel_btn.setText("キャンセル")
+
+        # スタイルシートを再適用
+        self.cancel_btn.setStyleSheet("""
+            QPushButton {
+                color: red;
+                font-weight: bold;
+                background-color: #fff5f5;
+                border: 2px solid red;
+                border-radius: 5px;
+                padding: 5px 10px;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background-color: #ffe5e5;
+            }
+            QPushButton:disabled {
+                color: #999;
+                border-color: #ccc;
+                background-color: #f0f0f0;
+            }
+        """)
+
+        # 強制更新の複数アプローチ
+        self.cancel_btn.repaint()
+        self.cancel_btn.update()
+
+        # ツールバー全体を更新
+        toolbar = self.cancel_btn.parent()
+        if toolbar:
+            toolbar.repaint()
+            toolbar.update()
+
+        # 全体UI更新
+        self.update()
+        self.repaint()
+
+        # QTimerで遅延チェック
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(100, self._verify_cancel_button_visibility)
+
+        logging.info(f"キャンセルボタン強制表示完了: visible={self.cancel_btn.isVisible()}, enabled={self.cancel_btn.isEnabled()}")
+
+    def _verify_cancel_button_visibility(self):
+        """キャンセルボタンの表示を検証"""
+        if not self.cancel_btn.isVisible():
+            logging.warning("キャンセルボタンがまだ表示されていません。再試行します。")
+            self.cancel_btn.setVisible(True)
+            self.cancel_btn.show()  # show()メソッドも試行
+            self.cancel_btn.raise_()  # 前面に持ってくる
+            self.cancel_btn.repaint()
+
+            # 親ウィジェットの更新も試行
+            if self.cancel_btn.parent():
+                self.cancel_btn.parent().update()
+        else:
+            logging.info("キャンセルボタンの表示が確認されました")
 
     def check_ocr_setup(self) -> bool:
         """OCRセットアップの確認（組み込みモデル優先）"""
