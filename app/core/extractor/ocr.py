@@ -53,6 +53,7 @@ def _create_safe_paddleocr_kwargs(base_kwargs: dict) -> dict:
     PaddleOCR への kwargs を安全に整形する。
     - base_kwargs を尊重しつつ、新しいPaddleOCRでサポートされていないパラメータを除外
     - 新旧パラメータの変換も実行
+    - セグメンテーションフォルト回避のための安全設定を追加
     """
     merged = dict(base_kwargs) if base_kwargs else {}
 
@@ -88,8 +89,88 @@ def _create_safe_paddleocr_kwargs(base_kwargs: dict) -> dict:
         merged["text_rec_score_thresh"] = base_kwargs["drop_score"]
         logging.debug(f"drop_score → text_rec_score_thresh に変換")
 
-    logging.info(f"PaddleOCR 初期化設定: {merged}")
-    return merged
+    # セグメンテーションフォルト回避のための安全設定
+    # モデルディレクトリが指定されている場合、それらを一旦除外して最小構成にする
+    model_dirs = {}
+    for key in ["det_model_dir", "rec_model_dir", "cls_model_dir", "textline_orientation_model_dir"]:
+        if key in merged:
+            model_dirs[key] = merged.pop(key)
+            logging.debug(f"セグメンテーションフォルト回避のため{key}を一時除外")
+
+    logging.info(f"PaddleOCR 安全初期化設定: {merged}")
+    if model_dirs:
+        logging.debug(f"除外されたモデルディレクトリ: {model_dirs}")
+
+    return merged, model_dirs
+
+
+def _safe_paddleocr_init(kwargs: dict, model_dirs: dict = None) -> tuple:
+    """
+    セグメンテーションフォルト対策を含むPaddleOCR初期化
+    returns: (ocr_instance, success, error_message)
+    """
+    import signal
+    import sys
+    import gc
+
+    # メモリクリア
+    gc.collect()
+
+    try:
+        from paddleocr import PaddleOCR
+
+        # ステップ1: 最小構成で初期化
+        logging.info("PaddleOCR最小構成での初期化を試行...")
+        minimal_kwargs = {"lang": kwargs.get("lang", "japan")}
+
+        try:
+            ocr = PaddleOCR(**minimal_kwargs)
+            logging.info("✓ PaddleOCR最小構成初期化成功")
+            return ocr, True, None
+
+        except Exception as e1:
+            logging.warning(f"最小構成初期化失敗: {e1}")
+
+            # ステップ2: 段階的にパラメータを追加
+            logging.info("段階的パラメータ追加で初期化を試行...")
+
+            safe_configs = [
+                # 設定1: 言語のみ + テキスト方向
+                {
+                    "lang": kwargs.get("lang", "japan"),
+                    "use_textline_orientation": kwargs.get("use_textline_orientation", False)
+                },
+                # 設定2: 基本パラメータのみ
+                {
+                    "lang": kwargs.get("lang", "japan")
+                },
+                # 設定3: 絶対最小（英語）
+                {
+                    "lang": "en"
+                }
+            ]
+
+            for i, config in enumerate(safe_configs, 1):
+                try:
+                    logging.debug(f"設定{i}を試行: {config}")
+                    ocr = PaddleOCR(**config)
+                    logging.info(f"✓ PaddleOCR設定{i}で初期化成功")
+                    return ocr, True, None
+
+                except Exception as e:
+                    logging.warning(f"設定{i}初期化失敗: {e}")
+                    continue
+
+            # 全ての設定で失敗
+            return None, False, f"全ての初期化設定が失敗: 最小={e1}"
+
+    except Exception as e:
+        logging.error(f"PaddleOCR初期化で予期しないエラー: {e}")
+        return None, False, str(e)
+
+    finally:
+        # メモリクリア
+        gc.collect()
 
 
 class OCRModelDownloader:
@@ -405,11 +486,10 @@ class OCRModelDownloader:
                         errors_log.append(error_msg)
                         logging.warning(error_msg)
 
-                # 従来のPaddleOCRを使用（フォールバック）
+                # 従来のPaddleOCRを使用（フォールバック） - 安全な初期化方式を使用
                 if PADDLEOCR_AVAILABLE:
                     try:
                         logging.info("従来PaddleOCRでのフォールバックを開始...")
-                        from paddleocr import PaddleOCR
 
                         # Windows環境向けの基本設定
                         base_kwargs = {
@@ -417,20 +497,20 @@ class OCRModelDownloader:
                             "use_angle_cls": True,
                         }
 
-                        # 安全なPaddleOCR設定を作成
-                        paddleocr_kwargs = _create_safe_paddleocr_kwargs(base_kwargs)
-
                         # Windows でも上位設定を尊重。必要があれば追加で setdefault のみ行う
                         if sys.platform == 'win32':
-                            paddleocr_kwargs.setdefault('use_gpu', False)
+                            base_kwargs.setdefault('use_gpu', False)
 
-                        logging.debug(f"PaddleOCR設定: {paddleocr_kwargs}")
-                        ocr = PaddleOCR(**paddleocr_kwargs)
+                        # 安全なPaddleOCR初期化を実行
+                        ocr, success, error_message = _safe_paddleocr_init(base_kwargs)
 
-                        if progress_callback:
-                            progress_callback("従来PaddleOCR作成完了", 70 + (attempt * 5))
-                        logging.info("従来PaddleOCR作成成功")
-                        return ocr
+                        if success and ocr:
+                            if progress_callback:
+                                progress_callback("従来PaddleOCR作成完了", 70 + (attempt * 5))
+                            logging.info("従来PaddleOCR作成成功")
+                            return ocr
+                        else:
+                            raise Exception(f"安全な初期化に失敗: {error_message}")
 
                     except Exception as e:
                         error_msg = f"従来PaddleOCR失敗: {type(e).__name__}: {str(e)}"
@@ -895,10 +975,8 @@ class BundledPaddleOCREngine(OCREngine):
             # PaddleOCRの言語コード変換
             paddle_lang = "japan" if self.language in ["ja", "japanese"] else self.language
 
-            # 組み込みモデルを使用してPaddleOCRを初期化
+            # 組み込みモデルを使用してPaddleOCRを初期化 - 安全な初期化方式を使用
             try:
-                from paddleocr import PaddleOCR
-
                 # 基本的な組み込みモデル設定
                 base_kwargs = {
                     "det_model_dir": str(det_model_path),
@@ -910,21 +988,22 @@ class BundledPaddleOCREngine(OCREngine):
                     "drop_score": 0.5
                 }
 
-                # 安全なPaddleOCR設定を作成
-                paddleocr_kwargs = _create_safe_paddleocr_kwargs(base_kwargs)
-
-                logging.debug(f"組み込みPaddleOCR設定: {paddleocr_kwargs}")
-
                 if download_callback:
                     download_callback("PaddleOCRインスタンス作成中...", 80)
 
-                self.ocr_model = PaddleOCR(**paddleocr_kwargs)
-                self.is_paddlex = False
+                # 安全なPaddleOCR初期化を実行
+                ocr_instance, success, error_message = _safe_paddleocr_init(base_kwargs)
 
-                if download_callback:
-                    download_callback("初期化完了", 100)
+                if success and ocr_instance:
+                    self.ocr_model = ocr_instance
+                    self.is_paddlex = False
 
-                self.is_initialized = True
+                    if download_callback:
+                        download_callback("初期化完了", 100)
+
+                    self.is_initialized = True
+                else:
+                    raise Exception(f"組み込みモデルでの安全な初期化に失敗: {error_message}")
                 logging.info("組み込みモデルでのPaddleOCR初期化が完了しました")
                 return True
 
