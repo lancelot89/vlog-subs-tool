@@ -166,8 +166,8 @@ class OCRSetupDialog(QDialog):
             # PaddleOCRエンジンが利用できない場合
             self.status_label.setText("❌ PaddleOCRエンジンが利用できません")
             self.status_label.setStyleSheet("color: red;")
-                self.setup_btn.setEnabled(False)
-                self.add_log("利用可能なOCRエンジンが見つかりません")
+            self.setup_btn.setEnabled(False)
+            self.add_log("利用可能なOCRエンジンが見つかりません")
 
         except Exception as e:
             self.status_label.setText(f"❌ エラー: {str(e)}")
