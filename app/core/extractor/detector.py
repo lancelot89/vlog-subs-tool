@@ -163,7 +163,14 @@ class SubtitleDetector:
             self._check_cancelled()
             self._emit_progress(5, "動画を読み込んでいます...")
             self._initialize_sampler(video_path)
-            self._emit_progress(10, "動画読み込み完了")
+
+            # 動画情報を表示
+            video_info = self.sampler.video_info
+            total_frames = video_info.get('frame_count', 0)
+            duration = video_info.get('duration_sec', 0)
+            fps = video_info.get('fps', 0)
+
+            self._emit_progress(10, f"動画読み込み完了 ({total_frames}フレーム, {duration:.1f}秒, {fps:.1f}FPS)")
 
             # Step 2: ROI検出
             self._check_cancelled()
@@ -274,8 +281,13 @@ class SubtitleDetector:
         frame_count = 0
         last_progress_time = time.time()
 
+        # 動画の総フレーム数を取得
+        video_info = self.sampler.video_info
+        total_video_frames = video_info.get('frame_count', 0)
+
         try:
             self.logger.info(f"フレームサンプリング開始: ROI={roi_region.rect}")
+            self.logger.info(f"動画総フレーム数: {total_video_frames}")
 
             if isinstance(self.sampler, BottomROISampler):
                 # 下段専用サンプラーの場合
@@ -288,7 +300,11 @@ class SubtitleDetector:
                     # 進捗を定期的に報告（1秒間隔）
                     current_time = time.time()
                     if current_time - last_progress_time >= 1.0:
-                        self._emit_progress(32, f"フレームサンプリング中... ({frame_count}フレーム)")
+                        if total_video_frames > 0:
+                            processed_ratio = (frame.frame_number / total_video_frames) * 100
+                            self._emit_progress(32, f"フレームサンプリング中... ({frame_count}フレーム, {processed_ratio:.1f}%処理済み)")
+                        else:
+                            self._emit_progress(32, f"フレームサンプリング中... ({frame_count}フレーム)")
                         last_progress_time = current_time
 
             else:
@@ -302,10 +318,14 @@ class SubtitleDetector:
                     # 進捗を定期的に報告（1秒間隔）
                     current_time = time.time()
                     if current_time - last_progress_time >= 1.0:
-                        self._emit_progress(32, f"フレームサンプリング中... ({frame_count}フレーム)")
+                        if total_video_frames > 0:
+                            processed_ratio = (frame.frame_number / total_video_frames) * 100
+                            self._emit_progress(32, f"フレームサンプリング中... ({frame_count}フレーム, {processed_ratio:.1f}%処理済み)")
+                        else:
+                            self._emit_progress(32, f"フレームサンプリング中... ({frame_count}フレーム)")
                         last_progress_time = current_time
 
-            self.logger.info(f"フレームサンプリング完了: {len(frames)}フレーム")
+            self.logger.info(f"フレームサンプリング完了: {len(frames)}フレーム（動画全体の{len(frames)}/{total_video_frames}フレーム処理）")
             return frames
 
         except Exception as e:
@@ -313,6 +333,7 @@ class SubtitleDetector:
             self.logger.error(f"サンプラー種別: {type(self.sampler)}")
             self.logger.error(f"ROI情報: {roi_region}")
             self.logger.error(f"取得済みフレーム数: {len(frames)}")
+            self.logger.error(f"動画総フレーム数: {total_video_frames}")
             raise
     
     def _perform_ocr(self, frames: List[VideoFrame]) -> List[FrameOCRResult]:
