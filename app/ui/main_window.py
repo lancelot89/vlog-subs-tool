@@ -4,6 +4,7 @@ DESIGN.mdの画面仕様に基づくGUIレイアウト
 """
 
 import sys
+import logging
 from pathlib import Path
 from typing import Optional, List
 
@@ -24,7 +25,7 @@ from .extraction_worker import ExtractionWorker
 from app.core.models import Project, SubtitleItem
 from app.core.format.srt import SRTFormatter, SRTFormatSettings
 from app.core.qc.rules import QCChecker
-from app.core.extractor.ocr import OCRModelDownloader, PADDLEOCR_AVAILABLE
+from app.core.extractor.ocr import OCRModelDownloader, PADDLEOCR_AVAILABLE, OCRManager
 
 
 def setup_japanese_support(app):
@@ -533,42 +534,11 @@ class MainWindow(QMainWindow):
         """動画読み込み完了時の処理"""
         self.setWindowTitle(f"VLog字幕ツール v1.0 - {Path(file_path).name}")
     
-    def start_extraction(self):
-        """字幕抽出を開始"""
-        if not self.current_project or not self.current_video_path:
-            return
-
-        # OCRモデルの存在確認
-        if not self.check_ocr_setup():
-            return
-
-        # 既存の抽出処理をキャンセル
+    def stop_extraction(self):
+        """抽出処理を停止"""
         if self.extraction_worker and self.extraction_worker.isRunning():
             self.extraction_worker.cancel()
             self.extraction_worker.wait()
-
-        # UI状態の更新
-        self.extraction_started.emit()
-        self.status_label.setText("字幕抽出を開始しています...")
-        self.progress_bar.setVisible(True)
-        self.progress_bar.setValue(0)
-        self.extract_btn.setEnabled(False)
-        self.re_extract_btn.setEnabled(False)
-        
-        # 抽出ワーカーの作成と開始
-        self.extraction_worker = ExtractionWorker(
-            self.current_video_path,
-            self.current_project.settings
-        )
-        
-        # ワーカーシグナルの接続
-        self.extraction_worker.progress_updated.connect(self.on_extraction_progress)
-        self.extraction_worker.subtitles_extracted.connect(self.on_extraction_completed)
-        self.extraction_worker.error_occurred.connect(self.on_extraction_error)
-        self.extraction_worker.finished.connect(self.on_extraction_finished)
-        
-        # 抽出開始
-        self.extraction_worker.start()
     
     def on_extraction_progress(self, percentage: int, message: str):
         """抽出プログレス更新（ETA情報付き）"""
@@ -661,7 +631,7 @@ class MainWindow(QMainWindow):
     
     def start_extraction(self):
         """字幕抽出を開始"""
-        if not self.current_project or not self.current_project.video_path:
+        if not self.current_project or not self.current_project.source_video:
             QMessageBox.warning(self, "警告", "動画ファイルが選択されていません。")
             return
 
@@ -684,7 +654,7 @@ class MainWindow(QMainWindow):
 
         # ワーカースレッド作成・開始
         self.extraction_worker = ExtractionWorker(
-            self.current_project.video_path,
+            self.current_project.source_video,
             self.current_project.settings
         )
 
@@ -727,10 +697,26 @@ class MainWindow(QMainWindow):
             self.extraction_worker.cancel()
 
     def check_ocr_setup(self) -> bool:
-        """OCRセットアップの確認"""
-        # PaddleOCRが利用可能でモデルも存在する場合はOK
-        if PADDLEOCR_AVAILABLE and OCRModelDownloader.is_paddleocr_model_available():
+        """OCRセットアップの確認（組み込みモデル優先）"""
+        # OCRManagerで利用可能性をチェック
+        ocr_manager = OCRManager()
+
+        # いずれかのエンジンが利用可能な場合は即座にOK
+        if ocr_manager.is_any_engine_available():
+            recommended_engine = ocr_manager.get_recommended_engine()
+            if recommended_engine == 'paddleocr_bundled':
+                logging.info("組み込みPaddleOCRモデルを使用して字幕抽出を開始します")
+                self.status_label.setText("組み込みPaddleOCRモデルで字幕抽出を開始...")
+            elif recommended_engine == 'paddleocr':
+                logging.info("従来PaddleOCRモデルを使用して字幕抽出を開始します")
+                self.status_label.setText("PaddleOCRモデルで字幕抽出を開始...")
+            elif recommended_engine == 'tesseract':
+                logging.info("Tesseractエンジンを使用して字幕抽出を開始します")
+                self.status_label.setText("Tesseractエンジンで字幕抽出を開始...")
             return True
+
+        # 利用可能なエンジンがない場合のみセットアップダイアログを表示
+        logging.warning("利用可能なOCRエンジンが見つかりません。セットアップダイアログを表示します。")
 
         # セットアップダイアログを表示
         setup_dialog = OCRSetupDialog(self)
@@ -738,17 +724,20 @@ class MainWindow(QMainWindow):
 
         if result == setup_dialog.Accepted:
             # セットアップ完了
+            self.status_label.setText("OCRセットアップが完了しました")
             return True
         else:
-            # セットアップをスキップ - Tesseractまたはキャンセル
-            QMessageBox.information(
+            # セットアップをキャンセル
+            QMessageBox.warning(
                 self,
-                "情報",
-                "PaddleOCRセットアップがスキップされました。\n"
-                "Tesseractエンジンで字幕抽出を行います。\n\n"
-                "※後で設定画面からPaddleOCRを有効化できます"
+                "警告",
+                "OCRエンジンが利用できません。\n\n"
+                "字幕抽出を行うには以下のいずれかが必要です：\n"
+                "• PaddleOCRのセットアップ\n"
+                "• Tesseractのインストール\n\n"
+                "設定画面からOCRエンジンを設定してください。"
             )
-            return True
+            return False
     
     def run_qc_check(self):
         """QCチェックを実行"""
