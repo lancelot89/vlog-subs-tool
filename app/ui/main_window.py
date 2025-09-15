@@ -274,6 +274,12 @@ class MainWindow(QMainWindow):
         self.re_extract_btn.clicked.connect(self.re_extract)
         self.re_extract_btn.setEnabled(False)
         toolbar.addWidget(self.re_extract_btn)
+
+        # キャンセル（抽出中のみ表示）
+        self.cancel_btn = QPushButton("キャンセル")
+        self.cancel_btn.clicked.connect(self.cancel_extraction)
+        self.cancel_btn.setVisible(False)  # 初期は非表示
+        toolbar.addWidget(self.cancel_btn)
         
         toolbar.addSeparator()
         
@@ -591,6 +597,11 @@ class MainWindow(QMainWindow):
         # プログレスバーを非表示
         self.progress_bar.setVisible(False)
 
+        # キャンセルボタンを非表示
+        self.cancel_btn.setVisible(False)
+        self.cancel_btn.setText("キャンセル")
+        self.cancel_btn.setEnabled(True)
+
         # UI状態の更新
         self.extract_btn.setEnabled(True)
         self.re_extract_btn.setEnabled(True)
@@ -607,17 +618,42 @@ class MainWindow(QMainWindow):
         # プログレスバーを非表示
         self.progress_bar.setVisible(False)
 
+        # キャンセルボタンを非表示
+        self.cancel_btn.setVisible(False)
+        self.cancel_btn.setText("キャンセル")
+        self.cancel_btn.setEnabled(True)
+
         QMessageBox.critical(self, "抽出エラー", f"字幕の抽出に失敗しました:\\n{error_message}")
 
         # UI状態をリセット
         self.extract_btn.setEnabled(True)
         self.re_extract_btn.setEnabled(True)
         self.status_label.setText("字幕の抽出に失敗しました")
+
+    def on_extraction_cancelled(self):
+        """抽出キャンセル処理"""
+        # プログレスバーを非表示
+        self.progress_bar.setVisible(False)
+
+        # キャンセルボタンを非表示
+        self.cancel_btn.setVisible(False)
+        self.cancel_btn.setText("キャンセル")
+        self.cancel_btn.setEnabled(True)
+
+        # UI状態をリセット
+        self.extract_btn.setEnabled(True)
+        self.re_extract_btn.setEnabled(True)
+        self.status_label.setText("字幕抽出がキャンセルされました")
     
     def on_extraction_finished(self):
         """抽出処理終了時の共通処理"""
         self.progress_bar.setVisible(False)
-        
+
+        # キャンセルボタンを非表示（念のため）
+        self.cancel_btn.setVisible(False)
+        self.cancel_btn.setText("キャンセル")
+        self.cancel_btn.setEnabled(True)
+
         # ワーカーのクリーンアップ
         if self.extraction_worker:
             self.extraction_worker.cleanup()
@@ -644,6 +680,7 @@ class MainWindow(QMainWindow):
         # ボタン状態更新
         self.extract_btn.setEnabled(False)
         self.re_extract_btn.setEnabled(False)
+        self.cancel_btn.setVisible(True)  # キャンセルボタンを表示
 
         # ワーカースレッド作成・開始
         self.extraction_worker = ExtractionWorker(
@@ -655,6 +692,7 @@ class MainWindow(QMainWindow):
         self.extraction_worker.progress_updated.connect(self.on_extraction_progress)
         self.extraction_worker.subtitles_extracted.connect(self.on_extraction_completed)
         self.extraction_worker.error_occurred.connect(self.on_extraction_error)
+        self.extraction_worker.cancelled.connect(self.on_extraction_cancelled)
         self.extraction_worker.finished.connect(self.on_extraction_finished)
 
         # 抽出開始
@@ -663,6 +701,30 @@ class MainWindow(QMainWindow):
     def re_extract(self):
         """再抽出"""
         self.start_extraction()
+
+    def cancel_extraction(self):
+        """抽出処理をキャンセル"""
+        if not self.extraction_worker or not self.extraction_worker.isRunning():
+            return
+
+        # キャンセル確認ダイアログ
+        reply = QMessageBox.question(
+            self,
+            "キャンセル確認",
+            "字幕抽出を中止しますか？\n\n"
+            "進行中の処理が停止され、現在までの結果は破棄されます。",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            # キャンセル実行
+            self.cancel_btn.setEnabled(False)  # 連打防止
+            self.cancel_btn.setText("キャンセル中...")
+            self.status_label.setText("処理を中止しています...")
+
+            # ワーカーにキャンセル要請
+            self.extraction_worker.cancel()
 
     def check_ocr_setup(self) -> bool:
         """OCRセットアップの確認"""

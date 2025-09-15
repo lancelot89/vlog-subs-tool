@@ -40,6 +40,9 @@ class SubtitleDetector:
             'ocr': 60,          # OCR処理: 60%
             'grouping': 10      # グルーピング: 10%
         }
+
+        # キャンセル機能
+        self._is_cancelled = False
         
         # ログ設定
         self.logger = logging.getLogger(__name__)
@@ -115,6 +118,16 @@ class SubtitleDetector:
             'remaining_str': remaining_str,
             'completion_time': completion_time
         }
+
+    def cancel(self):
+        """字幕検出処理をキャンセル"""
+        self._is_cancelled = True
+        self.logger.info("字幕検出処理のキャンセルが要求されました")
+
+    def _check_cancelled(self):
+        """キャンセル状態をチェックし、必要に応じて例外を発生"""
+        if self._is_cancelled:
+            raise InterruptedError("字幕検出処理がキャンセルされました")
     
     def detect_subtitles(self, video_path: str) -> List[SubtitleItem]:
         """
@@ -131,16 +144,19 @@ class SubtitleDetector:
             self.start_time = time.time()
 
             # Step 1: 動画サンプリングの準備
+            self._check_cancelled()
             self._emit_progress(5, "動画を読み込んでいます...")
             self._initialize_sampler(video_path)
             self._emit_progress(10, "動画読み込み完了")
-            
+
             # Step 2: ROI検出
+            self._check_cancelled()
             self._emit_progress(15, "字幕領域を検出しています...")
             roi_region = self._detect_roi()
             self._emit_progress(25, "字幕領域検出完了")
 
             # Step 3: フレームサンプリング
+            self._check_cancelled()
             self._emit_progress(30, "フレームをサンプリングしています...")
             frames = self._sample_frames(roi_region)
 
@@ -151,10 +167,12 @@ class SubtitleDetector:
             self._emit_progress(35, f"フレームサンプリング完了 ({len(frames)}フレーム)")
 
             # Step 4: OCR実行（最も時間がかかる処理）
+            self._check_cancelled()
             self._emit_progress(40, f"OCRを実行しています... ({len(frames)}フレーム)")
             frame_results = self._perform_ocr(frames)
 
             # Step 5: グルーピング・統合
+            self._check_cancelled()
             self._emit_progress(85, "字幕をグルーピングしています...")
             subtitle_items = self._group_subtitles(frame_results)
             self._emit_progress(95, "グルーピング完了")
@@ -166,6 +184,12 @@ class SubtitleDetector:
             self.logger.info(f"字幕検出完了: {len(subtitle_items)}件の字幕を検出")
             return subtitle_items
             
+        except InterruptedError as e:
+            # キャンセル例外は特別扱い
+            self.logger.info(f"字幕検出がキャンセルされました: {e}")
+            self._emit_progress(100, "処理がキャンセルされました")
+            raise
+
         except Exception as e:
             self.logger.error(f"字幕検出エラー: {e}")
             self._emit_progress(100, f"エラーが発生しました: {str(e)}")
@@ -262,22 +286,25 @@ class SubtitleDetector:
             completed_count = 0
             
             for future in as_completed(future_to_frame):
+                # キャンセルチェック
+                self._check_cancelled()
+
                 frame = future_to_frame[future]
-                
+
                 try:
                     ocr_results = future.result()
-                    
+
                     if ocr_results:  # OCR結果がある場合のみ追加
                         frame_results.append(FrameOCRResult(
                             frame=frame,
                             ocr_results=ocr_results
                         ))
-                    
+
                 except Exception as e:
                     self.logger.warning(f"フレーム {frame.frame_number} のOCR処理に失敗: {e}")
-                
+
                 completed_count += 1
-                
+
                 # プログレス更新（40%から85%の範囲でOCR処理）
                 progress = 40 + int((completed_count / total_frames) * 45)
                 self._emit_progress(progress, f"OCR処理中... ({completed_count}/{total_frames})")
