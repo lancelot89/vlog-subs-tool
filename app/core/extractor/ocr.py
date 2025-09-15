@@ -107,10 +107,6 @@ class SimplePaddleOCREngine:
                 "rec_model_dir": str(rec_dir),
                 "lang": lang,
                 "use_angle_cls": True,
-                "use_gpu": False,
-                "show_log": False,
-                "use_space_char": True,
-                "drop_score": 0.5,
             }
 
             logging.debug(f"PaddleOCR init kwargs: {kwargs}")
