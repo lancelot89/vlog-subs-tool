@@ -140,6 +140,10 @@ a = Analysis(
 # PYZアーカイブ作成
 pyz = PYZ(a.pure, a.zipped_data, cipher=None)
 
+# TODO: v1リリース時にDEBUG_MODE判定を削除してconsole=Falseに固定
+# デバッグモード判定（main.pyのDEBUG_MODEと連動）
+DEBUG_MODE = True  # 開発版（v1リリース時にFalseにする）
+
 # 実行ファイル設定
 exe = EXE(
     pyz,
@@ -151,7 +155,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,  # UPX圧縮を無効化（誤検知回避）
-    console=False,
+    console=DEBUG_MODE,  # デバッグ版ではコンソール表示、本番版では非表示
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
