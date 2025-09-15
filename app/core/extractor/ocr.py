@@ -150,8 +150,8 @@ class SimplePaddleOCREngine:
                 "text_recognition_model_dir": str(rec_dir.resolve()),
                 "lang": lang,
                 "use_textline_orientation": True,
-                "text_det_limit_side_len": 1536,
-                "text_det_limit_type": "max",
+                "text_det_limit_side_len": 1536,  # Limit detection resolution
+                "text_det_limit_type": "max",  # Max dimension limit
             }
 
             # Configuration 2: Legacy parameters (fallback for older PaddleOCR versions)
@@ -201,6 +201,7 @@ class SimplePaddleOCREngine:
         """
         Run OCR. Returns list of OCRResult with text, confidence, bbox.
         - Accepts BGR (OpenCV) or grayscale. Ensures uint8 and 3-channel.
+        - Added memory safety checks and image size validation.
         - Cross-platform compatible OCR result parsing.
         """
         if self._ocr is None:
@@ -219,7 +220,7 @@ class SimplePaddleOCREngine:
                 logging.warning(f"Invalid image dimensions: {w}x{h}")
                 return []
 
-            # Prevent excessive memory usage on Windows
+            # Prevent excessive memory usage
             max_dimension = 4096  # 4K resolution limit
             if h > max_dimension or w > max_dimension:
                 logging.warning(f"Image too large: {w}x{h}, resizing for memory safety")
