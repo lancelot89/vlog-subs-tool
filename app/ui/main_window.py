@@ -25,7 +25,7 @@ from .extraction_worker import ExtractionWorker
 from app.core.models import Project, SubtitleItem
 from app.core.format.srt import SRTFormatter, SRTFormatSettings
 from app.core.qc.rules import QCChecker
-from app.core.extractor.ocr import OCRModelDownloader, PADDLEOCR_AVAILABLE, OCRManager
+from app.core.extractor.ocr import SimplePaddleOCREngine
 
 
 def setup_japanese_support(app):
@@ -890,22 +890,13 @@ class MainWindow(QMainWindow):
             logging.info("キャンセルボタンの表示が確認されました")
 
     def check_ocr_setup(self) -> bool:
-        """OCRセットアップの確認（組み込みモデル優先）"""
-        # OCRManagerで利用可能性をチェック
-        ocr_manager = OCRManager()
+        """OCRセットアップの確認（SimplePaddleOCREngine使用）"""
+        # SimplePaddleOCREngineの利用可能性をチェック
+        ocr_engine = SimplePaddleOCREngine()
 
-        # いずれかのエンジンが利用可能な場合は即座にOK
-        if ocr_manager.is_any_engine_available():
-            recommended_engine = ocr_manager.get_recommended_engine()
-            if recommended_engine == 'paddleocr_bundled':
-                logging.info("組み込みPaddleOCRモデルを使用して字幕抽出を開始します")
-                self.status_label.setText("組み込みPaddleOCRモデルで字幕抽出を開始...")
-            elif recommended_engine == 'paddleocr':
-                logging.info("従来PaddleOCRモデルを使用して字幕抽出を開始します")
-                self.status_label.setText("PaddleOCRモデルで字幕抽出を開始...")
-            elif recommended_engine == 'tesseract':
-                logging.info("Tesseractエンジンを使用して字幕抽出を開始します")
-                self.status_label.setText("Tesseractエンジンで字幕抽出を開始...")
+        if ocr_engine.initialize():
+            logging.info("SimplePaddleOCREngineを使用して字幕抽出を開始します")
+            self.status_label.setText("PaddleOCRエンジンで字幕抽出を開始...")
             return True
 
         # 利用可能なエンジンがない場合のみセットアップダイアログを表示

@@ -11,7 +11,7 @@ import time
 from app.core.models import SubtitleItem, ProjectSettings
 from .sampler import VideoSampler, BottomROISampler, VideoFrame
 from .roi import ROIManager, ROIMode, ROIRegion
-from .ocr import OCRManager, OCRResult
+from .ocr import SimplePaddleOCREngine, OCRResult
 from .group import FrameOCRResult, ExtractionProcessor
 
 
@@ -24,7 +24,7 @@ class SubtitleDetector:
             settings: プロジェクト設定
         """
         self.settings = settings
-        self.ocr_manager = OCRManager()
+        self.ocr_engine = SimplePaddleOCREngine()
         self.roi_manager: Optional[ROIManager] = None
         self.sampler: Optional[VideoSampler] = None
         
@@ -47,41 +47,12 @@ class SubtitleDetector:
         # ログ設定
         self.logger = logging.getLogger(__name__)
         
-        # OCRエンジンの初期化（組み込みモデル優先で自動選択）
-        preferred_engine = self._get_preferred_ocr_engine()
+        # SimplePaddleOCREngineの初期化
+        if not self.ocr_engine.initialize():
+            raise RuntimeError("PaddleOCRエンジンの初期化に失敗しました")
 
-        if preferred_engine:
-            # 設定で特定のエンジンが指定されている場合は、それを試行
-            if not self.ocr_manager.initialize_engine(preferred_engine):
-                self.logger.warning(f"設定されたOCRエンジンの初期化に失敗: {preferred_engine}")
-                # フォールバックして自動選択
-                if not self.ocr_manager.initialize_best_available_engine():
-                    raise RuntimeError("利用可能なOCRエンジンがありません")
-            else:
-                self.logger.info(f"設定されたOCRエンジンで初期化: {preferred_engine}")
-        else:
-            # 設定がない場合は自動選択
-            if not self.ocr_manager.initialize_best_available_engine():
-                raise RuntimeError("利用可能なOCRエンジンがありません")
-
-        current_engine_info = self.ocr_manager.get_engine_info()
-        self.logger.info(f"字幕検出器を初期化しました: {current_engine_info}")
+        self.logger.info("字幕検出器を初期化しました: SimplePaddleOCREngine")
     
-    def _get_preferred_ocr_engine(self) -> Optional[str]:
-        """設定から優先OCRエンジン名を取得"""
-        ocr_engine = self.settings.ocr_engine
-
-        if ocr_engine == "paddleocr_ja":
-            # 組み込みモデルがあれば優先、なければ従来版
-            if 'paddleocr_bundled' in self.ocr_manager.get_available_engines():
-                return "paddleocr_bundled"
-            else:
-                return "paddleocr"
-        elif ocr_engine == "tesseract_jpn":
-            return "tesseract"
-        else:
-            # 設定がない場合はNone（自動選択）
-            return None
     
     def set_progress_callback(self, callback: Callable[[int, str], None]):
         """プログレスコールバックを設定"""
@@ -420,7 +391,7 @@ class SubtitleDetector:
     def _ocr_single_frame(self, frame: VideoFrame) -> List[OCRResult]:
         """単一フレームのOCR処理"""
         try:
-            return self.ocr_manager.extract_text(frame.image)
+            return self.ocr_engine.extract_text(frame.image)
         except Exception as e:
             self.logger.warning(f"フレーム {frame.frame_number} のOCR失敗: {e}")
             return []
@@ -464,7 +435,7 @@ class SubtitleDetector:
         if self.sampler:
             info['video_info'] = self.sampler.video_info
         
-        info['ocr_info'] = self.ocr_manager.get_engine_info()
+        info['ocr_info'] = "SimplePaddleOCREngine"
         
         return info
 
