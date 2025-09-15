@@ -338,9 +338,11 @@ class MainWindow(QMainWindow):
         """ステータスバーの作成"""
         self.status_bar = self.statusBar()
         
-        # プログレスバー
+        # プログレスバー（ETA表示対応）
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
+        self.progress_bar.setTextVisible(True)  # テキスト表示を有効化
+        self.progress_bar.setFormat("%p% - 待機中...")  # 初期テキスト
         self.status_bar.addPermanentWidget(self.progress_bar)
         
         # ステータスラベル
@@ -564,8 +566,16 @@ class MainWindow(QMainWindow):
         self.extraction_worker.start()
     
     def on_extraction_progress(self, percentage: int, message: str):
-        """抽出プログレス更新"""
+        """抽出プログレス更新（ETA情報付き）"""
         self.progress_bar.setValue(percentage)
+
+        # プログレスバーのテキスト表示も更新
+        if percentage < 100:
+            self.progress_bar.setFormat(f"{percentage}% - 処理中...")
+        else:
+            self.progress_bar.setFormat(f"{percentage}% - 完了")
+
+        # ステータスラベルにメッセージ（ETA情報含む）を表示
         self.status_label.setText(message)
     
     def on_extraction_completed(self, subtitle_items: List[SubtitleItem]):
@@ -579,6 +589,9 @@ class MainWindow(QMainWindow):
         # プレイヤービューにも字幕を設定
         self.player_view.set_subtitles(subtitle_items)
         
+        # プログレスバーを非表示
+        self.progress_bar.setVisible(False)
+
         # UI状態の更新
         self.extract_btn.setEnabled(True)
         self.re_extract_btn.setEnabled(True)
@@ -586,16 +599,20 @@ class MainWindow(QMainWindow):
         self.translate_btn.setEnabled(True)
         self.csv_export_btn.setEnabled(True)
         self.export_srt_btn.setEnabled(True)
-        
+
         self.status_label.setText(f"字幕の抽出が完了しました ({len(subtitle_items)}件)")
         self.extraction_completed.emit()
     
     def on_extraction_error(self, error_message: str):
         """抽出エラー処理"""
+        # プログレスバーを非表示
+        self.progress_bar.setVisible(False)
+
         QMessageBox.critical(self, "抽出エラー", f"字幕の抽出に失敗しました:\\n{error_message}")
-        
+
         # UI状態をリセット
         self.extract_btn.setEnabled(True)
+        self.re_extract_btn.setEnabled(True)
         self.status_label.setText("字幕の抽出に失敗しました")
     
     def on_extraction_finished(self):
@@ -607,6 +624,43 @@ class MainWindow(QMainWindow):
             self.extraction_worker.cleanup()
             self.extraction_worker = None
     
+    def start_extraction(self):
+        """字幕抽出を開始"""
+        if not self.current_project or not self.current_project.video_path:
+            QMessageBox.warning(self, "警告", "動画ファイルが選択されていません。")
+            return
+
+        # OCRセットアップ確認
+        if not self.check_ocr_setup():
+            return
+
+        # 既存の抽出処理を停止
+        self.stop_extraction()
+
+        # プログレスバー表示
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setFormat("0% - 準備中...")
+
+        # ボタン状態更新
+        self.extract_btn.setEnabled(False)
+        self.re_extract_btn.setEnabled(False)
+
+        # ワーカースレッド作成・開始
+        self.extraction_worker = ExtractionWorker(
+            self.current_project.video_path,
+            self.current_project.settings
+        )
+
+        # シグナル接続
+        self.extraction_worker.progress_updated.connect(self.on_extraction_progress)
+        self.extraction_worker.subtitles_extracted.connect(self.on_extraction_completed)
+        self.extraction_worker.error_occurred.connect(self.on_extraction_error)
+        self.extraction_worker.finished.connect(self.on_extraction_finished)
+
+        # 抽出開始
+        self.extraction_worker.start()
+
     def re_extract(self):
         """再抽出"""
         self.start_extraction()

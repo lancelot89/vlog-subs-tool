@@ -28,8 +28,18 @@ class SubtitleDetector:
         self.roi_manager: Optional[ROIManager] = None
         self.sampler: Optional[VideoSampler] = None
         
-        # プログレスコールバック
+        # プログレスコールバック（進捗率、メッセージ、ETA情報を含む）
         self.progress_callback: Optional[Callable[[int, str], None]] = None
+
+        # ETA計算用変数
+        self.start_time: Optional[float] = None
+        self.phase_weights = {
+            'init': 5,           # 初期化: 5%
+            'roi_detection': 10, # ROI検出: 10%
+            'sampling': 15,      # サンプリング: 15%
+            'ocr': 60,          # OCR処理: 60%
+            'grouping': 10      # グルーピング: 10%
+        }
         
         # ログ設定
         self.logger = logging.getLogger(__name__)
@@ -73,12 +83,54 @@ class SubtitleDetector:
     def set_progress_callback(self, callback: Callable[[int, str], None]):
         """プログレスコールバックを設定"""
         self.progress_callback = callback
-    
+
     def _emit_progress(self, percentage: int, message: str):
-        """プログレス通知を発信"""
+        """プログレス通知を発信（ETA情報付き）"""
+        # ETA計算
+        eta_info = self._calculate_eta(percentage)
+
+        # メッセージにETA情報を含める
+        if eta_info and percentage >= 10:  # 10%以降からETA表示
+            enhanced_message = f"{message} (残り約{eta_info['remaining_str']}, {eta_info['completion_time']}頃完了予定)"
+        else:
+            enhanced_message = message
+
         if self.progress_callback:
-            self.progress_callback(percentage, message)
-        self.logger.info(f"[{percentage}%] {message}")
+            self.progress_callback(percentage, enhanced_message)
+        self.logger.info(f"[{percentage}%] {enhanced_message}")
+
+    def _calculate_eta(self, current_progress: int) -> Optional[dict]:
+        """ETA（予定完了時間）を計算"""
+        if not self.start_time or current_progress <= 5:
+            return None
+
+        elapsed_time = time.time() - self.start_time
+
+        if current_progress <= 0:
+            return None
+
+        # 推定総時間 = 経過時間 / (進捗率 / 100)
+        estimated_total_time = elapsed_time / (current_progress / 100)
+        remaining_time = estimated_total_time - elapsed_time
+
+        if remaining_time <= 0:
+            return None
+
+        # 残り時間を分秒で表示
+        if remaining_time >= 60:
+            remaining_str = f"{int(remaining_time // 60)}分{int(remaining_time % 60)}秒"
+        else:
+            remaining_str = f"{int(remaining_time)}秒"
+
+        # 完了予定時刻
+        from datetime import datetime, timedelta
+        completion_time = (datetime.now() + timedelta(seconds=remaining_time)).strftime("%H:%M")
+
+        return {
+            'remaining_seconds': remaining_time,
+            'remaining_str': remaining_str,
+            'completion_time': completion_time
+        }
     
     def detect_subtitles(self, video_path: str) -> List[SubtitleItem]:
         """
@@ -92,36 +144,41 @@ class SubtitleDetector:
         """
         try:
             self.logger.info(f"字幕検出開始: {video_path}")
-            start_time = time.time()
-            
+            self.start_time = time.time()
+
             # Step 1: 動画サンプリングの準備
-            self._emit_progress(10, "動画を読み込んでいます...")
+            self._emit_progress(5, "動画を読み込んでいます...")
             self._initialize_sampler(video_path)
+            self._emit_progress(10, "動画読み込み完了")
             
             # Step 2: ROI検出
-            self._emit_progress(20, "字幕領域を検出しています...")
+            self._emit_progress(15, "字幕領域を検出しています...")
             roi_region = self._detect_roi()
-            
+            self._emit_progress(25, "字幕領域検出完了")
+
             # Step 3: フレームサンプリング
             self._emit_progress(30, "フレームをサンプリングしています...")
             frames = self._sample_frames(roi_region)
-            
+
             if not frames:
                 self._emit_progress(100, "字幕が検出されませんでした")
                 return []
-            
-            # Step 4: OCR実行
-            self._emit_progress(50, f"OCRを実行しています... ({len(frames)}フレーム)")
+
+            self._emit_progress(35, f"フレームサンプリング完了 ({len(frames)}フレーム)")
+
+            # Step 4: OCR実行（最も時間がかかる処理）
+            self._emit_progress(40, f"OCRを実行しています... ({len(frames)}フレーム)")
             frame_results = self._perform_ocr(frames)
-            
+
             # Step 5: グルーピング・統合
-            self._emit_progress(80, "字幕をグルーピングしています...")
+            self._emit_progress(85, "字幕をグルーピングしています...")
             subtitle_items = self._group_subtitles(frame_results)
+            self._emit_progress(95, "グルーピング完了")
             
             # Step 6: 完了
-            elapsed_time = time.time() - start_time
+            elapsed_time = time.time() - self.start_time
             self._emit_progress(100, f"検出完了: {len(subtitle_items)}件 ({elapsed_time:.1f}秒)")
-            
+
             self.logger.info(f"字幕検出完了: {len(subtitle_items)}件の字幕を検出")
             return subtitle_items
             
@@ -237,8 +294,8 @@ class SubtitleDetector:
                 
                 completed_count += 1
                 
-                # プログレス更新
-                progress = 50 + int((completed_count / total_frames) * 30)
+                # プログレス更新（40%から85%の範囲でOCR処理）
+                progress = 40 + int((completed_count / total_frames) * 45)
                 self._emit_progress(progress, f"OCR処理中... ({completed_count}/{total_frames})")
         
         # 時間順にソート
