@@ -51,31 +51,44 @@ except ImportError:
 
 
 def _create_safe_paddleocr_kwargs(base_kwargs: dict) -> dict:
-    """PaddleOCRの設定を安全に作成（バージョン依存パラメータを動的に処理）"""
+    """PaddleOCRの設定を安全に作成（全パラメータを動的に検証）"""
     try:
         from paddleocr import PaddleOCR
         import inspect
 
         # PaddleOCRのコンストラクタの引数を確認
         signature = inspect.signature(PaddleOCR.__init__)
-        params = signature.parameters.keys()
+        valid_params = set(signature.parameters.keys())
 
-        # 安全な設定辞書を作成
-        safe_kwargs = base_kwargs.copy()
+        # 有効なパラメータのみを含む安全な設定を作成
+        safe_kwargs = {}
 
-        # GPU設定をバージョンに応じて追加
-        if "use_gpu" in params:
+        for key, value in base_kwargs.items():
+            if key in valid_params:
+                safe_kwargs[key] = value
+            else:
+                logging.debug(f"PaddleOCRパラメータ '{key}' は利用できません（スキップ）")
+
+        # GPU設定を動的に追加（CPU使用を強制）
+        if "use_gpu" in valid_params:
             safe_kwargs["use_gpu"] = False
-        elif "gpu" in params:
+        elif "gpu" in valid_params:
             safe_kwargs["gpu"] = False
-        # GPU関連パラメータがない場合は何もしない
+
+        logging.debug(f"有効なPaddleOCRパラメータ: {list(valid_params)}")
+        logging.debug(f"使用するPaddleOCR設定: {safe_kwargs}")
 
         return safe_kwargs
 
     except Exception as e:
-        logging.debug(f"PaddleOCRパラメータ確認失敗: {e}")
-        # エラー時は元の設定をそのまま返す
-        return base_kwargs
+        logging.warning(f"PaddleOCRパラメータ確認失敗: {e}")
+        # エラー時は最小限の設定のみ返す
+        minimal_kwargs = {
+            "lang": base_kwargs.get("lang", "japan"),
+            "show_log": False
+        }
+        logging.debug(f"フォールバック設定: {minimal_kwargs}")
+        return minimal_kwargs
 
 
 class OCRModelDownloader:
