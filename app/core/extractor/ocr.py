@@ -1130,43 +1130,26 @@ class OCRManager:
 
         # 各エンジンの状態を診断
         if PADDLEOCR_AVAILABLE:
-            # PaddleOCRの実際の初期化テストを実行
-            paddleocr_working = False
-            paddleocr_error = None
+            # 組み込みPaddleOCRが優先（アプリに組み込み済み）
+            bundled_engine = self.engines.get('paddleocr_bundled')
+            if bundled_engine:
+                bundled_path = bundled_engine.get_bundled_model_path()
+                if bundled_path and bundled_path.exists():
+                    # 組み込みモデルでの実際の初期化テストを実行
+                    bundled_working = False
+                    bundled_error = None
 
-            try:
-                # 最小構成でPaddleOCRの初期化テストを試行
-                from paddleocr import PaddleOCR
+                    try:
+                        # 組み込みモデルを使用した初期化テスト
+                        test_result = bundled_engine.initialize()
+                        if test_result:
+                            bundled_working = True
+                            logging.debug("組み込みPaddleOCR初期化テスト: 成功")
+                    except Exception as e:
+                        bundled_error = str(e)
+                        logging.debug(f"組み込みPaddleOCR初期化テスト: 失敗 - {e}")
 
-                # シンプルなテスト設定（サポートされているパラメータのみ）
-                test_kwargs = _create_safe_paddleocr_kwargs({
-                    "lang": "japan",
-                    "use_angle_cls": True,
-                    "show_log": False
-                })
-
-                # 初期化テスト
-                test_ocr = PaddleOCR(**test_kwargs)
-
-                # ダミー画像でのテスト実行
-                import numpy as np
-                test_image = np.ones((100, 300, 3), dtype=np.uint8) * 255
-                test_result = test_ocr.ocr(test_image, cls=True)
-
-                # 初期化成功
-                paddleocr_working = True
-                logging.debug("PaddleOCR初期化テスト: 成功")
-
-            except Exception as e:
-                paddleocr_error = str(e)
-                logging.debug(f"PaddleOCR初期化テスト: 失敗 - {e}")
-
-            if paddleocr_working:
-                # 組み込みPaddleOCR
-                bundled_engine = self.engines.get('paddleocr_bundled')
-                if bundled_engine:
-                    bundled_path = bundled_engine.get_bundled_model_path()
-                    if bundled_path and bundled_path.exists():
+                    if bundled_working:
                         diagnosis['available_engines']['paddleocr_bundled'] = {
                             'status': 'available',
                             'model_path': str(bundled_path),
@@ -1174,32 +1157,64 @@ class OCRManager:
                             'test_result': 'initialization_successful'
                         }
                     else:
-                        diagnosis['available_engines']['paddleocr'] = {
-                            'status': 'available',
-                            'description': '従来PaddleOCR（初期化テスト成功）',
-                            'test_result': 'initialization_successful'
+                        # 組み込みPaddleOCR初期化失敗の詳細分析
+                        error_details = self._analyze_paddleocr_error(bundled_error)
+                        diagnosis['missing_engines']['paddleocr_bundled'] = {
+                            'reason': 'bundled_initialization_failed',
+                            'description': '組み込みPaddleOCRの初期化に失敗しました',
+                            'error_detail': bundled_error,
+                            'error_analysis': error_details,
+                            'model_path': str(bundled_path),
+                            'suggested_action': 'アプリケーションを再起動してください'
                         }
                 else:
-                    diagnosis['available_engines']['paddleocr'] = {
-                        'status': 'available',
-                        'description': '従来PaddleOCR（初期化テスト成功）',
-                        'test_result': 'initialization_successful'
+                    diagnosis['missing_engines']['paddleocr_bundled'] = {
+                        'reason': 'no_bundled_models',
+                        'description': '組み込みモデルファイルが見つかりません',
+                        'model_path': str(bundled_path) if bundled_path else 'None',
+                        'suggested_action': 'アプリケーションの再インストールが必要です'
                     }
-            else:
-                # PaddleOCR初期化失敗の詳細分析
-                error_details = self._analyze_paddleocr_error(paddleocr_error)
-                diagnosis['missing_engines']['paddleocr'] = {
-                    'reason': 'initialization_failed',
-                    'description': 'PaddleOCRの初期化に失敗しました',
-                    'error_detail': paddleocr_error,
-                    'error_analysis': error_details,
-                    'install_command': 'pip install --upgrade paddlepaddle paddleocr'
-                }
+
+            # フォールバック: 従来PaddleOCRの確認（組み込みが失敗した場合のみ）
+            if not diagnosis['available_engines'] and PADDLEOCR_AVAILABLE:
+                model_available = OCRModelDownloader.is_paddleocr_model_available()
+                if model_available:
+                    # 従来PaddleOCRでの初期化テスト
+                    try:
+                        from paddleocr import PaddleOCR
+                        test_kwargs = _create_safe_paddleocr_kwargs({
+                            "lang": "japan",
+                            "use_angle_cls": True,
+                            "show_log": False
+                        })
+                        test_ocr = PaddleOCR(**test_kwargs)
+
+                        # ダミー画像でのテスト実行
+                        import numpy as np
+                        test_image = np.ones((100, 300, 3), dtype=np.uint8) * 255
+                        test_result = test_ocr.ocr(test_image, cls=True)
+
+                        diagnosis['available_engines']['paddleocr'] = {
+                            'status': 'available',
+                            'description': '従来PaddleOCR（フォールバック）',
+                            'test_result': 'initialization_successful',
+                            'cache_dir': str(OCRModelDownloader.get_paddleocr_cache_dir())
+                        }
+                    except Exception as e:
+                        error_details = self._analyze_paddleocr_error(str(e))
+                        diagnosis['missing_engines']['paddleocr'] = {
+                            'reason': 'fallback_initialization_failed',
+                            'description': 'フォールバックPaddleOCRも初期化に失敗しました',
+                            'error_detail': str(e),
+                            'error_analysis': error_details,
+                            'suggested_action': 'アプリケーションを再起動してください'
+                        }
         else:
+            # PaddleOCRライブラリ自体が利用できない（通常は発生しないはず）
             diagnosis['missing_engines']['paddleocr'] = {
-                'reason': 'package_not_installed',
-                'description': 'PaddleOCRパッケージがインストールされていません',
-                'install_command': 'pip install paddlepaddle paddleocr'
+                'reason': 'library_not_available',
+                'description': 'PaddleOCRライブラリが利用できません',
+                'suggested_action': 'アプリケーションの再インストールが必要です'
             }
 
         if TESSERACT_AVAILABLE:
@@ -1267,11 +1282,11 @@ class OCRManager:
         return diagnosis
 
     def _analyze_paddleocr_error(self, error_msg: str) -> Dict[str, str]:
-        """PaddleOCR初期化エラーの詳細分析"""
+        """PaddleOCR初期化エラーの詳細分析（組み込み版前提）"""
         analysis = {
             'category': 'unknown',
-            'likely_cause': 'PaddleOCR初期化の一般的な失敗',
-            'suggested_fix': 'pip install --upgrade paddlepaddle paddleocr'
+            'likely_cause': '組み込みPaddleOCRの初期化失敗',
+            'suggested_fix': 'アプリケーションを再起動してください'
         }
 
         if not error_msg:
@@ -1283,29 +1298,36 @@ class OCRManager:
         if any(param in error_msg for param in ['use_space_char', 'show_log', 'drop_score']):
             analysis.update({
                 'category': 'parameter_compatibility',
-                'likely_cause': '新しいPaddleOCRバージョンでサポート外のパラメータが使用されています',
-                'suggested_fix': 'パラメータの互換性処理を確認してください'
+                'likely_cause': '組み込みPaddleOCRのパラメータ互換性の問題',
+                'suggested_fix': 'アプリケーションのアップデートを確認してください'
             })
-        # モデルダウンロードエラーの検出
-        elif any(keyword in error_lower for keyword in ['download', 'network', 'timeout', 'ssl']):
+        # モデルファイル関連エラーの検出
+        elif any(keyword in error_lower for keyword in ['model', 'file not found', 'no such file']):
             analysis.update({
-                'category': 'model_download',
-                'likely_cause': 'モデルファイルのダウンロードに失敗しています',
-                'suggested_fix': 'ネットワーク接続を確認し、再試行してください'
+                'category': 'bundled_model_missing',
+                'likely_cause': '組み込みモデルファイルが不完全または破損しています',
+                'suggested_fix': 'アプリケーションを再インストールしてください'
             })
         # ハードウェア/CUDA関連エラーの検出
         elif any(keyword in error_lower for keyword in ['cuda', 'gpu', 'device']):
             analysis.update({
                 'category': 'hardware_compatibility',
                 'likely_cause': 'GPU/CUDA設定に問題があります',
-                'suggested_fix': 'CPU版PaddlePaddleを使用するか、CUDA設定を確認してください'
+                'suggested_fix': 'CPU環境でアプリケーションを実行してください'
+            })
+        # メモリ関連エラーの検出
+        elif any(keyword in error_lower for keyword in ['memory', 'out of memory', 'allocation']):
+            analysis.update({
+                'category': 'memory_issue',
+                'likely_cause': 'メモリ不足でPaddleOCRを初期化できません',
+                'suggested_fix': '他のアプリケーションを終了してメモリを確保してください'
             })
         # ライブラリ依存関係エラーの検出
         elif any(keyword in error_lower for keyword in ['import', 'module', 'package']):
             analysis.update({
-                'category': 'dependency_missing',
-                'likely_cause': '必要なライブラリが不足しています',
-                'suggested_fix': 'pip install --upgrade paddlepaddle paddleocr'
+                'category': 'bundled_dependency_missing',
+                'likely_cause': '組み込みライブラリが不完全です',
+                'suggested_fix': 'アプリケーションを再インストールしてください'
             })
         # ファイル/権限エラーの検出
         elif any(keyword in error_lower for keyword in ['permission', 'access', 'file']):
