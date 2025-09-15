@@ -51,9 +51,8 @@ except ImportError:
 def _create_safe_paddleocr_kwargs(base_kwargs: dict) -> dict:
     """
     PaddleOCR への kwargs を安全に整形する。
-    - base_kwargs を尊重しつつ、デフォルトで use_gpu=False を補うのみ
-    - 新しいPaddleOCRバージョンに対応してuse_angle_cls → use_textline_orientationに変換
-    - 渡された use_space_char / drop_score などは破棄しない
+    - base_kwargs を尊重しつつ、新しいPaddleOCRでサポートされていないパラメータを除外
+    - 新旧パラメータの変換も実行
     """
     merged = dict(base_kwargs) if base_kwargs else {}
 
@@ -64,13 +63,30 @@ def _create_safe_paddleocr_kwargs(base_kwargs: dict) -> dict:
         merged["use_textline_orientation"] = use_angle_value
         logging.debug(f"use_angle_cls={use_angle_value} → use_textline_orientation={use_angle_value} に変換")
 
-    merged.setdefault("use_gpu", False)        # 既定は CPU
+    # 新しいPaddleOCRでサポートされていないパラメータを除外
+    unsupported_params = [
+        "show_log",           # ログ制御パラメータ（内部的に処理）
+        "use_space_char",     # 空白文字認識パラメータ（廃止）
+        "drop_score",         # スコア閾値パラメータ（text_rec_score_threshに統合）
+        "use_gpu",            # GPU使用フラグ（デバイス指定に変更）
+        "cls_model_dir",      # 分類モデルディレクトリ（廃止）
+    ]
+
+    removed_params = []
+    for param in unsupported_params:
+        if param in merged:
+            removed_params.append(f"{param}={merged.pop(param)}")
+
+    if removed_params:
+        logging.debug(f"新PaddleOCRでサポート外のパラメータを除外: {', '.join(removed_params)}")
+
+    # 基本パラメータの設定
     merged.setdefault("lang", "japan")         # 既定は日本語
 
-    # show_logは新しいバージョンでサポートされていないため除外
-    if "show_log" in merged:
-        logging.debug("show_logパラメータを除外（新PaddleOCRではサポート外）")
-        merged.pop("show_log")
+    # drop_scoreの代替としてtext_rec_score_threshを設定
+    if "drop_score" in base_kwargs and "text_rec_score_thresh" not in merged:
+        merged["text_rec_score_thresh"] = base_kwargs["drop_score"]
+        logging.debug(f"drop_score → text_rec_score_thresh に変換")
 
     logging.info(f"PaddleOCR 初期化設定: {merged}")
     return merged

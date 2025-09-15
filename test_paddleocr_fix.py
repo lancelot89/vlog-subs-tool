@@ -67,16 +67,22 @@ def test_safe_kwargs():
         # 重要なパラメータが保持/変換されているかチェック
         checks = [
             ("use_textline_orientation", True),  # use_angle_clsから変換されている
-            ("use_space_char", True),
-            ("drop_score", 0.7),
-            ("use_gpu", False),  # デフォルトで追加される
-            ("lang", "japan")
+            ("lang", "japan"),
+            ("det_model_dir", "/test/det"),
+            ("rec_model_dir", "/test/rec")
         ]
 
         # 除外されるべきパラメータもチェック
         excluded_checks = [
             ("use_angle_cls", "新しいPaddleOCRパラメータに変換"),
-            ("show_log", "新しいPaddleOCRではサポート外のため除外")
+            ("show_log", "新しいPaddleOCRではサポート外のため除外"),
+            ("use_space_char", "新しいPaddleOCRではサポート外のため除外"),
+            ("drop_score", "text_rec_score_threshに変換")
+        ]
+
+        # 新しいパラメータへの変換もチェック
+        conversion_checks = [
+            ("text_rec_score_thresh", 0.7, "drop_scoreから変換")
         ]
 
         all_passed = True
@@ -93,6 +99,14 @@ def test_safe_kwargs():
                 print(f"✓ {key}: 正しく除外されています ({reason})")
             else:
                 print(f"✗ {key}: {result[key]} (期待: 除外されるべき - {reason})")
+                all_passed = False
+
+        # 変換されたパラメータの確認
+        for key, expected, reason in conversion_checks:
+            if key in result and result[key] == expected:
+                print(f"✓ {key}: {result[key]} (期待値: {expected}, {reason})")
+            else:
+                print(f"✗ {key}: {result.get(key, 'なし')} (期待値: {expected}, {reason})")
                 all_passed = False
 
         return all_passed
