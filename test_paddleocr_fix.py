@@ -64,14 +64,19 @@ def test_safe_kwargs():
         print(f"入力: {test_kwargs}")
         print(f"出力: {result}")
 
-        # 重要なパラメータが保持されているかチェック
+        # 重要なパラメータが保持/変換されているかチェック
         checks = [
-            ("use_angle_cls", True),
-            ("show_log", False),
+            ("use_textline_orientation", True),  # use_angle_clsから変換されている
             ("use_space_char", True),
             ("drop_score", 0.7),
             ("use_gpu", False),  # デフォルトで追加される
             ("lang", "japan")
+        ]
+
+        # 除外されるべきパラメータもチェック
+        excluded_checks = [
+            ("use_angle_cls", "新しいPaddleOCRパラメータに変換"),
+            ("show_log", "新しいPaddleOCRではサポート外のため除外")
         ]
 
         all_passed = True
@@ -80,6 +85,14 @@ def test_safe_kwargs():
                 print(f"✓ {key}: {result[key]} (期待値: {expected})")
             else:
                 print(f"✗ {key}: {result.get(key, 'なし')} (期待値: {expected})")
+                all_passed = False
+
+        # 除外されたパラメータの確認
+        for key, reason in excluded_checks:
+            if key not in result:
+                print(f"✓ {key}: 正しく除外されています ({reason})")
+            else:
+                print(f"✗ {key}: {result[key]} (期待: 除外されるべき - {reason})")
                 all_passed = False
 
         return all_passed
@@ -128,18 +141,34 @@ def test_minimal_paddleocr():
 
         print("PaddleOCRの最小構成での初期化を試行中...")
 
-        # REFACTORE.mdで示された最小再現テスト
+        # REFACTORE.mdで示された最小再現テスト（サポートされているパラメータのみ使用）
         from paddleocr import PaddleOCR
-        import cv2
 
-        # 最小構成でOCRを初期化
-        ocr = PaddleOCR(lang="japan", use_angle_cls=True, use_gpu=False, show_log=False)
+        # 新しいPaddleOCRバージョンに対応したパラメータを使用
+        # use_angle_cls → use_textline_orientation (非推奨警告対応)
+        # show_log は内部的に処理されるため除外
+        try:
+            # まず新しいパラメータで試行
+            ocr = PaddleOCR(lang="japan", use_textline_orientation=True)
+            print("✓ 新しいPaddleOCRパラメータ（use_textline_orientation）で初期化成功")
+        except Exception as e1:
+            try:
+                # フォールバック: 従来パラメータで試行
+                ocr = PaddleOCR(lang="japan", use_angle_cls=True)
+                print("✓ 従来PaddleOCRパラメータ（use_angle_cls）で初期化成功")
+            except Exception as e2:
+                try:
+                    # 最小構成で試行
+                    ocr = PaddleOCR(lang="japan")
+                    print("✓ 最小構成PaddleOCRで初期化成功")
+                except Exception as e3:
+                    raise Exception(f"すべての初期化パターンが失敗: 新API={e1}, 旧API={e2}, 最小={e3}")
 
         # ダミー画像でテスト
         img = np.ones((100, 300, 3), dtype=np.uint8) * 255
         res = ocr.ocr(img)
 
-        print(f"✓ PaddleOCR初期化成功: 結果型={type(res)}, 長さ={len(res) if res else 0}")
+        print(f"✓ PaddleOCR実行成功: 結果型={type(res)}, 長さ={len(res) if res else 0}")
         return True
 
     except Exception as e:

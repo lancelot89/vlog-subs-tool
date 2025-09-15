@@ -52,12 +52,26 @@ def _create_safe_paddleocr_kwargs(base_kwargs: dict) -> dict:
     """
     PaddleOCR への kwargs を安全に整形する。
     - base_kwargs を尊重しつつ、デフォルトで use_gpu=False を補うのみ
-    - 渡された use_angle_cls / show_log / use_space_char / drop_score などは破棄しない
+    - 新しいPaddleOCRバージョンに対応してuse_angle_cls → use_textline_orientationに変換
+    - 渡された use_space_char / drop_score などは破棄しない
     """
     merged = dict(base_kwargs) if base_kwargs else {}
+
+    # 新旧PaddleOCRパラメータの互換性対応
+    if "use_angle_cls" in merged:
+        # use_angle_cls → use_textline_orientation に変換（新しいPaddleOCR対応）
+        use_angle_value = merged.pop("use_angle_cls")
+        merged["use_textline_orientation"] = use_angle_value
+        logging.debug(f"use_angle_cls={use_angle_value} → use_textline_orientation={use_angle_value} に変換")
+
     merged.setdefault("use_gpu", False)        # 既定は CPU
     merged.setdefault("lang", "japan")         # 既定は日本語
-    # None をわざわざ上書きしない
+
+    # show_logは新しいバージョンでサポートされていないため除外
+    if "show_log" in merged:
+        logging.debug("show_logパラメータを除外（新PaddleOCRではサポート外）")
+        merged.pop("show_log")
+
     logging.info(f"PaddleOCR 初期化設定: {merged}")
     return merged
 
