@@ -1,0 +1,29 @@
+# Git LFS設定ファイル
+# 大容量ファイルをLFS管理対象に指定
+
+# PaddleOCRモデルファイル（組み込み）
+app/models/**/*.pdiparams filter=lfs diff=lfs merge=lfs -text
+app/models/**/*.json filter=lfs diff=lfs merge=lfs -text
+app/models/**/*.yml filter=lfs diff=lfs merge=lfs -text
+
+# その他の大容量ファイル
+*.zip filter=lfs diff=lfs merge=lfs -text
+*.tar.gz filter=lfs diff=lfs merge=lfs -text
+*.tar.bz2 filter=lfs diff=lfs merge=lfs -text
+*.7z filter=lfs diff=lfs merge=lfs -text
+
+# 動画ファイル（テスト用）
+*.mp4 filter=lfs diff=lfs merge=lfs -text
+*.avi filter=lfs diff=lfs merge=lfs -text
+*.mov filter=lfs diff=lfs merge=lfs -text
+*.mkv filter=lfs diff=lfs merge=lfs -text
+
+# 画像ファイル（大容量）
+*.png filter=lfs diff=lfs merge=lfs -text
+*.jpg filter=lfs diff=lfs merge=lfs -text
+*.jpeg filter=lfs diff=lfs merge=lfs -text
+
+# バイナリファイル
+*.exe filter=lfs diff=lfs merge=lfs -text
+*.app/** filter=lfs diff=lfs merge=lfs -text
+*.AppImage filter=lfs diff=lfs merge=lfs -text

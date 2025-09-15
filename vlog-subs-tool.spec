@@ -83,6 +83,8 @@ hidden_imports = [
 # データファイルの定義
 datas = [
     ('README.md', '.'),
+    # 組み込みPaddleOCRモデルファイル
+    ('app/models', 'models'),
 ]
 
 # PaddleOCR / PaddlePaddle関連のデータファイルを動的に検出・追加
