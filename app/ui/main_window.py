@@ -280,6 +280,8 @@ class MainWindow(QMainWindow):
         self.cancel_btn = QPushButton("キャンセル")
         self.cancel_btn.clicked.connect(self.cancel_extraction)
         self.cancel_btn.setVisible(False)  # 初期は非表示
+        self.cancel_btn.setMinimumWidth(80)  # 最小幅を設定
+        self.cancel_btn.setStyleSheet("QPushButton { color: red; font-weight: bold; }")
         toolbar.addWidget(self.cancel_btn)
         
         toolbar.addSeparator()
@@ -568,6 +570,7 @@ class MainWindow(QMainWindow):
         self.progress_bar.setVisible(False)
 
         # キャンセルボタンを非表示
+        logging.info("キャンセルボタンを非表示にします")
         self.cancel_btn.setVisible(False)
         self.cancel_btn.setText("キャンセル")
         self.cancel_btn.setEnabled(True)
@@ -589,6 +592,7 @@ class MainWindow(QMainWindow):
         self.progress_bar.setVisible(False)
 
         # キャンセルボタンを非表示
+        logging.info("キャンセルボタンを非表示にします")
         self.cancel_btn.setVisible(False)
         self.cancel_btn.setText("キャンセル")
         self.cancel_btn.setEnabled(True)
@@ -606,6 +610,7 @@ class MainWindow(QMainWindow):
         self.progress_bar.setVisible(False)
 
         # キャンセルボタンを非表示
+        logging.info("キャンセルボタンを非表示にします")
         self.cancel_btn.setVisible(False)
         self.cancel_btn.setText("キャンセル")
         self.cancel_btn.setEnabled(True)
@@ -639,6 +644,10 @@ class MainWindow(QMainWindow):
         if not self.check_ocr_setup():
             return
 
+        # 抽出開始前の確認ダイアログ
+        if not self._confirm_extraction_start():
+            return
+
         # 既存の抽出処理を停止
         self.stop_extraction()
 
@@ -650,7 +659,15 @@ class MainWindow(QMainWindow):
         # ボタン状態更新
         self.extract_btn.setEnabled(False)
         self.re_extract_btn.setEnabled(False)
-        self.cancel_btn.setVisible(True)  # キャンセルボタンを表示
+
+        # キャンセルボタンを表示（デバッグログ付き）
+        logging.info("キャンセルボタンを表示します")
+        self.cancel_btn.setVisible(True)
+        self.cancel_btn.setEnabled(True)
+        self.cancel_btn.setText("キャンセル")
+        self.cancel_btn.repaint()  # 即座に再描画を強制
+        self.update()  # UI全体の更新を強制
+        logging.info(f"キャンセルボタン状態: visible={self.cancel_btn.isVisible()}, enabled={self.cancel_btn.isEnabled()}")
 
         # ワーカースレッド作成・開始
         self.extraction_worker = ExtractionWorker(
@@ -689,12 +706,67 @@ class MainWindow(QMainWindow):
 
         if reply == QMessageBox.Yes:
             # キャンセル実行
+            logging.info("ユーザーがキャンセルを確定しました")
             self.cancel_btn.setEnabled(False)  # 連打防止
             self.cancel_btn.setText("キャンセル中...")
             self.status_label.setText("処理を中止しています...")
 
             # ワーカーにキャンセル要請
+            logging.info("ExtractionWorkerにキャンセル要請を送信")
             self.extraction_worker.cancel()
+
+    def _confirm_extraction_start(self) -> bool:
+        """抽出開始前の確認ダイアログ"""
+        try:
+            # 動画情報を取得して処理時間を推定
+            video_path = self.current_project.source_video
+            import cv2
+            cap = cv2.VideoCapture(video_path)
+
+            if cap.isOpened():
+                fps = cap.get(cv2.CAP_PROP_FPS) or 30
+                frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                duration = frame_count / fps if fps > 0 else 0
+                cap.release()
+
+                # 処理時間の目安を計算（概算）
+                estimated_minutes = max(1, int(duration / 60 * 0.5))  # 動画時間の約50%
+
+                duration_str = f"{int(duration // 60)}分{int(duration % 60)}秒"
+                estimated_str = f"約{estimated_minutes}分"
+            else:
+                duration_str = "不明"
+                estimated_str = "数分"
+
+        except Exception:
+            duration_str = "不明"
+            estimated_str = "数分"
+
+        # 確認ダイアログを表示
+        message = f"""字幕の自動抽出を開始しますか？
+
+📹 動画時間: {duration_str}
+⏱️ 予想処理時間: {estimated_str}
+
+📋 処理内容:
+• 動画フレームの解析
+• OCRによる文字認識
+• 字幕のグルーピング
+
+⚠️ 注意:
+• 処理中はアプリケーションが専有されます
+• 長時間の動画では時間がかかる場合があります
+• いつでもキャンセルボタンで中止できます"""
+
+        reply = QMessageBox.question(
+            self,
+            "字幕抽出の開始確認",
+            message,
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+
+        return reply == QMessageBox.Yes
 
     def check_ocr_setup(self) -> bool:
         """OCRセットアップの確認（組み込みモデル優先）"""
