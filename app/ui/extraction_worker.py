@@ -16,6 +16,7 @@ class ExtractionWorker(QThread):
     progress_updated = Signal(int, str)  # プログレス更新 (percentage, message)
     subtitles_extracted = Signal(list)   # 抽出完了 (subtitle_items)
     error_occurred = Signal(str)         # エラー発生 (error_message)
+    cancelled = Signal()                 # キャンセル完了
     
     def __init__(self, video_path: str, settings: ProjectSettings):
         super().__init__()
@@ -44,12 +45,20 @@ class ExtractionWorker(QThread):
             if self._is_cancelled:
                 return
             
+            # キャンセルチェック
+            if self._is_cancelled:
+                self.cancelled.emit()
+                return
+
             # 結果を通知
             self.subtitles_extracted.emit(subtitle_items)
-            
+
         except Exception as e:
             if not self._is_cancelled:
                 self.error_occurred.emit(str(e))
+            else:
+                # キャンセルされた場合
+                self.cancelled.emit()
     
     def _on_progress(self, percentage: int, message: str):
         """プログレスコールバック"""
@@ -60,8 +69,17 @@ class ExtractionWorker(QThread):
         """抽出処理をキャンセル"""
         self._is_cancelled = True
         if self.detector:
-            # TODO: 検出器のキャンセル機能を実装
-            pass
+            # 検出器にキャンセル要請
+            self.detector.cancel()
+
+        # スレッドが実行中の場合は終了を待つ
+        if self.isRunning():
+            # 強制終了ではなく、適切にループから抜けるのを待つ
+            self.wait(3000)  # 3秒待機
+            if self.isRunning():
+                # まだ実行中の場合は強制終了
+                self.terminate()
+                self.wait(1000)  # 1秒待機
     
     def cleanup(self):
         """リソースクリーンアップ"""

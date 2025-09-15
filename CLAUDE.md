@@ -38,6 +38,9 @@ ClaudeCodeは以下の順序で作業を行うこと：
      - 適切なLabels（bug/feature/enhancement など）
 
 2. **🌿 ブランチ作成**
+   - **⚠️ 必須**: 新しいブランチは**必ず最新のmainブランチから作成**すること
+     - 作業開始前に `git checkout main && git pull origin main` を実行
+     - その後 `git checkout -b {ブランチ名}` でブランチ作成
    - Issueに対応する新しいブランチを作成
    - 命名規則: `{type}/{issue-number}-{short-description}`
      - 例: `fix/47-paddlex-version-file`, `feat/48-translation-ui`
@@ -59,8 +62,11 @@ ClaudeCodeは以下の順序で作業を行うこと：
     - `refactor/49-subtitle-merger`
     - `feature/50-p1-core-implementation`
 - **main へ直接 push することは禁止**。
+- **⚠️ 必須**: 新しいブランチは**必ず最新のmainブランチから作成**すること。
+  - 古いブランチから新しいブランチを作成することは禁止。
+  - 作業前に必ず `git checkout main && git pull origin main` で最新化。
 - 機能単位・目的ごとに小さなブランチを分けること。
-- **⚠️ 重要**: ClaudeCodeは修正作業を開始する前に**必ずIssue作成→ブランチ作成**の順序を遵守すること。
+- **⚠️ 重要**: ClaudeCodeは修正作業を開始する前に**必ずIssue作成→mainブランチ最新化→ブランチ作成**の順序を遵守すること。
 
 ### ✅ プルリクエスト（PR）運用ルール
 - PRは **意味のある単位で細かく作成**すること。
