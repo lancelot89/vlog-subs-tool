@@ -528,43 +528,12 @@ class MainWindow(QMainWindow):
         """動画読み込み完了時の処理"""
         self.setWindowTitle(f"VLog字幕ツール v1.0 - {Path(file_path).name}")
     
-    def start_extraction(self):
-        """字幕抽出を開始"""
-        if not self.current_project or not self.current_video_path:
-            return
-
-        # OCRモデルの存在確認
-        if not self.check_ocr_setup():
-            return
-
-        # 既存の抽出処理をキャンセル
+    def stop_extraction(self):
+        """抽出処理を停止"""
         if self.extraction_worker and self.extraction_worker.isRunning():
             self.extraction_worker.cancel()
             self.extraction_worker.wait()
 
-        # UI状態の更新
-        self.extraction_started.emit()
-        self.status_label.setText("字幕抽出を開始しています...")
-        self.progress_bar.setVisible(True)
-        self.progress_bar.setValue(0)
-        self.extract_btn.setEnabled(False)
-        self.re_extract_btn.setEnabled(False)
-        
-        # 抽出ワーカーの作成と開始
-        self.extraction_worker = ExtractionWorker(
-            self.current_video_path,
-            self.current_project.settings
-        )
-        
-        # ワーカーシグナルの接続
-        self.extraction_worker.progress_updated.connect(self.on_extraction_progress)
-        self.extraction_worker.subtitles_extracted.connect(self.on_extraction_completed)
-        self.extraction_worker.error_occurred.connect(self.on_extraction_error)
-        self.extraction_worker.finished.connect(self.on_extraction_finished)
-        
-        # 抽出開始
-        self.extraction_worker.start()
-    
     def on_extraction_progress(self, percentage: int, message: str):
         """抽出プログレス更新（ETA情報付き）"""
         self.progress_bar.setValue(percentage)
@@ -626,7 +595,7 @@ class MainWindow(QMainWindow):
     
     def start_extraction(self):
         """字幕抽出を開始"""
-        if not self.current_project or not self.current_project.video_path:
+        if not self.current_project or not self.current_project.source_video:
             QMessageBox.warning(self, "警告", "動画ファイルが選択されていません。")
             return
 
@@ -648,7 +617,7 @@ class MainWindow(QMainWindow):
 
         # ワーカースレッド作成・開始
         self.extraction_worker = ExtractionWorker(
-            self.current_project.video_path,
+            self.current_project.source_video,
             self.current_project.settings
         )
 
