@@ -280,6 +280,8 @@ class MainWindow(QMainWindow):
         self.cancel_btn = QPushButton("キャンセル")
         self.cancel_btn.clicked.connect(self.cancel_extraction)
         self.cancel_btn.setVisible(False)  # 初期は非表示
+        self.cancel_btn.setMinimumWidth(80)  # 最小幅を設定
+        self.cancel_btn.setStyleSheet("QPushButton { color: red; font-weight: bold; }")
         toolbar.addWidget(self.cancel_btn)
         
         toolbar.addSeparator()
@@ -568,6 +570,7 @@ class MainWindow(QMainWindow):
         self.progress_bar.setVisible(False)
 
         # キャンセルボタンを非表示
+        logging.info("キャンセルボタンを非表示にします（抽出完了）")
         self.cancel_btn.setVisible(False)
         self.cancel_btn.setText("キャンセル")
         self.cancel_btn.setEnabled(True)
@@ -589,6 +592,7 @@ class MainWindow(QMainWindow):
         self.progress_bar.setVisible(False)
 
         # キャンセルボタンを非表示
+        logging.info("キャンセルボタンを非表示にします（抽出エラー）")
         self.cancel_btn.setVisible(False)
         self.cancel_btn.setText("キャンセル")
         self.cancel_btn.setEnabled(True)
@@ -606,6 +610,7 @@ class MainWindow(QMainWindow):
         self.progress_bar.setVisible(False)
 
         # キャンセルボタンを非表示
+        logging.info("キャンセルボタンを非表示にします（キャンセル完了）")
         self.cancel_btn.setVisible(False)
         self.cancel_btn.setText("キャンセル")
         self.cancel_btn.setEnabled(True)
@@ -650,7 +655,15 @@ class MainWindow(QMainWindow):
         # ボタン状態更新
         self.extract_btn.setEnabled(False)
         self.re_extract_btn.setEnabled(False)
-        self.cancel_btn.setVisible(True)  # キャンセルボタンを表示
+
+        # キャンセルボタンを表示（デバッグログ付き）
+        logging.info("キャンセルボタンを表示します")
+        self.cancel_btn.setVisible(True)
+        self.cancel_btn.setEnabled(True)
+        self.cancel_btn.setText("キャンセル")
+        self.cancel_btn.repaint()  # 即座に再描画を強制
+        self.update()  # UI全体の更新を強制
+        logging.info(f"キャンセルボタン状態: visible={self.cancel_btn.isVisible()}, enabled={self.cancel_btn.isEnabled()}")
 
         # ワーカースレッド作成・開始
         self.extraction_worker = ExtractionWorker(
@@ -689,11 +702,13 @@ class MainWindow(QMainWindow):
 
         if reply == QMessageBox.Yes:
             # キャンセル実行
+            logging.info("ユーザーがキャンセルを確定しました")
             self.cancel_btn.setEnabled(False)  # 連打防止
             self.cancel_btn.setText("キャンセル中...")
             self.status_label.setText("処理を中止しています...")
 
             # ワーカーにキャンセル要請
+            logging.info("ExtractionWorkerにキャンセル要請を送信")
             self.extraction_worker.cancel()
 
     def check_ocr_setup(self) -> bool:
