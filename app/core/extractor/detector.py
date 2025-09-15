@@ -271,36 +271,74 @@ class SubtitleDetector:
     def _sample_frames(self, roi_region: ROIRegion) -> List[VideoFrame]:
         """ROI領域でフレームサンプリング"""
         frames = []
-        
-        if isinstance(self.sampler, BottomROISampler):
-            # 下段専用サンプラーの場合
-            for frame in self.sampler.sample_bottom_frames():
-                frames.append(frame)
-        else:
-            # 汎用サンプラーの場合
-            for frame in self.sampler.extract_roi_frames(roi_region.rect):
-                frames.append(frame)
-        
-        self.logger.info(f"フレームサンプリング完了: {len(frames)}フレーム")
-        return frames
+        frame_count = 0
+        last_progress_time = time.time()
+
+        try:
+            self.logger.info(f"フレームサンプリング開始: ROI={roi_region.rect}")
+
+            if isinstance(self.sampler, BottomROISampler):
+                # 下段専用サンプラーの場合
+                self.logger.debug("下段専用サンプラーを使用")
+                for frame in self.sampler.sample_bottom_frames():
+                    self._check_cancelled()
+                    frames.append(frame)
+                    frame_count += 1
+
+                    # 進捗を定期的に報告（1秒間隔）
+                    current_time = time.time()
+                    if current_time - last_progress_time >= 1.0:
+                        self._emit_progress(32, f"フレームサンプリング中... ({frame_count}フレーム)")
+                        last_progress_time = current_time
+
+            else:
+                # 汎用サンプラーの場合
+                self.logger.debug(f"汎用サンプラーを使用: ROI={roi_region.rect}")
+                for frame in self.sampler.extract_roi_frames(roi_region.rect):
+                    self._check_cancelled()
+                    frames.append(frame)
+                    frame_count += 1
+
+                    # 進捗を定期的に報告（1秒間隔）
+                    current_time = time.time()
+                    if current_time - last_progress_time >= 1.0:
+                        self._emit_progress(32, f"フレームサンプリング中... ({frame_count}フレーム)")
+                        last_progress_time = current_time
+
+            self.logger.info(f"フレームサンプリング完了: {len(frames)}フレーム")
+            return frames
+
+        except Exception as e:
+            self.logger.error(f"フレームサンプリングエラー: {e}")
+            self.logger.error(f"サンプラー種別: {type(self.sampler)}")
+            self.logger.error(f"ROI情報: {roi_region}")
+            self.logger.error(f"取得済みフレーム数: {len(frames)}")
+            raise
     
     def _perform_ocr(self, frames: List[VideoFrame]) -> List[FrameOCRResult]:
         """OCR実行"""
         frame_results = []
         total_frames = len(frames)
-        
+
+        self.logger.info(f"OCR処理開始: {total_frames}フレーム")
+
         # 並列処理用の設定
         max_workers = min(4, total_frames)  # 最大4並列
-        
+        self.logger.debug(f"OCR並列実行: {max_workers}ワーカー")
+
+        start_time = time.time()
+
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # OCRタスクを並列実行
             future_to_frame = {
-                executor.submit(self._ocr_single_frame, frame): frame 
+                executor.submit(self._ocr_single_frame, frame): frame
                 for frame in frames
             }
-            
+
             completed_count = 0
-            
+            successful_count = 0
+            last_progress_time = time.time()
+
             for future in as_completed(future_to_frame):
                 # キャンセルチェック
                 self._check_cancelled()
@@ -315,6 +353,7 @@ class SubtitleDetector:
                             frame=frame,
                             ocr_results=ocr_results
                         ))
+                        successful_count += 1
 
                 except Exception as e:
                     self.logger.warning(f"フレーム {frame.frame_number} のOCR処理に失敗: {e}")
@@ -324,14 +363,37 @@ class SubtitleDetector:
                 # キャンセルチェック
                 self._check_cancelled()
 
-                # プログレス更新（40%から85%の範囲でOCR処理）
+                # プログレス更新（詳細な情報付き）
                 progress = 40 + int((completed_count / total_frames) * 45)
-                self._emit_progress(progress, f"OCR処理中... ({completed_count}/{total_frames})")
+
+                # 経過時間と推定残り時間を計算
+                elapsed = time.time() - start_time
+                if completed_count > 0:
+                    avg_time_per_frame = elapsed / completed_count
+                    remaining_frames = total_frames - completed_count
+                    estimated_remaining = avg_time_per_frame * remaining_frames
+
+                    if estimated_remaining > 60:
+                        eta_str = f"{int(estimated_remaining // 60)}分{int(estimated_remaining % 60)}秒"
+                    else:
+                        eta_str = f"{int(estimated_remaining)}秒"
+
+                    message = f"OCR処理中... ({completed_count}/{total_frames}) テキスト検出:{successful_count}件 残り約{eta_str}"
+                else:
+                    message = f"OCR処理中... ({completed_count}/{total_frames}) テキスト検出:{successful_count}件"
+
+                # 進捗を0.5秒間隔で更新
+                current_time = time.time()
+                if current_time - last_progress_time >= 0.5 or completed_count == total_frames:
+                    self._emit_progress(progress, message)
+                    last_progress_time = current_time
         
         # 時間順にソート
         frame_results.sort(key=lambda x: x.frame.timestamp_ms)
-        
-        self.logger.info(f"OCR処理完了: {len(frame_results)}フレームでテキストを検出")
+
+        total_elapsed = time.time() - start_time
+        self.logger.info(f"OCR処理完了: {len(frame_results)}フレームでテキストを検出 "
+                        f"({successful_count}/{total_frames}) {total_elapsed:.1f}秒")
         return frame_results
     
     def _ocr_single_frame(self, frame: VideoFrame) -> List[OCRResult]:
