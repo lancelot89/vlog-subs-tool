@@ -24,28 +24,101 @@ import shutil
 
 PADDLEOCR_AVAILABLE = False
 PADDLEX_AVAILABLE = False
-# まず PaddleOCR の可否を厳密に判定
+
+# まず必須の依存関係をチェック
+def _check_dependencies():
+    """依存関係の詳細診断"""
+    missing_deps = []
+    available_deps = []
+
+    # OpenCV check
+    try:
+        import cv2
+        available_deps.append(f"OpenCV {cv2.__version__}")
+        logging.debug(f"✓ OpenCV バージョン: {cv2.__version__}")
+    except ImportError as e:
+        missing_deps.append(f"opencv-python: {e}")
+        logging.error(f"✗ OpenCV が利用できません: {e}")
+
+    # NumPy check
+    try:
+        import numpy as np
+        available_deps.append(f"NumPy {np.__version__}")
+        logging.debug(f"✓ NumPy バージョン: {np.__version__}")
+    except ImportError as e:
+        missing_deps.append(f"numpy: {e}")
+        logging.error(f"✗ NumPy が利用できません: {e}")
+
+    if missing_deps:
+        logging.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        logging.error("❌ 必須依存関係が不足しています")
+        logging.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        for dep in missing_deps:
+            logging.error(f"   ✗ 不足: {dep}")
+        logging.error("")
+        logging.error("🔧 解決方法:")
+        logging.error("   次のコマンドで依存関係をインストールしてください:")
+        logging.error("   pip install opencv-python numpy")
+        logging.error("")
+        return False
+    else:
+        logging.info("✓ 必須依存関係チェック完了")
+        for dep in available_deps:
+            logging.debug(f"   ✓ {dep}")
+
+    return True
+
+# 必須依存関係チェック
+_DEPENDENCIES_OK = _check_dependencies()
+
+# PaddleOCR の可否を厳密に判定
 try:
+    if not _DEPENDENCIES_OK:
+        raise ImportError("必須依存関係が不足")
     from paddleocr import PaddleOCR
+    import paddlepaddle
     PADDLEOCR_AVAILABLE = True
-    logging.info("PaddleOCR が利用可能です")
-except ImportError:
-    logging.warning("PaddleOCR が利用できません。pip install paddleocr を実行してください。")
+
+    # バージョン情報を取得
+    try:
+        import paddleocr
+        paddleocr_version = getattr(paddleocr, '__version__', 'Unknown')
+        paddle_version = getattr(paddlepaddle, '__version__', 'Unknown')
+        logging.info(f"✓ PaddleOCR {paddleocr_version} (PaddlePaddle {paddle_version}) が利用可能です")
+    except:
+        logging.info("✓ PaddleOCR が利用可能です")
+
+except ImportError as e:
+    logging.error(f"✗ PaddleOCR が利用できません: {e}")
+    logging.error("🔧 解決方法:")
+    logging.error("   pip install paddlepaddle paddleocr")
+
 # 任意: PaddleX はあくまでオプション
 try:
     from paddlex import create_pipeline
     PADDLEX_AVAILABLE = True
-    logging.info("PaddleX v3.2+ が利用可能です（任意機能）")
+    try:
+        import paddlex
+        paddlex_version = getattr(paddlex, '__version__', 'Unknown')
+        logging.info(f"✓ PaddleX {paddlex_version} が利用可能です（任意機能）")
+    except:
+        logging.info("✓ PaddleX v3.2+ が利用可能です（任意機能）")
 except ImportError:
-    pass
+    logging.debug("PaddleX は利用できません（任意機能のため問題なし）")
 
 # Tesseract（オプション）
 try:
     import pytesseract
     TESSERACT_AVAILABLE = True
-except ImportError:
+    try:
+        tesseract_version = pytesseract.get_tesseract_version()
+        logging.info(f"✓ Tesseract {tesseract_version} が利用可能です")
+    except:
+        logging.info("✓ Tesseract が利用可能です")
+except ImportError as e:
     TESSERACT_AVAILABLE = False
-    logging.warning("Tesseractが利用できません。pip install pytesseractでインストールしてください。")
+    logging.debug(f"Tesseract が利用できません: {e}")
+    logging.debug("🔧 解決方法: pip install pytesseract")
 
 
 def _create_safe_paddleocr_kwargs(base_kwargs: dict) -> dict:
@@ -959,7 +1032,13 @@ class OCRManager:
                 logging.info("Tesseractエンジンで初期化成功")
                 return True
 
+        # 詳細な診断情報をログに出力
+        diagnosis = self.diagnose_ocr_availability()
+        detailed_error = self.get_user_friendly_error_message()
+
         logging.error("利用可能なOCRエンジンがありません")
+        logging.error(detailed_error)
+
         return False
 
     def is_any_engine_available(self) -> bool:
@@ -1032,9 +1111,132 @@ class OCRManager:
         """現在のエンジン情報"""
         if not self.current_engine:
             return {}
-        
+
         return {
             'engine_type': type(self.current_engine).__name__,
             'language': self.current_engine.language,
             'is_initialized': self.current_engine.is_initialized
         }
+
+    def diagnose_ocr_availability(self) -> Dict[str, Any]:
+        """OCRエンジンの可用性を詳細診断"""
+        diagnosis = {
+            'dependencies_ok': _DEPENDENCIES_OK,
+            'available_engines': {},
+            'missing_engines': {},
+            'recommended_action': None,
+            'error_summary': []
+        }
+
+        # 各エンジンの状態を診断
+        if PADDLEOCR_AVAILABLE:
+            # 組み込みPaddleOCR
+            bundled_engine = self.engines.get('paddleocr_bundled')
+            if bundled_engine:
+                bundled_path = bundled_engine.get_bundled_model_path()
+                diagnosis['available_engines']['paddleocr_bundled'] = {
+                    'status': 'available' if bundled_path and bundled_path.exists() else 'no_models',
+                    'model_path': str(bundled_path) if bundled_path else None,
+                    'description': '組み込みPaddleOCRモデル（推奨）'
+                }
+
+            # 従来PaddleOCR
+            model_available = OCRModelDownloader.is_paddleocr_model_available()
+            diagnosis['available_engines']['paddleocr'] = {
+                'status': 'available' if model_available else 'needs_download',
+                'model_available': model_available,
+                'cache_dir': str(OCRModelDownloader.get_paddleocr_cache_dir()),
+                'description': '従来PaddleOCR（自動ダウンロード）'
+            }
+        else:
+            diagnosis['missing_engines']['paddleocr'] = {
+                'reason': 'package_not_installed',
+                'description': 'PaddleOCRパッケージがインストールされていません',
+                'install_command': 'pip install paddlepaddle paddleocr'
+            }
+
+        if TESSERACT_AVAILABLE:
+            diagnosis['available_engines']['tesseract'] = {
+                'status': 'available',
+                'description': 'Tesseract OCRエンジン'
+            }
+        else:
+            diagnosis['missing_engines']['tesseract'] = {
+                'reason': 'package_not_installed',
+                'description': 'Tesseractパッケージがインストールされていません',
+                'install_command': 'pip install pytesseract'
+            }
+
+        # 推奨アクションの決定
+        if not _DEPENDENCIES_OK:
+            diagnosis['recommended_action'] = 'install_dependencies'
+            diagnosis['error_summary'].append('必須依存関係（OpenCV、NumPy）が不足しています')
+        elif not diagnosis['available_engines']:
+            diagnosis['recommended_action'] = 'install_ocr_engines'
+            diagnosis['error_summary'].append('利用可能なOCRエンジンがありません')
+        elif any(engine['status'] == 'available' for engine in diagnosis['available_engines'].values()):
+            diagnosis['recommended_action'] = 'ready'
+        else:
+            diagnosis['recommended_action'] = 'download_models'
+            diagnosis['error_summary'].append('OCRモデルのダウンロードが必要です')
+
+        return diagnosis
+
+    def get_user_friendly_error_message(self) -> str:
+        """ユーザー向けのわかりやすいエラーメッセージを生成"""
+        diagnosis = self.diagnose_ocr_availability()
+
+        if diagnosis['recommended_action'] == 'ready':
+            return "OCRエンジンは正常に利用可能です。"
+
+        error_lines = ["━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"]
+        error_lines.append("❌ 字幕抽出に失敗しました")
+        error_lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        error_lines.append("")
+
+        if diagnosis['error_summary']:
+            error_lines.append("🔍 問題:")
+            for error in diagnosis['error_summary']:
+                error_lines.append(f"   • {error}")
+            error_lines.append("")
+
+        error_lines.append("🔧 解決方法:")
+
+        if diagnosis['recommended_action'] == 'install_dependencies':
+            error_lines.append("   1. 次のコマンドで必須ライブラリをインストール:")
+            error_lines.append("      pip install opencv-python numpy")
+            error_lines.append("")
+
+        if diagnosis['recommended_action'] == 'install_ocr_engines':
+            error_lines.append("   1. PaddleOCR（推奨）をインストール:")
+            error_lines.append("      pip install paddlepaddle paddleocr")
+            error_lines.append("")
+            error_lines.append("   2. または、Tesseractをインストール:")
+            error_lines.append("      pip install pytesseract")
+            error_lines.append("")
+
+        if diagnosis['recommended_action'] == 'download_models':
+            error_lines.append("   1. アプリケーションを再起動してモデルを自動ダウンロード")
+            error_lines.append("   2. インターネット接続を確認")
+            error_lines.append("")
+
+        error_lines.append("💡 詳細情報:")
+        if diagnosis['available_engines']:
+            error_lines.append("   利用可能なエンジン:")
+            for name, info in diagnosis['available_engines'].items():
+                status_emoji = "✓" if info['status'] == 'available' else "⚠"
+                error_lines.append(f"   {status_emoji} {name}: {info.get('description', '')}")
+        else:
+            error_lines.append("   利用可能なOCRエンジンがありません")
+
+        if diagnosis['missing_engines']:
+            error_lines.append("   不足しているエンジン:")
+            for name, info in diagnosis['missing_engines'].items():
+                error_lines.append(f"   ✗ {name}: {info.get('description', '')}")
+                if 'install_command' in info:
+                    error_lines.append(f"      インストール: {info['install_command']}")
+
+        error_lines.append("")
+        error_lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+        return "\n".join(error_lines)
