@@ -11,6 +11,9 @@ import logging
 import traceback
 from datetime import datetime
 
+# TODO: v1リリース時にDEBUG_MODE関連の機能を削除
+DEBUG_MODE = True  # 開発版ではターミナルを表示（v1リリース時にFalseにする）
+
 def setup_logging():
     """
     デバッグ用ロギング設定
@@ -25,18 +28,23 @@ def setup_logging():
 
     log_file = log_dir / "vlog-subs-tool-debug.log"
 
+    # ハンドラーリスト（開発版ではコンソール出力も含める）
+    handlers = [logging.FileHandler(log_file, encoding='utf-8')]
+
+    # TODO: v1リリース時に削除 - デバッグモードではコンソール出力も有効
+    if DEBUG_MODE:
+        handlers.append(logging.StreamHandler(sys.stdout))
+
     # ロガー設定
     logging.basicConfig(
         level=logging.DEBUG,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(log_file, encoding='utf-8'),
-            logging.StreamHandler(sys.stdout)  # コンソール出力
-        ]
+        handlers=handlers
     )
 
     logger = logging.getLogger(__name__)
     logger.info("=== VLog字幕ツール デバッグログ開始 ===")
+    logger.info(f"DEBUG_MODE: {DEBUG_MODE}")  # TODO: v1リリース時に削除
     logger.info(f"Python version: {sys.version}")
     logger.info(f"Platform: {sys.platform}")
     logger.info(f"Executable: {sys.executable}")
@@ -126,6 +134,22 @@ def test_imports(logger):
 
 def main():
     """メインエントリーポイント（デバッグ機能統合版）"""
+    # TODO: v1リリース時に削除 - Windows版でコンソールウィンドウを表示
+    if DEBUG_MODE and sys.platform == "win32" and getattr(sys, 'frozen', False):
+        try:
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            # コンソールウィンドウを割り当て
+            kernel32.AllocConsole()
+            # 標準出力をコンソールにリダイレクト
+            sys.stdout = open('CONOUT$', 'w', encoding='utf-8')
+            sys.stderr = open('CONOUT$', 'w', encoding='utf-8')
+            print("=== VLog字幕ツール デバッグコンソール ===")
+            print("v1リリース時にこのコンソールは無効化されます")
+            print("=" * 50)
+        except Exception as e:
+            pass  # コンソール表示に失敗してもアプリ起動は継続
+
     logger = setup_logging()
     logger.info("メインエントリーポイント開始")
 
