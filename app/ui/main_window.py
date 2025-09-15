@@ -539,7 +539,7 @@ class MainWindow(QMainWindow):
         if self.extraction_worker and self.extraction_worker.isRunning():
             self.extraction_worker.cancel()
             self.extraction_worker.wait()
-    
+
     def on_extraction_progress(self, percentage: int, message: str):
         """抽出プログレス更新（ETA情報付き）"""
         self.progress_bar.setValue(percentage)

@@ -1127,6 +1127,53 @@ class OCRManager:
         logging.error("利用可能なOCRエンジンがありません")
         return False
 
+    def is_any_engine_available(self) -> bool:
+        """いずれかのOCRエンジンが利用可能かチェック"""
+        # 1. 組み込みPaddleOCRをチェック
+        if 'paddleocr_bundled' in self.engines:
+            bundled_engine = self.engines['paddleocr_bundled']
+            if isinstance(bundled_engine, BundledPaddleOCREngine):
+                bundled_path = bundled_engine.get_bundled_model_path()
+                if bundled_path and bundled_path.exists():
+                    logging.debug("組み込みPaddleOCRモデルが利用可能")
+                    return True
+
+        # 2. 従来のPaddleOCRをチェック
+        if 'paddleocr' in self.engines:
+            if PADDLEOCR_AVAILABLE and OCRModelDownloader.is_paddleocr_model_available():
+                logging.debug("従来PaddleOCRモデルが利用可能")
+                return True
+
+        # 3. Tesseractをチェック
+        if 'tesseract' in self.engines:
+            if TESSERACT_AVAILABLE:
+                logging.debug("Tesseractエンジンが利用可能")
+                return True
+
+        return False
+
+    def get_recommended_engine(self) -> Optional[str]:
+        """推奨エンジンを取得"""
+        # 1. 組み込みPaddleOCRを最優先
+        if 'paddleocr_bundled' in self.engines:
+            bundled_engine = self.engines['paddleocr_bundled']
+            if isinstance(bundled_engine, BundledPaddleOCREngine):
+                bundled_path = bundled_engine.get_bundled_model_path()
+                if bundled_path and bundled_path.exists():
+                    return 'paddleocr_bundled'
+
+        # 2. 従来のPaddleOCR
+        if 'paddleocr' in self.engines:
+            if PADDLEOCR_AVAILABLE and OCRModelDownloader.is_paddleocr_model_available():
+                return 'paddleocr'
+
+        # 3. Tesseract
+        if 'tesseract' in self.engines:
+            if TESSERACT_AVAILABLE:
+                return 'tesseract'
+
+        return None
+
     def extract_text(self, image: np.ndarray) -> List[OCRResult]:
         """現在のエンジンでテキスト抽出"""
         if not self.current_engine:

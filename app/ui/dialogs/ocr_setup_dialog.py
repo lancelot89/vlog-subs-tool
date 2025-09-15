@@ -12,7 +12,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from app.core.extractor.ocr import OCRModelDownloader, PADDLEOCR_AVAILABLE
+from app.core.extractor.ocr import OCRModelDownloader, PADDLEOCR_AVAILABLE, OCRManager
 
 
 class OCRSetupWorker(QThread):
@@ -75,13 +75,15 @@ class OCRSetupDialog(QDialog):
         title_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(title_label)
 
-        # 説明文
+        # 説明文（組み込みモデル優先）
         description = QLabel(
-            "字幕抽出を行うために、PaddleOCRの日本語認識モデルが必要です。\n"
-            "初回のみ、インターネットからモデルファイル（約50MB）をダウンロードします。\n"
-            "ダウンロード完了後、オフラインでも字幕抽出が可能になります。\n\n"
-            "※ ダウンロードに失敗する場合は、ネットワーク接続やファイアウォール設定を\n"
-            "　 確認してください。また、Tesseractエンジンも利用可能です。"
+            "字幕抽出には高精度な日本語OCRエンジンを使用します。\n\n"
+            "✅ v0.0.4では高品質なPaddleOCRモデルを組み込み済み\n"
+            "✅ ダウンロード不要で即座に利用可能\n"
+            "✅ オフライン環境でも完全動作\n\n"
+            "組み込みモデルが利用できない場合は、以下の選択肢があります：\n"
+            "• PaddleOCRモデルの追加ダウンロード\n"
+            "• Tesseractエンジンの使用（軽量・高速）"
         )
         description.setWordWrap(True)
         description.setAlignment(Qt.AlignLeft)
@@ -147,28 +149,54 @@ class OCRSetupDialog(QDialog):
         QTimer.singleShot(500, self._check_status)
 
     def _check_status(self):
-        """ステータス確認実行"""
+        """ステータス確認実行（組み込みモデル優先）"""
         try:
-            if not PADDLEOCR_AVAILABLE:
-                self.status_label.setText("❌ PaddleOCRがインストールされていません")
+            # OCRManagerで利用可能なエンジンをチェック
+            ocr_manager = OCRManager()
+
+            if ocr_manager.is_any_engine_available():
+                recommended_engine = ocr_manager.get_recommended_engine()
+
+                if recommended_engine == 'paddleocr_bundled':
+                    self.status_label.setText("✅ 組み込みPaddleOCRモデルが利用可能です")
+                    self.status_label.setStyleSheet("color: green; font-weight: bold;")
+                    self.setup_btn.setText("完了")
+                    self.setup_btn.setEnabled(True)
+                    self.skip_btn.setText("閉じる")
+                    self.setup_success = True
+                    self.add_log("組み込みPaddleOCRモデルが検出されました（ダウンロード不要）")
+                    return
+
+                elif recommended_engine == 'paddleocr':
+                    self.status_label.setText("✅ PaddleOCRモデルは既にダウンロード済みです")
+                    self.status_label.setStyleSheet("color: green;")
+                    self.setup_btn.setText("完了")
+                    self.setup_btn.setEnabled(True)
+                    self.skip_btn.setText("閉じる")
+                    self.setup_success = True
+                    self.add_log("従来PaddleOCRモデルが利用可能です")
+                    return
+
+                elif recommended_engine == 'tesseract':
+                    self.status_label.setText("ℹ️ Tesseractエンジンが利用可能です")
+                    self.status_label.setStyleSheet("color: blue;")
+                    self.setup_btn.setText("Tesseractを使用")
+                    self.setup_btn.setEnabled(True)
+                    self.add_log("Tesseractエンジンが検出されました")
+                    return
+
+            # PaddleOCRは利用可能だがモデルが不足している場合
+            if PADDLEOCR_AVAILABLE:
+                self.status_label.setText("⚠️ 追加PaddleOCRモデルのダウンロードが利用可能です")
+                self.status_label.setStyleSheet("color: orange;")
+                self.setup_btn.setText("ダウンロード")
+                self.setup_btn.setEnabled(True)
+                self.add_log("PaddleOCRは利用可能ですが、追加モデルをダウンロードできます")
+            else:
+                self.status_label.setText("❌ OCRエンジンが利用できません")
                 self.status_label.setStyleSheet("color: red;")
                 self.setup_btn.setEnabled(False)
-                self.add_log("PaddleOCRパッケージが見つかりません")
-                return
-
-            if OCRModelDownloader.is_paddleocr_model_available(self.language):
-                self.status_label.setText("✅ PaddleOCRモデルは既にダウンロード済みです")
-                self.status_label.setStyleSheet("color: green;")
-                self.setup_btn.setText("完了")
-                self.setup_btn.setEnabled(True)
-                self.skip_btn.setText("閉じる")
-                self.setup_success = True
-                self.add_log("PaddleOCRモデルが利用可能です")
-            else:
-                self.status_label.setText("⚠️ PaddleOCRモデルのダウンロードが必要です")
-                self.status_label.setStyleSheet("color: orange;")
-                self.setup_btn.setEnabled(True)
-                self.add_log("PaddleOCRモデルが見つかりません")
+                self.add_log("利用可能なOCRエンジンが見つかりません")
 
         except Exception as e:
             self.status_label.setText(f"❌ エラー: {str(e)}")
