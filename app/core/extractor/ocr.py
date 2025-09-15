@@ -1130,24 +1130,71 @@ class OCRManager:
 
         # 各エンジンの状態を診断
         if PADDLEOCR_AVAILABLE:
-            # 組み込みPaddleOCR
-            bundled_engine = self.engines.get('paddleocr_bundled')
-            if bundled_engine:
-                bundled_path = bundled_engine.get_bundled_model_path()
-                diagnosis['available_engines']['paddleocr_bundled'] = {
-                    'status': 'available' if bundled_path and bundled_path.exists() else 'no_models',
-                    'model_path': str(bundled_path) if bundled_path else None,
-                    'description': '組み込みPaddleOCRモデル（推奨）'
-                }
+            # PaddleOCRの実際の初期化テストを実行
+            paddleocr_working = False
+            paddleocr_error = None
 
-            # 従来PaddleOCR
-            model_available = OCRModelDownloader.is_paddleocr_model_available()
-            diagnosis['available_engines']['paddleocr'] = {
-                'status': 'available' if model_available else 'needs_download',
-                'model_available': model_available,
-                'cache_dir': str(OCRModelDownloader.get_paddleocr_cache_dir()),
-                'description': '従来PaddleOCR（自動ダウンロード）'
-            }
+            try:
+                # 最小構成でPaddleOCRの初期化テストを試行
+                from paddleocr import PaddleOCR
+
+                # シンプルなテスト設定（サポートされているパラメータのみ）
+                test_kwargs = _create_safe_paddleocr_kwargs({
+                    "lang": "japan",
+                    "use_angle_cls": True,
+                    "show_log": False
+                })
+
+                # 初期化テスト
+                test_ocr = PaddleOCR(**test_kwargs)
+
+                # ダミー画像でのテスト実行
+                import numpy as np
+                test_image = np.ones((100, 300, 3), dtype=np.uint8) * 255
+                test_result = test_ocr.ocr(test_image, cls=True)
+
+                # 初期化成功
+                paddleocr_working = True
+                logging.debug("PaddleOCR初期化テスト: 成功")
+
+            except Exception as e:
+                paddleocr_error = str(e)
+                logging.debug(f"PaddleOCR初期化テスト: 失敗 - {e}")
+
+            if paddleocr_working:
+                # 組み込みPaddleOCR
+                bundled_engine = self.engines.get('paddleocr_bundled')
+                if bundled_engine:
+                    bundled_path = bundled_engine.get_bundled_model_path()
+                    if bundled_path and bundled_path.exists():
+                        diagnosis['available_engines']['paddleocr_bundled'] = {
+                            'status': 'available',
+                            'model_path': str(bundled_path),
+                            'description': '組み込みPaddleOCRモデル（推奨）',
+                            'test_result': 'initialization_successful'
+                        }
+                    else:
+                        diagnosis['available_engines']['paddleocr'] = {
+                            'status': 'available',
+                            'description': '従来PaddleOCR（初期化テスト成功）',
+                            'test_result': 'initialization_successful'
+                        }
+                else:
+                    diagnosis['available_engines']['paddleocr'] = {
+                        'status': 'available',
+                        'description': '従来PaddleOCR（初期化テスト成功）',
+                        'test_result': 'initialization_successful'
+                    }
+            else:
+                # PaddleOCR初期化失敗の詳細分析
+                error_details = self._analyze_paddleocr_error(paddleocr_error)
+                diagnosis['missing_engines']['paddleocr'] = {
+                    'reason': 'initialization_failed',
+                    'description': 'PaddleOCRの初期化に失敗しました',
+                    'error_detail': paddleocr_error,
+                    'error_analysis': error_details,
+                    'install_command': 'pip install --upgrade paddlepaddle paddleocr'
+                }
         else:
             diagnosis['missing_engines']['paddleocr'] = {
                 'reason': 'package_not_installed',
@@ -1156,14 +1203,41 @@ class OCRManager:
             }
 
         if TESSERACT_AVAILABLE:
-            diagnosis['available_engines']['tesseract'] = {
-                'status': 'available',
-                'description': 'Tesseract OCRエンジン'
-            }
+            # Tesseractの実際の初期化状態をチェック
+            tesseract_engine = self.engines.get('tesseract')
+            if tesseract_engine:
+                try:
+                    # 実際に初期化を試行してテスト
+                    import pytesseract
+                    pytesseract.get_tesseract_version()
+                    diagnosis['available_engines']['tesseract'] = {
+                        'status': 'available',
+                        'description': 'Tesseract OCRエンジン'
+                    }
+                except Exception as e:
+                    error_msg = str(e).lower()
+                    if 'not installed' in error_msg or 'path' in error_msg:
+                        diagnosis['missing_engines']['tesseract'] = {
+                            'reason': 'tesseract_not_in_path',
+                            'description': 'Tesseractの実行ファイルがPATHに見つかりません',
+                            'install_command': 'システムにTesseractをインストールしてください',
+                            'error_detail': str(e)
+                        }
+                    else:
+                        diagnosis['missing_engines']['tesseract'] = {
+                            'reason': 'initialization_failed',
+                            'description': 'Tesseractの初期化に失敗しました',
+                            'error_detail': str(e)
+                        }
+            else:
+                diagnosis['missing_engines']['tesseract'] = {
+                    'reason': 'engine_not_created',
+                    'description': 'Tesseractエンジンが作成されていません'
+                }
         else:
             diagnosis['missing_engines']['tesseract'] = {
                 'reason': 'package_not_installed',
-                'description': 'Tesseractパッケージがインストールされていません',
+                'description': 'pytesseractパッケージがインストールされていません',
                 'install_command': 'pip install pytesseract'
             }
 
@@ -1174,6 +1248,16 @@ class OCRManager:
         elif not diagnosis['available_engines']:
             diagnosis['recommended_action'] = 'install_ocr_engines'
             diagnosis['error_summary'].append('利用可能なOCRエンジンがありません')
+
+            # より詳細なエラー情報を追加
+            for engine_name, info in diagnosis['missing_engines'].items():
+                if info.get('reason') == 'tesseract_not_in_path':
+                    diagnosis['error_summary'].append(f'Tesseract: {info["description"]}')
+                elif info.get('reason') == 'package_not_installed':
+                    diagnosis['error_summary'].append(f'{engine_name}: パッケージ未インストール')
+                elif info.get('reason') == 'no_bundled_models':
+                    diagnosis['error_summary'].append(f'{engine_name}: モデルファイル不足')
+
         elif any(engine['status'] == 'available' for engine in diagnosis['available_engines'].values()):
             diagnosis['recommended_action'] = 'ready'
         else:
@@ -1181,6 +1265,57 @@ class OCRManager:
             diagnosis['error_summary'].append('OCRモデルのダウンロードが必要です')
 
         return diagnosis
+
+    def _analyze_paddleocr_error(self, error_msg: str) -> Dict[str, str]:
+        """PaddleOCR初期化エラーの詳細分析"""
+        analysis = {
+            'category': 'unknown',
+            'likely_cause': 'PaddleOCR初期化の一般的な失敗',
+            'suggested_fix': 'pip install --upgrade paddlepaddle paddleocr'
+        }
+
+        if not error_msg:
+            return analysis
+
+        error_lower = error_msg.lower()
+
+        # パラメータエラーの検出
+        if any(param in error_msg for param in ['use_space_char', 'show_log', 'drop_score']):
+            analysis.update({
+                'category': 'parameter_compatibility',
+                'likely_cause': '新しいPaddleOCRバージョンでサポート外のパラメータが使用されています',
+                'suggested_fix': 'パラメータの互換性処理を確認してください'
+            })
+        # モデルダウンロードエラーの検出
+        elif any(keyword in error_lower for keyword in ['download', 'network', 'timeout', 'ssl']):
+            analysis.update({
+                'category': 'model_download',
+                'likely_cause': 'モデルファイルのダウンロードに失敗しています',
+                'suggested_fix': 'ネットワーク接続を確認し、再試行してください'
+            })
+        # ハードウェア/CUDA関連エラーの検出
+        elif any(keyword in error_lower for keyword in ['cuda', 'gpu', 'device']):
+            analysis.update({
+                'category': 'hardware_compatibility',
+                'likely_cause': 'GPU/CUDA設定に問題があります',
+                'suggested_fix': 'CPU版PaddlePaddleを使用するか、CUDA設定を確認してください'
+            })
+        # ライブラリ依存関係エラーの検出
+        elif any(keyword in error_lower for keyword in ['import', 'module', 'package']):
+            analysis.update({
+                'category': 'dependency_missing',
+                'likely_cause': '必要なライブラリが不足しています',
+                'suggested_fix': 'pip install --upgrade paddlepaddle paddleocr'
+            })
+        # ファイル/権限エラーの検出
+        elif any(keyword in error_lower for keyword in ['permission', 'access', 'file']):
+            analysis.update({
+                'category': 'file_permission',
+                'likely_cause': 'ファイルアクセス権限またはディスク容量に問題があります',
+                'suggested_fix': '管理者権限で実行するか、ディスク容量を確認してください'
+            })
+
+        return analysis
 
     def get_user_friendly_error_message(self) -> str:
         """ユーザー向けのわかりやすいエラーメッセージを生成"""
@@ -1213,6 +1348,14 @@ class OCRManager:
             error_lines.append("")
             error_lines.append("   2. または、Tesseractをインストール:")
             error_lines.append("      pip install pytesseract")
+
+            # Tesseract PATH問題の場合は追加指示
+            if any(info.get('reason') == 'tesseract_not_in_path' for info in diagnosis['missing_engines'].values()):
+                error_lines.append("")
+                error_lines.append("   ⚠ Tesseract実行ファイルの問題:")
+                error_lines.append("      - Windows: https://github.com/UB-Mannheim/tesseract/wiki からインストール")
+                error_lines.append("      - macOS: brew install tesseract")
+                error_lines.append("      - Ubuntu: sudo apt install tesseract-ocr")
             error_lines.append("")
 
         if diagnosis['recommended_action'] == 'download_models':
@@ -1234,7 +1377,9 @@ class OCRManager:
             for name, info in diagnosis['missing_engines'].items():
                 error_lines.append(f"   ✗ {name}: {info.get('description', '')}")
                 if 'install_command' in info:
-                    error_lines.append(f"      インストール: {info['install_command']}")
+                    error_lines.append(f"      解決方法: {info['install_command']}")
+                if 'error_detail' in info:
+                    error_lines.append(f"      詳細エラー: {info['error_detail']}")
 
         error_lines.append("")
         error_lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
