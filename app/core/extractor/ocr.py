@@ -50,6 +50,45 @@ except ImportError:
     logging.warning("Tesseractが利用できません。pip install pytesseractでインストールしてください。")
 
 
+def _test_kwargs_combination(kwargs: dict) -> dict:
+    """PaddleOCR設定の組み合わせをテストし、問題のあるパラメータを除外"""
+    try:
+        from paddleocr import PaddleOCR
+
+        # まず全体の設定で試行
+        try:
+            logging.debug(f"全設定での初期化を試行: {kwargs}")
+            test_ocr = PaddleOCR(**kwargs)
+            del test_ocr
+            logging.debug("全設定での初期化成功")
+            return kwargs
+        except Exception as e:
+            if "Unknown argument" in str(e):
+                # エラーメッセージから問題のパラメータ名を抽出
+                error_msg = str(e)
+                if "Unknown argument:" in error_msg:
+                    problem_param = error_msg.split("Unknown argument:")[1].strip().split()[0]
+                    logging.debug(f"問題のパラメータを特定: {problem_param}")
+
+                    # 問題のパラメータを除外して再試行
+                    safe_kwargs = {k: v for k, v in kwargs.items() if k != problem_param}
+                    logging.debug(f"パラメータ {problem_param} を除外して再試行")
+                    return _test_kwargs_combination(safe_kwargs)
+                else:
+                    raise e
+            else:
+                raise e
+
+    except Exception as e:
+        logging.warning(f"PaddleOCR設定テスト失敗: {e}")
+        # 最小限の設定にフォールバック
+        return {
+            'lang': kwargs.get('lang', 'japan'),
+            'use_gpu': False,
+            'show_log': False
+        }
+
+
 def _create_safe_paddleocr_kwargs(base_kwargs: dict) -> dict:
     """PaddleOCRの設定を安全に作成（新旧バージョン両対応）"""
     try:
@@ -90,8 +129,11 @@ def _create_safe_paddleocr_kwargs(base_kwargs: dict) -> dict:
         # CPUモード強制設定
         safe_kwargs['use_gpu'] = False
 
-        logging.debug(f"最終PaddleOCR設定: {safe_kwargs}")
-        return safe_kwargs
+        # 段階的に初期化を試行し、問題のあるパラメータを除外
+        final_kwargs = _test_kwargs_combination(safe_kwargs)
+
+        logging.debug(f"最終PaddleOCR設定: {final_kwargs}")
+        return final_kwargs
 
     except Exception as e:
         logging.warning(f"PaddleOCRパラメータ設定失敗: {e}")
