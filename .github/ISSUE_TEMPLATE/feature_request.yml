@@ -1,178 +1,60 @@
-name: ✨ 機能要望 (Feature Request)
-description: 新機能や改善の提案 (Suggest a new feature or improvement)
+name: ✨ 機能実装
+description: 新機能や改善の実装
 title: "[Feature]: "
-labels: ["enhancement", "feature-request"]
+labels: ["enhancement"]
 body:
-  - type: markdown
-    attributes:
-      value: |
-        機能要望をありがとうございます。以下の情報を記入して、アイデアを詳しく教えてください。
-
   - type: textarea
-    id: feature-summary
+    id: overview
     attributes:
-      label: 機能の概要 (Feature Summary)
-      description: 提案する機能を簡潔に説明してください
-      placeholder: "例: 複数の動画ファイルを一括で字幕抽出する機能"
+      label: 機能概要
+      description: 実装する機能の概要
     validations:
       required: true
 
   - type: textarea
-    id: problem-description
+    id: background
     attributes:
-      label: 解決したい問題 (Problem Description)
-      description: 現在どのような問題や不便さがあるかを説明してください
-      placeholder: |
-        例: 現在は1つずつしか動画を処理できないため、
-        複数の動画を処理するのに時間がかかり非効率です。
+      label: 背景・目的
+      description: なぜこの機能が必要か
     validations:
       required: true
 
   - type: textarea
-    id: proposed-solution
+    id: specification
     attributes:
-      label: 提案する解決策 (Proposed Solution)
-      description: どのような機能や改善を提案するかを詳しく説明してください
-      placeholder: |
-        例:
-        1. 複数ファイル選択機能を追加
-        2. バッチ処理機能で並列実行
-        3. 進捗表示で全体の処理状況を確認
-        4. 完了時に通知機能
-    validations:
-      required: true
-
-  - type: dropdown
-    id: feature-type
-    attributes:
-      label: 機能の種類 (Feature Type)
-      description: 提案する機能の種類を選択してください
-      options:
-        - 新機能追加 (New Feature)
-        - 既存機能の改善 (Enhancement)
-        - UI/UX改善 (UI/UX Improvement)
-        - パフォーマンス向上 (Performance)
-        - 多言語対応 (Localization)
-        - その他 (Other)
+      label: 仕様・要件
+      description: 機能の詳細仕様
     validations:
       required: true
 
   - type: dropdown
     id: priority
     attributes:
-      label: 優先度 (Priority)
-      description: この機能の重要度を選択してください
+      label: 優先度
       options:
-        - Critical (重要) - 必須機能
-        - High (高) - 非常に有用
-        - Medium (中) - あると便利
-        - Low (低) - Nice to have
-    validations:
-      required: true
-
-  - type: checkboxes
-    id: target-users
-    attributes:
-      label: 対象ユーザー (Target Users)
-      description: この機能を必要とするユーザー層を選択してください
-      options:
-        - label: 初心者ユーザー
-        - label: 上級ユーザー
-        - label: 動画制作者
-        - label: 翻訳者
-        - label: 企業ユーザー
-        - label: 全ユーザー
-
-  - type: textarea
-    id: use-cases
-    attributes:
-      label: 使用例・シナリオ (Use Cases)
-      description: この機能がどのような場面で使われるかを具体例で説明してください
-      placeholder: |
-        例:
-        - シナリオ1: YouTubeに投稿する10本の動画を一度に字幕抽出
-        - シナリオ2: 会議録画の大量処理
-        - シナリオ3: 教育コンテンツの字幕作成
+        - Critical
+        - High
+        - Medium
+        - Low
     validations:
       required: true
 
   - type: textarea
-    id: technical-considerations
+    id: technical_approach
     attributes:
-      label: 技術的考慮事項 (Technical Considerations)
-      description: 実装時に考慮すべき技術的な点があれば記載してください（任意）
-      placeholder: |
-        例:
-        - メモリ使用量の最適化が必要
-        - ファイルサイズ制限の検討
-        - 並列処理時のエラーハンドリング
+      label: 技術的アプローチ
+      description: 実装方針・技術的考慮事項
     validations:
       required: false
 
   - type: textarea
-    id: alternative-solutions
+    id: acceptance
     attributes:
-      label: 代替案 (Alternative Solutions)
-      description: 他に検討した解決方法があれば記載してください（任意）
-      placeholder: |
-        例:
-        - 外部ツールとの連携
-        - コマンドライン版の提供
-        - プラグイン機能の追加
-    validations:
-      required: false
-
-  - type: checkboxes
-    id: implementation-scope
-    attributes:
-      label: 実装範囲 (Implementation Scope)
-      description: この機能に含めたい要素を選択してください
-      options:
-        - label: GUI での操作
-        - label: 設定の保存・復元
-        - label: ドキュメント・ヘルプ
-        - label: ショートカット対応
-        - label: 他機能との連携
-
-  - type: dropdown
-    id: os-compatibility
-    attributes:
-      label: OS対応 (OS Compatibility)
-      description: どのOSでの対応を希望しますか
-      options:
-        - 全OS (Windows, macOS, Linux)
-        - Windows のみ
-        - macOS のみ
-        - Linux のみ
-        - Windows + macOS
-        - その他
+      label: 受け入れ条件
+      description: |
+        実装完了の判定基準
+        - [ ]
+        - [ ]
+        - [ ]
     validations:
       required: true
-
-  - type: textarea
-    id: mockup-description
-    attributes:
-      label: UI案・モックアップ (UI Mockup)
-      description: UI変更を伴う場合、画面の構成案やワイヤーフレームを記載してください（任意）
-      placeholder: |
-        例:
-        - メニューバーに「バッチ処理」ボタンを追加
-        - 新しいダイアログでファイル一覧表示
-        - 進捗バーで全体の進行状況を表示
-
-        画像がある場合はここにドラッグ＆ドロップしてください
-    validations:
-      required: false
-
-  - type: textarea
-    id: additional-context
-    attributes:
-      label: 補足情報 (Additional Context)
-      description: その他、この機能について伝えたいことがあれば記載してください
-      placeholder: |
-        例:
-        - 参考となる他のアプリケーション
-        - 関連する技術情報
-        - 実装時の制約事項
-    validations:
-      required: false

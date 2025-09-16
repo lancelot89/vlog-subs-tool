@@ -1,11 +1,8 @@
 blank_issues_enabled: true
 contact_links:
-  - name: 📖 プロジェクトドキュメント (Project Documentation)
-    url: https://github.com/lancelot89/vlog-subs-tool/blob/main/README.md
-    about: アプリの概要、インストール方法、基本的な使い方について
-  - name: 🛠️ 設計ドキュメント (Design Documentation)
-    url: https://github.com/lancelot89/vlog-subs-tool/blob/main/DESIGN.md
-    about: 技術仕様、アーキテクチャ、詳細な設計について
-  - name: 📋 実装ルール (Implementation Rules)
+  - name: 📋 実装ルール (CLAUDE.md)
     url: https://github.com/lancelot89/vlog-subs-tool/blob/main/CLAUDE.md
-    about: ClaudeCode向けの実装方針と設計ルール
+    about: ClaudeCode向けの開発ルール
+  - name: 🛠️ 技術仕様 (DESIGN.md)
+    url: https://github.com/lancelot89/vlog-subs-tool/blob/main/DESIGN.md
+    about: システム設計とアーキテクチャ
