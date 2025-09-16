@@ -8,22 +8,18 @@ import tempfile
 import shutil
 from pathlib import Path
 
-from app.core.translate.provider_local import (
+from app.core.translate import (
     LocalTranslateProvider,
     LocalTranslateSettings,
     LocalTranslateError,
-    ModelManager
-)
-from app.core.translate.language_detector import (
     LanguageDetector,
     LanguageDetectionResult,
-    LanguageDetectionError
-)
-from app.core.translate.provider_router import (
+    LanguageDetectionError,
     TranslationProviderRouter,
     TranslationProviderType,
     TranslationResult
 )
+from app.core.translate.provider_local import ModelManager
 
 
 class TestLanguageDetector(unittest.TestCase):

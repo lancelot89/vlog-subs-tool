@@ -8,7 +8,7 @@ import tempfile
 import shutil
 from pathlib import Path
 
-from app.core.translate.provider_router import (
+from app.core.translate import (
     TranslationProviderRouter,
     TranslationProviderType,
     TranslationResult

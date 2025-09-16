@@ -8,15 +8,11 @@ from enum import Enum
 from typing import List, Dict, Optional, Callable, Any, Union
 from dataclasses import dataclass
 
-from .provider_google import GoogleTranslateProvider, GoogleTranslateSettings, GoogleTranslateError
-from .provider_deepl import DeepLProvider, DeepLSettings, DeepLError
 from .provider_local import LocalTranslateProvider, LocalTranslateSettings, LocalTranslateError
 
 
 class TranslationProviderType(Enum):
     """翻訳プロバイダータイプ"""
-    GOOGLE = "google"
-    DEEPL = "deepl"
     LOCAL = "local"
     MOCK = "mock"  # テスト用
 
@@ -110,11 +106,7 @@ class TranslationProviderRouter:
         try:
             provider = None
 
-            if provider_type == TranslationProviderType.GOOGLE:
-                provider = GoogleTranslateProvider(settings)
-            elif provider_type == TranslationProviderType.DEEPL:
-                provider = DeepLProvider(settings)
-            elif provider_type == TranslationProviderType.LOCAL:
+            if provider_type == TranslationProviderType.LOCAL:
                 provider = LocalTranslateProvider(settings)
             elif provider_type == TranslationProviderType.MOCK:
                 provider = MockTranslateProvider()

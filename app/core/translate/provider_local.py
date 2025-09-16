@@ -34,12 +34,13 @@ class LocalTranslateSettings:
     """ローカル翻訳設定"""
     models_dir: str
     max_batch_size: int = 16
-    beam_size: int = 4
+    beam_size: int = 1  # より厳格に
     num_hypotheses: int = 1
-    length_penalty: float = 1.0
+    length_penalty: float = 0.2  # より短い翻訳を強く優遇
     coverage_penalty: float = 0.0
-    repetition_penalty: float = 1.0
-    max_decoding_length: int = 256
+    repetition_penalty: float = 1.5  # より強い繰り返し抑制
+    no_repeat_ngram_size: int = 3  # 3-gramの繰り返しを防ぐ
+    max_decoding_length: int = 50   # さらに短く制限
     min_decoding_length: int = 1
     use_vmap: bool = True
     inter_threads: int = 1
@@ -61,7 +62,7 @@ class ModelManager:
     # サポートされている言語ペア（英語ピボット構成）
     SUPPORTED_PAIRS = {
         ('ja', 'en'): 'Helsinki-NLP/opus-mt-ja-en',
-        ('en', 'ja'): 'Helsinki-NLP/opus-mt-en-ja',
+        ('en', 'ja'): 'Helsinki-NLP/opus-mt-jap-en',  # 実際に存在するモデル
         ('zh', 'en'): 'Helsinki-NLP/opus-mt-zh-en',
         ('en', 'zh'): 'Helsinki-NLP/opus-mt-en-zh',
         ('ar', 'en'): 'Helsinki-NLP/opus-mt-ar-en',
@@ -269,9 +270,14 @@ class LocalTranslateProvider:
             if progress_callback:
                 progress_callback(f"翻訳中 ({src_lang}->{tgt_lang}): {batch_num}/{total_batches}", int(batch_num * 50 / total_batches))
 
-            # トークン化
-            tokenized = tokenizer(batch_texts, return_tensors="pt", padding=True, truncation=True)
-            source_tokens = [[tokenizer.convert_ids_to_tokens(ids.tolist())] for ids in tokenized['input_ids']]
+            # トークン化（CTranslate2形式に合わせる）
+            source_tokens = []
+            for text in batch_texts:
+                # テキストを直接トークン化
+                tokens = tokenizer.tokenize(text)
+                if not tokens:
+                    tokens = ["<unk>"]
+                source_tokens.append(tokens)
 
             # 翻訳実行
             results = translator.translate_batch(
@@ -281,14 +287,16 @@ class LocalTranslateProvider:
                 length_penalty=self.settings.length_penalty,
                 coverage_penalty=self.settings.coverage_penalty,
                 repetition_penalty=self.settings.repetition_penalty,
+                no_repeat_ngram_size=self.settings.no_repeat_ngram_size,
                 max_decoding_length=self.settings.max_decoding_length,
                 min_decoding_length=self.settings.min_decoding_length
             )
 
             # デトークン化
             for result in results:
-                tokens = result.hypotheses[0]  # 最良の仮説を選択
-                translated_text = tokenizer.convert_tokens_to_string(tokens)
+                hypothesis = result.hypotheses[0]  # 最良の仮説を選択
+                # トークンを文字列に変換
+                translated_text = tokenizer.convert_tokens_to_string(hypothesis)
                 translated_text = self._postprocess_text(translated_text, tgt_lang)
                 translated_texts.append(translated_text)
 
