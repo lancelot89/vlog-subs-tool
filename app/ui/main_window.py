@@ -24,6 +24,7 @@ from .dialogs.ocr_setup_dialog import OCRSetupDialog
 from .extraction_worker import ExtractionWorker
 from app.core.models import Project, SubtitleItem
 from app.core.format.srt import SRTFormatter, SRTFormatSettings
+from app.core.csv import SubtitleCSVExporter
 from app.core.qc.rules import QCChecker
 from app.core.extractor.ocr import SimplePaddleOCREngine
 
@@ -199,14 +200,20 @@ class MainWindow(QMainWindow):
         
         # SRT出力メニュー
         export_menu = file_menu.addMenu("字幕を出力(&E)")
-        
+
         export_ja_action = QAction("日本語SRT(&J)", self)
         export_ja_action.triggered.connect(self.export_japanese_srt)
         export_menu.addAction(export_ja_action)
-        
+
         export_all_action = QAction("全言語SRT(&A)", self)
         export_all_action.triggered.connect(self.export_all_srt)
         export_menu.addAction(export_all_action)
+
+        # 元データCSVエクスポート
+        self.csv_export_menu_action = QAction("CSV出力(&C)", self)
+        self.csv_export_menu_action.setEnabled(False)
+        self.csv_export_menu_action.triggered.connect(self.export_original_csv)
+        export_menu.addAction(self.csv_export_menu_action)
         
         file_menu.addSeparator()
         
@@ -300,9 +307,11 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self.translate_btn)
         
         self.csv_export_btn = QPushButton("CSV出力")
-        self.csv_export_btn.clicked.connect(self.export_translation_csv)
+        self.csv_export_btn.clicked.connect(self.export_original_csv)
         self.csv_export_btn.setEnabled(False)
         toolbar.addWidget(self.csv_export_btn)
+        # 旧テスト互換用エイリアス
+        self.csv_export_action = self.csv_export_btn
         
         toolbar.addSeparator()
         
@@ -578,6 +587,8 @@ class MainWindow(QMainWindow):
         self.qc_btn.setEnabled(True)
         self.translate_btn.setEnabled(True)
         self.csv_export_btn.setEnabled(True)
+        if hasattr(self, 'csv_export_menu_action') and self.csv_export_menu_action is not None:
+            self.csv_export_menu_action.setEnabled(True)
         self.export_srt_btn.setEnabled(True)
 
         self.status_label.setText(f"字幕の抽出が完了しました ({len(subtitle_items)}件)")
@@ -1080,6 +1091,49 @@ class MainWindow(QMainWindow):
         # 将来的に多言語対応する際のプレースホルダー
         self.export_japanese_srt()
     
+    def export_original_csv(self):
+        """元データのCSVをエクスポート"""
+        if not self.table_view.subtitles:
+            QMessageBox.warning(self, "警告", "エクスポートする字幕データがありません")
+            return
+
+        if self.current_project and self.current_project.source_video:
+            video_path = Path(self.current_project.source_video)
+        elif self.current_video_path:
+            video_path = Path(self.current_video_path)
+        else:
+            video_path = Path.cwd() / "subtitles.mp4"
+
+        default_dir = video_path.parent if video_path.parent.exists() else Path.cwd()
+        default_name = f"{video_path.stem}_source.csv"
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "元データCSVの保存先を選択",
+            str(default_dir / default_name),
+            "CSVファイル (*.csv);;すべてのファイル (*)"
+        )
+
+        if not file_path:
+            return
+
+        try:
+            exporter = SubtitleCSVExporter()
+            success = exporter.export_standard(self.table_view.subtitles, Path(file_path))
+
+            if success:
+                QMessageBox.information(
+                    self,
+                    "保存完了",
+                    f"元データCSVを保存しました\n{file_path}"
+                )
+                self.status_label.setText(f"CSVを出力: {Path(file_path).name}")
+            else:
+                QMessageBox.critical(self, "エラー", "CSVエクスポートに失敗しました。")
+        except Exception as e:
+            logging.exception("CSVエクスポートでエラーが発生しました")
+            QMessageBox.critical(self, "エラー", f"CSVエクスポートに失敗しました\n{str(e)}")
+
     def show_translate_view(self):
         """翻訳設定画面を表示"""
         if not self.table_view.subtitles:
