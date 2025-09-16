@@ -1218,7 +1218,8 @@ class MainWindow(QMainWindow):
         if provider_type == "google":
             # Google Translate設定を取得（設定ファイルまたはデフォルト値）
             return {
-                "credentials_path": "",  # 設定から取得
+                "project_id": "vlog-subs-tool",  # デフォルトプロジェクトID
+                "service_account_path": "",  # 設定から取得
                 "glossary_id": None
             }
         elif provider_type == "deepl":

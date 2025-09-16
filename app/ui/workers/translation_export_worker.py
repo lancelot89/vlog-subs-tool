@@ -77,7 +77,8 @@ class TranslationExportWorker(QThread):
         """翻訳プロバイダーの初期化"""
         if self.provider_type == "google":
             settings = GoogleTranslateSettings(
-                credentials_path=self.provider_settings.get("credentials_path", ""),
+                project_id=self.provider_settings.get("project_id", ""),
+                service_account_path=self.provider_settings.get("service_account_path", ""),
                 glossary_id=self.provider_settings.get("glossary_id")
             )
             return GoogleTranslateProvider(settings)
