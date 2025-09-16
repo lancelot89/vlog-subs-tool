@@ -54,6 +54,10 @@ class TranslationExportWorker(QThread):
             # 翻訳プロバイダーの初期化
             translator = self._initialize_translator()
 
+            # プロバイダーの初期化を実行
+            if hasattr(translator, 'initialize'):
+                translator.initialize()
+
             # 翻訳テキストの準備
             source_texts = [subtitle.text for subtitle in self.subtitles]
 
