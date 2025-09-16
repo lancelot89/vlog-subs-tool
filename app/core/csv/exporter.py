@@ -127,20 +127,17 @@ class SubtitleCSVExporter:
     def _get_standard_headers(self) -> List[str]:
         """標準CSVヘッダーを取得"""
         headers = []
-        
+
         if self.settings.include_index:
             headers.append("字幕番号")
-        
+
         if self.settings.include_timing:
-            headers.extend(["開始時間(ms)", "終了時間(ms)", "表示時間(秒)"])
-        
+            headers.extend(["開始時間", "終了時間", "表示時間(秒)"])
+
         headers.extend([
-            "字幕テキスト",
-            "文字数",
-            "行数",
-            "作成日時"
+            "字幕テキスト"
         ])
-        
+
         return headers
     
     def _create_translation_row(self, subtitle: SubtitleItem, source_lang: str) -> List[str]:
@@ -169,28 +166,24 @@ class SubtitleCSVExporter:
     def _create_standard_row(self, subtitle: SubtitleItem) -> List[str]:
         """標準行データを作成"""
         row = []
-        
+
         if self.settings.include_index:
             row.append(str(subtitle.index))
-        
+
         if self.settings.include_timing:
+            start_time = self._format_time_for_csv(subtitle.start_ms)
+            end_time = self._format_time_for_csv(subtitle.end_ms)
             duration = (subtitle.end_ms - subtitle.start_ms) / 1000
             row.extend([
-                str(subtitle.start_ms),
-                str(subtitle.end_ms),
+                start_time,
+                end_time,
                 f"{duration:.1f}"
             ])
-        
-        char_count = len(subtitle.text.replace('\n', '').replace(' ', ''))
-        line_count = len(subtitle.text.split('\n'))
-        
+
         row.extend([
-            subtitle.text,
-            str(char_count),
-            str(line_count),
-            datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            subtitle.text
         ])
-        
+
         return row
     
     def _format_time_for_csv(self, time_ms: int) -> str:
