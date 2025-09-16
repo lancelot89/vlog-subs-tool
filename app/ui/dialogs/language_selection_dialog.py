@@ -153,6 +153,7 @@ class LanguageSelectionDialog(QDialog):
         self.translation_provider_combo.addItems([
             "Google Translate",
             "DeepL",
+            "モック翻訳（テスト用）",
             "翻訳しない（日本語のみ出力）"
         ])
         self.translation_provider_combo.setCurrentIndex(0)  # Google Translateをデフォルト
@@ -280,7 +281,7 @@ class LanguageSelectionDialog(QDialog):
         provider_index = self.translation_provider_combo.currentIndex()
 
         # 翻訳しない場合は言語選択を無効化
-        if provider_index == 2:  # 翻訳しない
+        if provider_index == 3:  # 翻訳しない
             for checkbox in self.language_checkboxes.values():
                 checkbox.setEnabled(False)
                 checkbox.setChecked(False)
@@ -319,7 +320,7 @@ class LanguageSelectionDialog(QDialog):
         """出力オプションを取得"""
         return {
             "output_folder": self.output_folder_edit.text().strip() or None,
-            "translation_provider": ["google", "deepl", "none"][self.translation_provider_combo.currentIndex()],
+            "translation_provider": ["google", "deepl", "mock", "none"][self.translation_provider_combo.currentIndex()],
             "concurrent_translations": self.concurrent_translation_spin.value()
         }
 

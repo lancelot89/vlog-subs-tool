@@ -14,6 +14,7 @@ from app.core.models import SubtitleItem
 from app.core.format.srt import SRTFormatter, SRTFormatSettings
 from app.core.translate.provider_google import GoogleTranslateProvider, GoogleTranslateSettings, GoogleTranslateError
 from app.core.translate.provider_deepl import DeepLProvider, DeepLSettings, DeepLError
+from app.core.translate.provider_mock import MockTranslateProvider, MockTranslateSettings, MockTranslateError
 
 
 class TranslationExportWorker(QThread):
@@ -93,6 +94,13 @@ class TranslationExportWorker(QThread):
                 use_pro_api=self.provider_settings.get("use_pro", False)
             )
             return DeepLProvider(settings)
+
+        elif self.provider_type == "mock":
+            settings = MockTranslateSettings(
+                delay_ms=self.provider_settings.get("delay_ms", 50),
+                add_prefix=self.provider_settings.get("add_prefix", True)
+            )
+            return MockTranslateProvider(settings)
 
         else:
             raise ValueError(f"未対応の翻訳プロバイダ: {self.provider_type}")

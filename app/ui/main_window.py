@@ -1228,6 +1228,12 @@ class MainWindow(QMainWindow):
                 "api_key": "",  # 設定から取得
                 "use_pro": False
             }
+        elif provider_type == "mock":
+            # モック翻訳設定
+            return {
+                "delay_ms": 50,
+                "add_prefix": True
+            }
         else:
             return {}
 
@@ -1252,12 +1258,61 @@ class MainWindow(QMainWindow):
 
     def on_translation_export_error(self, error_message: str):
         """翻訳SRT出力エラー"""
-        QMessageBox.critical(
-            self,
-            "翻訳エラー",
-            f"翻訳処理中にエラーが発生しました:\n\n{error_message}"
-        )
+        # Google Cloud認証エラーの場合は特別な対応
+        if "Your default credentials were not found" in error_message or "DefaultCredentialsError" in error_message:
+            self._handle_google_auth_error()
+        else:
+            QMessageBox.critical(
+                self,
+                "翻訳エラー",
+                f"翻訳処理中にエラーが発生しました:\n\n{error_message}"
+            )
         self.status_label.setText("翻訳処理エラー")
+
+    def _handle_google_auth_error(self):
+        """Google Cloud認証エラーの処理"""
+        reply = QMessageBox.question(
+            self,
+            "Google Cloud認証エラー",
+            "Google Cloud Translation APIの認証情報が見つかりません。\n\n"
+            "以下の選択肢があります:\n"
+            "• モック翻訳を使用してテスト実行\n"
+            "• Google Cloud認証を設定\n\n"
+            "モック翻訳を使用しますか？",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+
+        if reply == QMessageBox.Yes:
+            # モック翻訳での再実行を促す
+            QMessageBox.information(
+                self,
+                "モック翻訳の使用",
+                "SRT出力画面で翻訳エンジンを「モック翻訳（テスト用）」に変更してから再実行してください。\n\n"
+                "モック翻訳は認証不要で、デモ・テスト用途に適しています。"
+            )
+        else:
+            # Google Cloud認証の設定方法を案内
+            self._show_google_auth_guidance()
+
+    def _show_google_auth_guidance(self):
+        """Google Cloud認証の設定ガイダンス"""
+        guidance_message = (
+            "Google Cloud Translation APIを使用するには以下の設定が必要です:\n\n"
+            "1. Google Cloud Projectの作成\n"
+            "2. Translation APIの有効化\n"
+            "3. サービスアカウントキーの作成\n"
+            "4. 認証情報の設定\n\n"
+            "詳細な手順:\n"
+            "https://cloud.google.com/docs/authentication/external/set-up-adc\n\n"
+            "または、テスト用にモック翻訳をご利用ください。"
+        )
+
+        QMessageBox.information(
+            self,
+            "Google Cloud認証の設定",
+            guidance_message
+        )
     
     def get_srt_export_settings(self) -> SRTFormatSettings:
         """SRT出力設定を取得（設定画面から）"""
