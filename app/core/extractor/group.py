@@ -476,28 +476,61 @@ class ExtractionProcessor:
         return subtitles
     
     def _remove_duplicates(self, subtitles: List[SubtitleItem]) -> List[SubtitleItem]:
-        """重複字幕の除去"""
+        """重複字幕の統合（同じテキストの字幕をマージ）"""
         if not subtitles:
             return []
-        
-        unique_subtitles = []
+
+        # テキストをキーとして字幕をグループ化
+        text_groups = {}
         calc = TextSimilarityCalculator()
-        
+
         for subtitle in subtitles:
-            is_duplicate = False
-            
-            for existing in unique_subtitles:
-                # 時間が重複し、テキストが類似している場合は重複と判定
-                time_overlap = (subtitle.start_ms < existing.end_ms and 
-                              subtitle.end_ms > existing.start_ms)
-                
-                if time_overlap:
-                    similarity = calc.calculate_similarity(subtitle.text, existing.text)
-                    if similarity > 0.8:  # 重複判定の閾値
-                        is_duplicate = True
-                        break
-            
-            if not is_duplicate:
-                unique_subtitles.append(subtitle)
-        
-        return unique_subtitles
+            # 既存のグループと比較して類似度の高いものを探す
+            merged_with_existing = False
+
+            for existing_text, group in text_groups.items():
+                similarity = calc.calculate_similarity(subtitle.text, existing_text)
+                if similarity > 0.90:  # 高い類似度（90%以上）で同一テキストと判定
+                    group.append(subtitle)
+                    merged_with_existing = True
+                    break
+
+            # 新しいグループを作成
+            if not merged_with_existing:
+                text_groups[subtitle.text] = [subtitle]
+
+        # 各グループを統合
+        merged_subtitles = []
+        for text, group in text_groups.items():
+            if len(group) == 1:
+                # 単一の字幕はそのまま追加
+                merged_subtitles.append(group[0])
+            else:
+                # 複数の字幕を統合
+                merged_subtitle = self._merge_duplicate_group(group)
+                merged_subtitles.append(merged_subtitle)
+
+        return merged_subtitles
+
+    def _merge_duplicate_group(self, group: List[SubtitleItem]) -> SubtitleItem:
+        """同じテキストの字幕グループを統合"""
+        if not group:
+            return None
+
+        # 最も早い開始時間と最も遅い終了時間を取得
+        min_start_ms = min(subtitle.start_ms for subtitle in group)
+        max_end_ms = max(subtitle.end_ms for subtitle in group)
+
+        # 最も信頼度の高い（または最初の）字幕のテキストとbboxを使用
+        base_subtitle = group[0]
+
+        # 統合された字幕を作成
+        merged_subtitle = SubtitleItem(
+            index=base_subtitle.index,  # インデックスは後で再採番される
+            start_ms=min_start_ms,
+            end_ms=max_end_ms,
+            text=base_subtitle.text,
+            bbox=base_subtitle.bbox
+        )
+
+        return merged_subtitle
