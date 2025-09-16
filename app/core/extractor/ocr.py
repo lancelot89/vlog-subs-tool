@@ -444,7 +444,7 @@ class SimplePaddleOCREngine:
         elif processed.ndim != 3:
             return None
 
-        if not processed.flags.get("C_CONTIGUOUS", False):
+        if not processed.flags.c_contiguous:
             processed = np.ascontiguousarray(processed)
 
         height, width = processed.shape[:2]
