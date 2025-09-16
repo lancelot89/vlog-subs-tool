@@ -201,8 +201,8 @@ class MainWindow(QMainWindow):
         # SRT出力メニュー
         export_menu = file_menu.addMenu("字幕を出力(&E)")
         
-        export_ja_action = QAction("日本語SRT(&J)", self)
-        export_ja_action.triggered.connect(self.export_japanese_srt)
+        export_ja_action = QAction("SRT出力(&J)", self)
+        export_ja_action.triggered.connect(self.export_all_srt)
         export_menu.addAction(export_ja_action)
         
         export_all_action = QAction("多言語SRT出力...(&A)", self)
