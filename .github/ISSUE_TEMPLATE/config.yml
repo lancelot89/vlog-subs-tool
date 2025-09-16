@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 📋 実装ルール (CLAUDE.md)
+    url: https://github.com/lancelot89/vlog-subs-tool/blob/main/CLAUDE.md
+    about: ClaudeCode向けの開発ルール
+  - name: 🛠️ 技術仕様 (DESIGN.md)
+    url: https://github.com/lancelot89/vlog-subs-tool/blob/main/DESIGN.md
+    about: システム設計とアーキテクチャ

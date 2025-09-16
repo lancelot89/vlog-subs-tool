@@ -1,0 +1,64 @@
+name: 🔍 技術調査・検討
+description: 技術的な調査や検討事項
+title: "[Research]: "
+labels: ["research", "investigation"]
+body:
+  - type: textarea
+    id: topic
+    attributes:
+      label: 調査・検討事項
+      description: 調査・検討する内容
+    validations:
+      required: true
+
+  - type: textarea
+    id: background
+    attributes:
+      label: 背景
+      description: なぜ調査・検討が必要か
+    validations:
+      required: true
+
+  - type: textarea
+    id: questions
+    attributes:
+      label: 調査項目・課題
+      description: |
+        調査すべき項目や解決すべき課題
+        -
+        -
+        -
+    validations:
+      required: true
+
+  - type: textarea
+    id: approach
+    attributes:
+      label: 調査方法・アプローチ
+      description: 調査の進め方
+    validations:
+      required: false
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 優先度
+      options:
+        - Critical
+        - High
+        - Medium
+        - Low
+    validations:
+      required: true
+
+  - type: textarea
+    id: deliverables
+    attributes:
+      label: 成果物
+      description: |
+        調査結果として期待する成果物
+        - [ ]
+        - [ ]
+        - [ ]
+    validations:
+      required: true
