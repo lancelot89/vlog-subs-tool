@@ -236,16 +236,22 @@ python -m isort app/
 ```
 
 ### バイナリビルド
+
+クロスプラットフォームに対応したビルドスクリプトとして Python 版の
+`scripts/build_binary.py` を追加しています。Windows ではシェルスクリプトを
+実行できないため、以下のコマンドを利用してください。
+
 ```bash
-# Windows
-pyinstaller --onefile --windowed app/main.py
+# 例: Windowsでビルド
+python scripts/build_binary.py windows
 
-# macOS
-pyinstaller --onefile --windowed --name "VLog字幕ツール" app/main.py
-
-# Linux
-pyinstaller --onefile app/main.py
+# macOS/Linuxでも同じコマンドが利用可能
+python scripts/build_binary.py macos
+python scripts/build_binary.py linux
 ```
+
+従来のシェルスクリプトを利用する場合は `scripts/build_binary.sh` も
+引き続き利用できます（Linux/macOS向け）。
 
 ## 📋 技術仕様
 
