@@ -273,10 +273,10 @@ class SubtitleGrouper:
         }
         
         # OCR特有の誤認識パターンの修正
-        cleaned = re.sub(r'[\\x00-\\x1f\\x7f-\\x9f]', '', cleaned)  # 制御文字除去
-        
+        cleaned = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', cleaned)  # 制御文字除去
+
         # 連続する同じ文字の除去（明らかな誤認識）
-        cleaned = re.sub(r'(.)\\1{3,}', r'\\1', cleaned)
+        cleaned = re.sub(r'(.)\1{3,}', r'\1', cleaned)
         
         return cleaned
     

@@ -194,18 +194,21 @@ class SubtitleDetector:
     
     def _initialize_sampler(self, video_path: str):
         """サンプラーの初期化"""
+        # メモリ使用量を抑制するため、サンプリングレートを制限
+        safe_fps_sample = min(self.settings.fps_sample, 0.5)  # 最大0.5fps（2秒間隔）
+
         if self.settings.roi_mode == "bottom_30" or not self.settings.roi_rect:
             # 下段30%専用サンプラー
             self.sampler = BottomROISampler(
                 video_path,
-                sample_fps=self.settings.fps_sample,
+                sample_fps=safe_fps_sample,
                 bottom_ratio=0.3  # 30%
             )
         else:
             # 汎用サンプラー
             self.sampler = VideoSampler(
                 video_path,
-                sample_fps=self.settings.fps_sample
+                sample_fps=safe_fps_sample
             )
         
         # ROIManagerの初期化
@@ -310,13 +313,18 @@ class SubtitleDetector:
     def _perform_ocr(self, frames: List[VideoFrame]) -> List[FrameOCRResult]:
         """OCR実行"""
         frame_results = []
+
+        # メモリ使用量を抑制するため、フレーム数を制限
+        max_frames = min(len(frames), 100)  # 最大100フレームまで
+        frames = frames[:max_frames]
         total_frames = len(frames)
 
-        self.logger.info(f"OCR処理開始: {total_frames}フレーム")
+        self.logger.info(f"OCR処理開始: {total_frames}フレーム（安全性のため制限適用）")
 
-        # 並列処理用の設定
-        max_workers = min(4, total_frames)  # 最大4並列
-        self.logger.debug(f"OCR並列実行: {max_workers}ワーカー")
+        # 並列処理用の設定（メモリ使用量を抑制）
+        # Segmentation fault回避のため並列数を制限
+        max_workers = min(1, total_frames)  # シングルスレッドに制限
+        self.logger.debug(f"OCR実行: {max_workers}ワーカー（安全性重視）")
 
         start_time = time.time()
 
