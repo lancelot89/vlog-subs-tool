@@ -432,40 +432,103 @@ class SimplePaddleOCREngine:
         if not isinstance(image, np.ndarray):
             return None
 
-        # Ensure uint8 BGR format expected by PaddleOCR
-        processed = image
-        if processed.dtype != np.uint8:
-            processed = np.clip(processed, 0, 255).astype(np.uint8)
-
-        if processed.ndim == 2:
-            processed = cv2.cvtColor(processed, cv2.COLOR_GRAY2BGR)
-        elif processed.ndim == 3 and processed.shape[2] == 4:
-            processed = cv2.cvtColor(processed, cv2.COLOR_BGRA2BGR)
-        elif processed.ndim != 3:
+        # 画像の基本的な形状チェック
+        if image.ndim < 2 or image.ndim > 3:
+            logger.warning(f"Invalid image dimensions: {image.ndim}, expected 2 or 3")
             return None
 
-        if not processed.flags.c_contiguous:
-            processed = np.ascontiguousarray(processed)
-
-        height, width = processed.shape[:2]
+        # 画像サイズの初期チェック
+        height, width = image.shape[:2]
         if height <= 0 or width <= 0:
+            logger.warning(f"Invalid image size: {width}x{height}")
             return None
 
-        total_pixels = height * width
-        if self.max_image_pixels > 0 and total_pixels > self.max_image_pixels:
-            scale = (self.max_image_pixels / float(total_pixels)) ** 0.5
-            new_w = max(1, int(width * scale))
-            new_h = max(1, int(height * scale))
-            processed = cv2.resize(processed, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        # Ensure uint8 BGR format expected by PaddleOCR
+        processed = image.copy()  # 元の画像を変更しないようにコピー
+
+        try:
+            if processed.dtype != np.uint8:
+                processed = np.clip(processed, 0, 255).astype(np.uint8)
+
+            # 色チャンネル数の安全なチェックと変換
+            if processed.ndim == 2:
+                processed = cv2.cvtColor(processed, cv2.COLOR_GRAY2BGR)
+            elif processed.ndim == 3:
+                if processed.shape[2] == 4:
+                    processed = cv2.cvtColor(processed, cv2.COLOR_BGRA2BGR)
+                elif processed.shape[2] == 1:
+                    processed = cv2.cvtColor(processed, cv2.COLOR_GRAY2BGR)
+                elif processed.shape[2] != 3:
+                    logger.warning(f"Unsupported number of channels: {processed.shape[2]}")
+                    return None
+            else:
+                logger.warning(f"Unexpected image format after conversion: {processed.shape}")
+                return None
+
+            # メモリレイアウトの確認と修正
+            if not processed.flags.c_contiguous:
+                processed = np.ascontiguousarray(processed)
+
+            # 画像サイズの再確認
             height, width = processed.shape[:2]
+            if height <= 0 or width <= 0:
+                logger.warning(f"Invalid processed image size: {width}x{height}")
+                return None
 
-        if self.max_side_length > 0 and (height > self.max_side_length or width > self.max_side_length):
-            scale = min(self.max_side_length / float(height), self.max_side_length / float(width))
-            new_w = max(1, int(width * scale))
-            new_h = max(1, int(height * scale))
-            processed = cv2.resize(processed, (new_w, new_h), interpolation=cv2.INTER_AREA)
+            # 極端に小さい画像のチェック
+            if height < 10 or width < 10:
+                logger.warning(f"Image too small for OCR: {width}x{height}")
+                return None
 
-        return processed
+            # ピクセル数制限の適用
+            total_pixels = height * width
+            if self.max_image_pixels > 0 and total_pixels > self.max_image_pixels:
+                scale = (self.max_image_pixels / float(total_pixels)) ** 0.5
+                new_w = max(10, int(width * scale))  # 最小サイズを保証
+                new_h = max(10, int(height * scale))
+                try:
+                    processed = cv2.resize(processed, (new_w, new_h), interpolation=cv2.INTER_AREA)
+                    if processed is None or processed.size == 0:
+                        logger.warning("Resize operation failed (max_pixels)")
+                        return None
+                    height, width = processed.shape[:2]
+                except Exception as e:
+                    logger.error(f"Failed to resize image (max_pixels): {e}")
+                    return None
+
+            # 最大辺長制限の適用
+            if self.max_side_length > 0 and (height > self.max_side_length or width > self.max_side_length):
+                scale = min(self.max_side_length / float(height), self.max_side_length / float(width))
+                new_w = max(10, int(width * scale))  # 最小サイズを保証
+                new_h = max(10, int(height * scale))
+                try:
+                    processed = cv2.resize(processed, (new_w, new_h), interpolation=cv2.INTER_AREA)
+                    if processed is None or processed.size == 0:
+                        logger.warning("Resize operation failed (max_side)")
+                        return None
+                except Exception as e:
+                    logger.error(f"Failed to resize image (max_side): {e}")
+                    return None
+
+            # 最終的な画像の検証
+            if processed is None or processed.size == 0:
+                logger.warning("Final processed image is invalid")
+                return None
+
+            final_height, final_width = processed.shape[:2]
+            if final_height <= 0 or final_width <= 0:
+                logger.warning(f"Final processed image has invalid size: {final_width}x{final_height}")
+                return None
+
+            if processed.ndim != 3 or processed.shape[2] != 3:
+                logger.warning(f"Final processed image has invalid format: {processed.shape}")
+                return None
+
+            return processed
+
+        except Exception as e:
+            logger.error(f"Error during image preprocessing: {e}")
+            return None
 
     def _extract_from_single(self, image: Optional[np.ndarray]) -> List[OCRResult]:
         if image is None:
@@ -475,13 +538,42 @@ class SimplePaddleOCREngine:
         if processed is None:
             return []
 
+        # OCR実行前の最終検証
         try:
+            if not isinstance(processed, np.ndarray):
+                logger.warning("Processed image is not a numpy array")
+                return []
+
+            if processed.size == 0:
+                logger.warning("Processed image is empty")
+                return []
+
+            if processed.ndim != 3 or processed.shape[2] != 3:
+                logger.warning(f"Invalid processed image format: {processed.shape}")
+                return []
+
+            # PaddleOCRに渡す前にメモリ整合性をチェック
+            if not processed.flags.c_contiguous:
+                logger.warning("Image is not contiguous, fixing...")
+                processed = np.ascontiguousarray(processed)
+
+            # 画像データの整合性チェック
+            if not processed.data.contiguous:
+                logger.warning("Image data is not contiguous")
+                return []
+
+            logger.debug(f"Sending image to OCR: shape={processed.shape}, dtype={processed.dtype}, contiguous={processed.flags.c_contiguous}")
+
+            # PaddleOCRの実行
             raw_results = self._ocr.ocr(processed)  # type: ignore[operator]
+
         except (MemoryError, RuntimeError, ValueError) as exc:
             logger.error("PaddleOCR memory/runtime error on %s: %s", platform.system(), exc)
             return []
         except Exception as exc:  # pragma: no cover - unexpected runtime issue
             logger.error("PaddleOCR inference failed on %s: %s", platform.system(), exc)
+            import traceback
+            logger.error("Full traceback: %s", traceback.format_exc())
             return []
 
         return self._parse_ocr_results(raw_results)
