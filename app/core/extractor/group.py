@@ -42,46 +42,30 @@ class TextSimilarityCalculator:
     @staticmethod
     def calculate_similarity(text1: str, text2: str) -> float:
         """
-        2つのテキストの類似度を計算（0.0-1.0）
-        
+        2つのテキストの類似度を計算（OCR誤認識対応版）
+
         Args:
             text1: テキスト1
             text2: テキスト2
-            
+
         Returns:
             float: 類似度（0.0-1.0）
         """
         if not text1 or not text2:
             return 0.0
-        
+
         # 正規化（空白・記号の統一）
         norm_text1 = TextSimilarityCalculator._normalize_text(text1)
         norm_text2 = TextSimilarityCalculator._normalize_text(text2)
-        
+
         # 完全一致
         if norm_text1 == norm_text2:
             return 1.0
-        
-        # 文字レベルの類似度（SequenceMatcher）
-        char_similarity = SequenceMatcher(None, norm_text1, norm_text2).ratio()
-        
-        # 単語レベルの類似度
-        words1 = set(norm_text1.split())
-        words2 = set(norm_text2.split())
-        
-        if not words1 and not words2:
-            word_similarity = 1.0
-        elif not words1 or not words2:
-            word_similarity = 0.0
-        else:
-            intersection = len(words1 & words2)
-            union = len(words1 | words2)
-            word_similarity = intersection / union if union > 0 else 0.0
-        
-        # 加重平均（文字レベル70%、単語レベル30%）
-        final_similarity = char_similarity * 0.7 + word_similarity * 0.3
-        
-        return final_similarity
+
+        # OCR誤認識対応の類似度計算
+        ocr_similarity = TextSimilarityCalculator._calculate_ocr_aware_similarity(norm_text1, norm_text2)
+
+        return ocr_similarity
     
     @staticmethod
     def _normalize_text(text: str) -> str:
@@ -104,10 +88,84 @@ class TextSimilarityCalculator:
         normalized = re.sub(r'[!！]', '!', normalized)
         normalized = re.sub(r'[?？]', '?', normalized)
         
-        # 連続空白を1つに
-        normalized = re.sub(r'\\s+', ' ', normalized)
-        
+        # 連続空白を1つに & 全ての空白を除去（OCR誤認識対応）
+        normalized = re.sub(r'\s+', '', normalized)
+
         return normalized.strip()
+
+    @staticmethod
+    def _calculate_ocr_aware_similarity(text1: str, text2: str) -> float:
+        """
+        OCR誤認識を考慮した類似度計算
+        """
+        if not text1 or not text2:
+            return 0.0
+
+        # 長さの差が大きすぎる場合は低い類似度
+        len_ratio = min(len(text1), len(text2)) / max(len(text1), len(text2))
+        if len_ratio < 0.7:  # 70%未満の長さ差は別テキストと判定
+            return 0.0
+
+        # OCR誤認識の一般的なパターンをマッピング
+        ocr_corrections = {
+            'シヤ': 'シャ', 'シユ': 'シュ', 'シヨ': 'ショ',
+            'チヤ': 'チャ', 'チユ': 'チュ', 'チヨ': 'チョ',
+            'ロ': '口', '口': 'ロ',  # 「ロ」と「口」の相互変換
+            'ニ': 'コ', 'コ': 'ニ',  # 「ニ」と「コ」の相互変換
+            '0': 'O', 'O': '0', '1': 'l', 'l': '1', 'I': '1',
+        }
+
+        # OCR補正適用
+        corrected_text1 = text1
+        corrected_text2 = text2
+
+        for wrong, correct in ocr_corrections.items():
+            corrected_text1 = corrected_text1.replace(wrong, correct)
+            corrected_text2 = corrected_text2.replace(wrong, correct)
+
+        # 補正後の比較
+        if corrected_text1 == corrected_text2:
+            return 1.0
+
+        # 文字単位の編集距離ベースの類似度
+        edit_distance = TextSimilarityCalculator._calculate_edit_distance(corrected_text1, corrected_text2)
+        max_len = max(len(corrected_text1), len(corrected_text2))
+
+        if max_len == 0:
+            return 1.0
+
+        # 編集距離ベースの類似度（1文字違いでも高い類似度を保持）
+        similarity = 1.0 - (edit_distance / max_len)
+
+        # OCR誤認識の場合は類似度を底上げ（1-2文字の違いなら統合対象とする）
+        if edit_distance <= 2 and len_ratio >= 0.9:
+            similarity = max(similarity, 0.92)  # 90%閾値を超える値に設定
+
+        return similarity
+
+    @staticmethod
+    def _calculate_edit_distance(s1: str, s2: str) -> int:
+        """
+        レーベンシュタイン距離（編集距離）を計算
+        """
+        if len(s1) < len(s2):
+            return TextSimilarityCalculator._calculate_edit_distance(s2, s1)
+
+        if len(s2) == 0:
+            return len(s1)
+
+        previous_row = list(range(len(s2) + 1))
+        for i, c1 in enumerate(s1):
+            current_row = [i + 1]
+            for j, c2 in enumerate(s2):
+                # 挿入、削除、置換のコスト
+                insertions = previous_row[j + 1] + 1
+                deletions = current_row[j] + 1
+                substitutions = previous_row[j] + (c1 != c2)
+                current_row.append(min(insertions, deletions, substitutions))
+            previous_row = current_row
+
+        return previous_row[-1]
 
 
 class SubtitleGrouper:
@@ -476,28 +534,134 @@ class ExtractionProcessor:
         return subtitles
     
     def _remove_duplicates(self, subtitles: List[SubtitleItem]) -> List[SubtitleItem]:
-        """重複字幕の除去"""
+        """重複字幕の統合（同じテキストの字幕をマージ）"""
         if not subtitles:
             return []
-        
-        unique_subtitles = []
+
+        # 時間順にソート
+        sorted_subtitles = sorted(subtitles, key=lambda x: x.start_ms)
+
+        # 時間制約付きの重複統合（近接する類似字幕のみ統合）
+        time_aware_merged = self._merge_time_constrained_duplicates(sorted_subtitles)
+
+        # 最後に時間重複ベースの統合（従来の重複除去）
+        final_merged = self._merge_overlapping_subtitles(time_aware_merged)
+
+        return final_merged
+
+    def _merge_time_constrained_duplicates(self, subtitles: List[SubtitleItem]) -> List[SubtitleItem]:
+        """時間制約付きテキスト類似度による統合（近接する字幕のみ対象）"""
+        if not subtitles:
+            return []
+
+        merged = []
         calc = TextSimilarityCalculator()
-        
-        for subtitle in subtitles:
-            is_duplicate = False
-            
-            for existing in unique_subtitles:
-                # 時間が重複し、テキストが類似している場合は重複と判定
-                time_overlap = (subtitle.start_ms < existing.end_ms and 
-                              subtitle.end_ms > existing.start_ms)
-                
-                if time_overlap:
-                    similarity = calc.calculate_similarity(subtitle.text, existing.text)
-                    if similarity > 0.8:  # 重複判定の閾値
-                        is_duplicate = True
+        max_merge_gap_ms = 30000  # 30秒以内の字幕のみ統合対象とする
+
+        i = 0
+        while i < len(subtitles):
+            current_group = [subtitles[i]]
+            j = i + 1
+
+            # 現在の字幕から30秒以内の類似字幕を探す
+            while j < len(subtitles):
+                time_gap = subtitles[j].start_ms - subtitles[i].end_ms
+
+                # 時間間隔が30秒を超えたら統合対象外
+                if time_gap > max_merge_gap_ms:
+                    break
+
+                # 連鎖的重複対応: 既存グループのいずれかとの類似度をチェック
+                is_similar_to_group = False
+                for group_member in current_group:
+                    similarity = calc.calculate_similarity(
+                        group_member.text,
+                        subtitles[j].text
+                    )
+                    if similarity > 0.90:
+                        is_similar_to_group = True
                         break
-            
-            if not is_duplicate:
-                unique_subtitles.append(subtitle)
-        
-        return unique_subtitles
+
+                if is_similar_to_group:
+                    current_group.append(subtitles[j])
+                    subtitles.pop(j)  # 統合対象を削除
+                else:
+                    j += 1
+
+            # グループを統合して追加
+            if len(current_group) == 1:
+                merged.append(current_group[0])
+            else:
+                merged_subtitle = self._merge_duplicate_group(current_group)
+                merged.append(merged_subtitle)
+
+            i += 1
+
+        return merged
+
+    def _merge_overlapping_subtitles(self, subtitles: List[SubtitleItem]) -> List[SubtitleItem]:
+        """時間重複している字幕の統合"""
+        if not subtitles:
+            return []
+
+        # 時間順にソート
+        sorted_subtitles = sorted(subtitles, key=lambda x: x.start_ms)
+        merged = []
+        calc = TextSimilarityCalculator()
+
+        for subtitle in sorted_subtitles:
+            # 既存の字幕と時間重複かつテキスト類似度をチェック
+            found_overlap = False
+
+            for i, existing in enumerate(merged):
+                # 時間重複の判定
+                time_overlap = (subtitle.start_ms < existing.end_ms and
+                               subtitle.end_ms > existing.start_ms)
+
+                if time_overlap:
+                    # テキスト類似度の判定
+                    similarity = calc.calculate_similarity(subtitle.text, existing.text)
+                    if similarity > 0.80:  # 80%以上の類似度で統合
+                        # 既存の字幕と統合
+                        merged_subtitle = SubtitleItem(
+                            index=existing.index,
+                            start_ms=min(existing.start_ms, subtitle.start_ms),
+                            end_ms=max(existing.end_ms, subtitle.end_ms),
+                            text=existing.text,  # より長いテキストを保持
+                            bbox=existing.bbox
+                        )
+                        # より長いテキストを選択
+                        if len(subtitle.text) > len(existing.text):
+                            merged_subtitle.text = subtitle.text
+
+                        merged[i] = merged_subtitle
+                        found_overlap = True
+                        break
+
+            if not found_overlap:
+                merged.append(subtitle)
+
+        return merged
+
+    def _merge_duplicate_group(self, group: List[SubtitleItem]) -> SubtitleItem:
+        """同じテキストの字幕グループを統合"""
+        if not group:
+            return None
+
+        # 最も早い開始時間と最も遅い終了時間を取得
+        min_start_ms = min(subtitle.start_ms for subtitle in group)
+        max_end_ms = max(subtitle.end_ms for subtitle in group)
+
+        # 最も信頼度の高い（または最初の）字幕のテキストとbboxを使用
+        base_subtitle = group[0]
+
+        # 統合された字幕を作成
+        merged_subtitle = SubtitleItem(
+            index=base_subtitle.index,  # インデックスは後で再採番される
+            start_ms=min_start_ms,
+            end_ms=max_end_ms,
+            text=base_subtitle.text,
+            bbox=base_subtitle.bbox
+        )
+
+        return merged_subtitle
