@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 # プロジェクトルートをPythonパスに追加
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.core.format.srt import SRTFormatter
 from app.core.models import SubtitleItem
