@@ -239,14 +239,24 @@ if __name__ == "__main__":
     success_count = 0
     total_tests = 3
 
-    if test_duplicate_merge_basic():
-        success_count += 1
+    # assert文を使用したテスト実行
+    try:
+        if test_duplicate_merge_basic():
+            success_count += 1
+    except AssertionError as e:
+        print(f"❌ test_duplicate_merge_basic失敗: {e}")
 
-    if test_exact_duplicate():
-        success_count += 1
+    try:
+        if test_exact_duplicate():
+            success_count += 1
+    except AssertionError as e:
+        print(f"❌ test_exact_duplicate失敗: {e}")
 
-    if test_no_duplicates():
-        success_count += 1
+    try:
+        if test_no_duplicates():
+            success_count += 1
+    except AssertionError as e:
+        print(f"❌ test_no_duplicates失敗: {e}")
 
     print(f"\n=== テスト結果: {success_count}/{total_tests} 成功 ===")
 
@@ -254,3 +264,4 @@ if __name__ == "__main__":
         print("🎉 すべてのテストが成功しました！")
     else:
         print("❌ 一部のテストが失敗しました")
+        raise SystemExit(1)  # テスト失敗で終了

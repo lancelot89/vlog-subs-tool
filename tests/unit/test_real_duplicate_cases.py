@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-実際のtest_video.ja.srtの重複ケースを使ったテスト
+実際のtest_video.ja.srtの重複ケースを使ったテスト（assert文版）
 """
 
 import sys
@@ -41,6 +41,18 @@ class MockTextSimilarityCalculator:
         if norm_text1 == norm_text2:
             return 1.0
 
+        # OCR誤認識パターンの補正
+        corrections = {
+            'シヤ': 'シャ', 'ロ': '口', '口': 'ロ'
+        }
+
+        for wrong, correct in corrections.items():
+            norm_text1 = norm_text1.replace(wrong, correct)
+            norm_text2 = norm_text2.replace(wrong, correct)
+
+        if norm_text1 == norm_text2:
+            return 1.0
+
         # 長さ比
         len_ratio = min(len(norm_text1), len(norm_text2)) / max(len(norm_text1), len(norm_text2))
         if len_ratio < 0.8:
@@ -54,78 +66,49 @@ class MockTextSimilarityCalculator:
         return common_chars / max_len
 
 
-def merge_by_text_similarity(subtitles: List[MockSubtitleItem]) -> List[MockSubtitleItem]:
-    """テキスト類似度による統合"""
+def merge_time_constrained_duplicates(subtitles: List[MockSubtitleItem]) -> List[MockSubtitleItem]:
+    """時間制約付きの重複統合ロジック"""
     if not subtitles:
         return []
 
-    text_groups = {}
-    calc = MockTextSimilarityCalculator()
-
-    for subtitle in subtitles:
-        merged_with_existing = False
-
-        for existing_text, group in text_groups.items():
-            similarity = calc.calculate_similarity(subtitle.text, existing_text)
-            if similarity > 0.90:
-                group.append(subtitle)
-                merged_with_existing = True
-                break
-
-        if not merged_with_existing:
-            text_groups[subtitle.text] = [subtitle]
-
-    # 各グループを統合
-    merged_subtitles = []
-    for text, group in text_groups.items():
-        if len(group) == 1:
-            merged_subtitles.append(group[0])
-        else:
-            merged_subtitle = merge_duplicate_group(group)
-            merged_subtitles.append(merged_subtitle)
-
-    return merged_subtitles
-
-
-def merge_overlapping_subtitles(subtitles: List[MockSubtitleItem]) -> List[MockSubtitleItem]:
-    """時間重複している字幕の統合"""
-    if not subtitles:
-        return []
-
-    sorted_subtitles = sorted(subtitles, key=lambda x: x.start_ms)
     merged = []
     calc = MockTextSimilarityCalculator()
+    max_merge_gap_ms = 30000  # 30秒以内の字幕のみ統合対象
 
-    for subtitle in sorted_subtitles:
-        found_overlap = False
+    subtitles_copy = subtitles.copy()
+    i = 0
+    while i < len(subtitles_copy):
+        current_group = [subtitles_copy[i]]
+        j = i + 1
 
-        for i, existing in enumerate(merged):
-            # 時間重複の判定
-            time_overlap = (subtitle.start_ms < existing.end_ms and
-                           subtitle.end_ms > existing.start_ms)
+        # 現在の字幕から30秒以内の類似字幕を探す
+        while j < len(subtitles_copy):
+            time_gap = subtitles_copy[j].start_ms - subtitles_copy[i].end_ms
 
-            if time_overlap:
-                # テキスト類似度の判定
-                similarity = calc.calculate_similarity(subtitle.text, existing.text)
-                if similarity > 0.80:
-                    # 既存の字幕と統合
-                    merged_subtitle = MockSubtitleItem(
-                        index=existing.index,
-                        start_ms=min(existing.start_ms, subtitle.start_ms),
-                        end_ms=max(existing.end_ms, subtitle.end_ms),
-                        text=existing.text,
-                        bbox=existing.bbox
-                    )
-                    # より長いテキストを選択
-                    if len(subtitle.text) > len(existing.text):
-                        merged_subtitle.text = subtitle.text
+            # 時間間隔が30秒を超えたら統合対象外
+            if time_gap > max_merge_gap_ms:
+                break
 
-                    merged[i] = merged_subtitle
-                    found_overlap = True
-                    break
+            # テキスト類似度チェック
+            similarity = calc.calculate_similarity(
+                subtitles_copy[i].text,
+                subtitles_copy[j].text
+            )
 
-        if not found_overlap:
-            merged.append(subtitle)
+            if similarity > 0.90:
+                current_group.append(subtitles_copy[j])
+                subtitles_copy.pop(j)
+            else:
+                j += 1
+
+        # グループを統合して追加
+        if len(current_group) == 1:
+            merged.append(current_group[0])
+        else:
+            merged_subtitle = merge_duplicate_group(current_group)
+            merged.append(merged_subtitle)
+
+        i += 1
 
     return merged
 
@@ -150,26 +133,8 @@ def merge_duplicate_group(group: List[MockSubtitleItem]) -> MockSubtitleItem:
     return merged_subtitle
 
 
-def remove_duplicates_enhanced(subtitles: List[MockSubtitleItem]) -> List[MockSubtitleItem]:
-    """改善された重複除去ロジック"""
-    if not subtitles:
-        return []
-
-    # 時間順にソート
-    sorted_subtitles = sorted(subtitles, key=lambda x: x.start_ms)
-
-    # 段階的な統合処理
-    # 1. テキスト類似度ベースの統合
-    text_merged = merge_by_text_similarity(sorted_subtitles)
-
-    # 2. 時間重複ベースの統合
-    time_merged = merge_overlapping_subtitles(text_merged)
-
-    return time_merged
-
-
 def test_real_duplicate_cases():
-    """実際のtest_video.ja.srtの重複ケースをテスト"""
+    """実際のtest_video.ja.srtの重複ケースをテスト（assert文使用版）"""
     print("=== 実際の重複ケースのテスト ===")
 
     # test_video.ja.srtの実際のデータ
@@ -188,7 +153,7 @@ def test_real_duplicate_cases():
     print(f"元の字幕数: {len(subtitles)}")
 
     # 新しい統合ロジックを実行
-    merged_subtitles = remove_duplicates_enhanced(subtitles)
+    merged_subtitles = merge_time_constrained_duplicates(subtitles)
 
     print(f"統合後字幕数: {len(merged_subtitles)}")
     print("\n統合結果:")
@@ -197,35 +162,33 @@ def test_real_duplicate_cases():
         print(f"字幕 {subtitle.index}: {subtitle.start_ms}-{subtitle.end_ms}ms")
         print(f"  テキスト: {subtitle.text[:50]}...")
 
-    # 期待値の確認
+    # assert文で期待値の確認
     # 重複があった1+2, 3+4, 6+7の3組が統合されて6字幕になることを期待
     expected_count = 6
-    if len(merged_subtitles) == expected_count:
-        print(f"\n✅ テスト成功: {expected_count}字幕に統合されました")
+    assert len(merged_subtitles) == expected_count, f"期待値 {expected_count} != 実際 {len(merged_subtitles)}"
+    print(f"\n✅ テスト成功: {expected_count}字幕に統合されました")
 
-        # 重複統合の確認
-        # 1. 図書館関連が統合されているか
-        library_found = any("図書館" in s.text for s in merged_subtitles)
-        # 2. シャワー関連が統合されているか
-        shower_found = any("シャワー" in s.text or "シヤワー" in s.text for s in merged_subtitles)
-        # 3. カレー蕎麦関連が統合されているか
-        curry_found = any("カレー蕎麦" in s.text for s in merged_subtitles)
+    # 重複統合の確認
+    # 1. 図書館関連が統合されているか
+    library_found = any("図書館" in s.text for s in merged_subtitles)
+    # 2. シャワー関連が統合されているか
+    shower_found = any("シャワー" in s.text or "シヤワー" in s.text for s in merged_subtitles)
+    # 3. カレー蕎麦関連が統合されているか
+    curry_found = any("カレー蕎麦" in s.text for s in merged_subtitles)
 
-        if library_found and shower_found and curry_found:
-            print("✅ 全ての重複字幕が正しく統合されました")
-            return True
-        else:
-            print("❌ 一部の重複字幕が統合されていません")
-            return False
-    else:
-        print(f"❌ テスト失敗: 期待値 {expected_count} != 実際 {len(merged_subtitles)}")
-        return False
+    assert library_found, "図書館関連の字幕が統合されていません"
+    assert shower_found, "シャワー関連の字幕が統合されていません"
+    assert curry_found, "カレー蕎麦関連の字幕が統合されていません"
+    print("✅ 全ての重複字幕が正しく統合されました")
+    return True
 
 
 if __name__ == "__main__":
     print("実際の重複ケースのテスト開始...\n")
 
-    if test_real_duplicate_cases():
-        print("\n🎉 テストが成功しました！")
-    else:
-        print("\n❌ テストが失敗しました")
+    try:
+        if test_real_duplicate_cases():
+            print("\n🎉 テストが成功しました！")
+    except AssertionError as e:
+        print(f"\n❌ テストが失敗しました: {e}")
+        raise  # pytestのために再発生
