@@ -236,26 +236,101 @@ class SubtitleGrouper:
         )
     
     def _select_best_text(self, group: List[FrameOCRResult]) -> str:
-        """グループから最適なテキストを選択"""
+        """グループから最適なテキストを選択（2行字幕検出対応）"""
         if not group:
             return ""
-        
-        # 各フレームのベストテキストと信頼度を取得
+
+        # 最も信頼度の高いフレームを選択
+        best_frame = max(group, key=lambda x: x.average_confidence)
+
+        # そのフレームから2行字幕を検出・構成
+        multi_line_text = self._detect_multiline_text(best_frame)
+
+        if multi_line_text:
+            return self._clean_subtitle_text(multi_line_text)
+
+        # フォールバック: 従来の単行処理
         text_confidence_pairs = []
         for frame_result in group:
             text = frame_result.best_text
             confidence = frame_result.average_confidence
             if text.strip():
                 text_confidence_pairs.append((text, confidence))
-        
+
         if not text_confidence_pairs:
             return ""
-        
+
         # 信頼度が最も高いテキストを選択
         best_text, _ = max(text_confidence_pairs, key=lambda x: x[1])
-        
+
         # テキストクリーンアップ
         return self._clean_subtitle_text(best_text)
+
+    def _detect_multiline_text(self, frame_result: FrameOCRResult) -> str:
+        """フレーム内の複数OCR結果から2行字幕を検出・構成"""
+        if len(frame_result.ocr_results) <= 1:
+            return frame_result.best_text  # 単一テキストの場合はそのまま返す
+
+        # OCR結果をY座標でソート（上から下へ）
+        sorted_results = sorted(frame_result.ocr_results, key=lambda x: x.bbox[1])
+
+        # 2行字幕の候補を検出
+        line_groups = self._group_by_vertical_position(sorted_results)
+
+        if len(line_groups) >= 2:
+            # 2行以上の場合、最初の2つのグループを使用
+            line1_texts = [result.text for result in line_groups[0]]
+            line2_texts = [result.text for result in line_groups[1]]
+
+            # 各行内でX座標順にソート
+            line1_texts.sort(key=lambda text: next(
+                result.bbox[0] for result in line_groups[0] if result.text == text
+            ))
+            line2_texts.sort(key=lambda text: next(
+                result.bbox[0] for result in line_groups[1] if result.text == text
+            ))
+
+            # 行を結合
+            line1 = " ".join(line1_texts).strip()
+            line2 = " ".join(line2_texts).strip()
+
+            if line1 and line2:
+                return f"{line1}\n{line2}"
+
+        # 2行構成できない場合は単行として返す
+        return frame_result.best_text
+
+    def _group_by_vertical_position(self, sorted_results: List[OCRResult]) -> List[List[OCRResult]]:
+        """OCR結果を垂直位置でグループ化"""
+        if not sorted_results:
+            return []
+
+        line_groups = []
+        current_group = [sorted_results[0]]
+        current_y_center = sorted_results[0].bbox[1] + sorted_results[0].bbox[3] // 2
+
+        # Y座標の許容範囲（テキストの高さの50%程度）
+        for result in sorted_results[1:]:
+            result_y_center = result.bbox[1] + result.bbox[3] // 2
+            text_height = result.bbox[3]
+
+            # 同じ行と判定する垂直距離の閾値
+            vertical_threshold = text_height * 0.5
+
+            if abs(result_y_center - current_y_center) <= vertical_threshold:
+                # 同じ行のグループに追加
+                current_group.append(result)
+            else:
+                # 新しい行のグループを開始
+                line_groups.append(current_group)
+                current_group = [result]
+                current_y_center = result_y_center
+
+        # 最後のグループを追加
+        if current_group:
+            line_groups.append(current_group)
+
+        return line_groups
     
     def _clean_subtitle_text(self, text: str) -> str:
         """字幕テキストのクリーンアップ"""
