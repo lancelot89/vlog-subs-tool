@@ -194,18 +194,21 @@ class SubtitleDetector:
     
     def _initialize_sampler(self, video_path: str):
         """サンプラーの初期化"""
+        # メモリ使用量を抑制するため、サンプリングレートを制限
+        safe_fps_sample = min(self.settings.fps_sample, 0.5)  # 最大0.5fps（2秒間隔）
+
         if self.settings.roi_mode == "bottom_30" or not self.settings.roi_rect:
             # 下段30%専用サンプラー
             self.sampler = BottomROISampler(
                 video_path,
-                sample_fps=self.settings.fps_sample,
+                sample_fps=safe_fps_sample,
                 bottom_ratio=0.3  # 30%
             )
         else:
             # 汎用サンプラー
             self.sampler = VideoSampler(
                 video_path,
-                sample_fps=self.settings.fps_sample
+                sample_fps=safe_fps_sample
             )
         
         # ROIManagerの初期化
@@ -308,84 +311,102 @@ class SubtitleDetector:
             raise
     
     def _perform_ocr(self, frames: List[VideoFrame]) -> List[FrameOCRResult]:
-        """OCR実行"""
+        """OCR実行（チャンク処理でメモリ使用量を最適化）"""
         frame_results = []
         total_frames = len(frames)
 
-        self.logger.info(f"OCR処理開始: {total_frames}フレーム")
+        # チャンクサイズを設定（メモリ使用量を制御）
+        chunk_size = 50  # 一度に処理するフレーム数
 
-        # 並列処理用の設定
-        max_workers = min(4, total_frames)  # 最大4並列
-        self.logger.debug(f"OCR並列実行: {max_workers}ワーカー")
+        self.logger.info(f"OCR処理開始: {total_frames}フレーム（チャンク処理: {chunk_size}フレーム/chunk）")
+
+        # 並列処理用の設定（メモリ使用量を抑制）
+        # Segmentation fault回避のため並列数を制限
+        max_workers = 1  # シングルスレッドに制限
+        self.logger.debug(f"OCR実行: {max_workers}ワーカー（安全性重視）")
 
         start_time = time.time()
+        processed_count = 0
 
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # OCRタスクを並列実行
-            future_to_frame = {
-                executor.submit(self._ocr_single_frame, frame): frame
-                for frame in frames
-            }
+        # フレームをチャンクに分割して順次処理
+        for chunk_start in range(0, total_frames, chunk_size):
+            chunk_end = min(chunk_start + chunk_size, total_frames)
+            chunk_frames = frames[chunk_start:chunk_end]
+            chunk_num = (chunk_start // chunk_size) + 1
+            total_chunks = (total_frames + chunk_size - 1) // chunk_size
 
-            completed_count = 0
-            successful_count = 0
-            last_progress_time = time.time()
+            self.logger.debug(f"チャンク {chunk_num}/{total_chunks} 処理中 ({len(chunk_frames)}フレーム)")
 
-            for future in as_completed(future_to_frame):
-                # キャンセルチェック
-                self._check_cancelled()
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # チャンク内のOCRタスクを並列実行
+                future_to_frame = {
+                    executor.submit(self._ocr_single_frame, frame): frame
+                    for frame in chunk_frames
+                }
 
-                frame = future_to_frame[future]
+                chunk_completed_count = 0
+                chunk_successful_count = 0
+                last_progress_time = time.time()
 
-                try:
-                    ocr_results = future.result()
+                for future in as_completed(future_to_frame):
+                    # キャンセルチェック
+                    self._check_cancelled()
 
-                    if ocr_results:  # OCR結果がある場合のみ追加
-                        frame_results.append(FrameOCRResult(
-                            frame=frame,
-                            ocr_results=ocr_results
-                        ))
-                        successful_count += 1
+                    frame = future_to_frame[future]
 
-                except Exception as e:
-                    self.logger.warning(f"フレーム {frame.frame_number} のOCR処理に失敗: {e}")
+                    try:
+                        ocr_results = future.result()
 
-                completed_count += 1
+                        if ocr_results:  # OCR結果がある場合のみ追加
+                            frame_results.append(FrameOCRResult(
+                                frame=frame,
+                                ocr_results=ocr_results
+                            ))
+                            chunk_successful_count += 1
 
-                # キャンセルチェック
-                self._check_cancelled()
+                    except Exception as e:
+                        self.logger.warning(f"フレーム {frame.frame_number} のOCR処理に失敗: {e}")
 
-                # プログレス更新（詳細な情報付き）
-                progress = 40 + int((completed_count / total_frames) * 45)
+                    chunk_completed_count += 1
+                    processed_count += 1
 
-                # 経過時間と推定残り時間を計算
-                elapsed = time.time() - start_time
-                if completed_count > 0:
-                    avg_time_per_frame = elapsed / completed_count
-                    remaining_frames = total_frames - completed_count
-                    estimated_remaining = avg_time_per_frame * remaining_frames
+                    # キャンセルチェック
+                    self._check_cancelled()
 
-                    if estimated_remaining > 60:
-                        eta_str = f"{int(estimated_remaining // 60)}分{int(estimated_remaining % 60)}秒"
+                    # プログレス更新（詳細な情報付き）
+                    progress = 40 + int((processed_count / total_frames) * 45)
+
+                    # 経過時間と推定残り時間を計算
+                    elapsed = time.time() - start_time
+                    if processed_count > 0:
+                        avg_time_per_frame = elapsed / processed_count
+                        remaining_frames = total_frames - processed_count
+                        estimated_remaining = avg_time_per_frame * remaining_frames
+
+                        if estimated_remaining > 60:
+                            eta_str = f"{int(estimated_remaining // 60)}分{int(estimated_remaining % 60)}秒"
+                        else:
+                            eta_str = f"{int(estimated_remaining)}秒"
+
+                        message = f"OCR処理中... ({processed_count}/{total_frames}) テキスト検出:{len(frame_results)}件 残り約{eta_str}"
                     else:
-                        eta_str = f"{int(estimated_remaining)}秒"
+                        message = f"OCR処理中... ({processed_count}/{total_frames}) テキスト検出:{len(frame_results)}件"
 
-                    message = f"OCR処理中... ({completed_count}/{total_frames}) テキスト検出:{successful_count}件 残り約{eta_str}"
-                else:
-                    message = f"OCR処理中... ({completed_count}/{total_frames}) テキスト検出:{successful_count}件"
+                    # 進捗を0.5秒間隔で更新
+                    current_time = time.time()
+                    if current_time - last_progress_time >= 0.5 or processed_count == total_frames:
+                        self._emit_progress(progress, message)
+                        last_progress_time = current_time
 
-                # 進捗を0.5秒間隔で更新
-                current_time = time.time()
-                if current_time - last_progress_time >= 0.5 or completed_count == total_frames:
-                    self._emit_progress(progress, message)
-                    last_progress_time = current_time
+            # チャンク処理完了のログ
+            self.logger.debug(f"チャンク {chunk_num}/{total_chunks} 完了: {chunk_successful_count}/{len(chunk_frames)}フレームでテキスト検出")
         
         # 時間順にソート
         frame_results.sort(key=lambda x: x.frame.timestamp_ms)
 
         total_elapsed = time.time() - start_time
         self.logger.info(f"OCR処理完了: {len(frame_results)}フレームでテキストを検出 "
-                        f"({successful_count}/{total_frames}) {total_elapsed:.1f}秒")
+                        f"({len(frame_results)}/{total_frames}) {total_elapsed:.1f}秒")
         return frame_results
     
     def _ocr_single_frame(self, frame: VideoFrame) -> List[OCRResult]:
