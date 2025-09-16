@@ -191,8 +191,20 @@ class SimplePaddleOCREngine:
                 combined_errors = "; ".join(error_messages)
                 raise Exception(f"All PaddleOCR configurations failed: {combined_errors}")
             return True
+        except FileNotFoundError as e:
+            logging.error(f"PaddleOCR model files not found on {platform.system()}: {e}")
+            self._ocr = None
+            return False
+        except ImportError as e:
+            logging.error(f"PaddleOCR import error on {platform.system()}: {e}")
+            self._ocr = None
+            return False
         except Exception as e:
             logging.error(f"PaddleOCR initialization failed on {platform.system()}: {e}")
+            logging.error(f"Error type: {type(e).__name__}")
+            if hasattr(e, '__traceback__'):
+                import traceback
+                logging.error(f"Traceback: {traceback.format_exc()}")
             self._ocr = None
             return False
 
