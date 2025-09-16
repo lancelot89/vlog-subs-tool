@@ -1,352 +1,558 @@
-"""
-Minimal PaddleOCR wrapper for this app.
-- Uses bundled models under app/models/paddleocr (PP-OCRv5_server_det/rec).
-- CPU-only, no PaddleX, no network download, no Tesseract.
-- Clean API: initialize() -> bool, extract_text(np.ndarray) -> List[OCRResult].
+"""PaddleOCR integration helpers used by the subtitle extractor.
+
+The original implementation eagerly pushed raw video frame data directly into
+``PaddleOCR.ocr``.  When large batches of frames or full-resolution frames were
+handed over, PaddleOCR attempted to allocate huge intermediate buffers and the
+process crashed with ``std::bad_alloc``/``malloc`` failures.  This module now
+wraps PaddleOCR with a thin safety layer that:
+
+* Detects whether PaddleOCR/PaddleX are importable and exposes availability
+  flags so the UI can react gracefully when the dependency is missing.
+* Converts legacy PaddleOCR constructor arguments to the new v3 API while
+  stripping unsupported parameters.
+* Provides a model cache helper that understands the default PaddleOCR cache
+  location.
+* Normalises video frame inputs (``numpy.ndarray`` / ``VideoFrame`` /
+  dictionaries containing an ``image`` key), resizes overly large frames and
+  splits large iterables into small batches before invoking PaddleOCR.
+
+These changes make it safe to feed video sampling metadata into the OCR engine
+without exhausting memory, satisfying the regression tests bundled with the
+repository.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import Any, Dict, Iterable, Iterator, List, Mapping, Optional, Sequence, Tuple, Union
 import logging
 import os
-import sys
 import platform
-import numpy as np
-import cv2
+import sys
 
-try:
+import cv2  # type: ignore
+import numpy as np
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Availability flags --------------------------------------------------------
+# ---------------------------------------------------------------------------
+try:  # pragma: no cover - availability detection
     from paddleocr import PaddleOCR  # type: ignore
-except Exception as e:  # ImportError and others
-    raise ImportError(
-        "PaddleOCR is required. Install with: pip install paddlepaddle paddleocr\n"
-        f"Import error: {e}"
-    )
+
+    PADDLEOCR_AVAILABLE = True
+    _PADDLE_IMPORT_ERROR: Optional[Exception] = None
+except Exception as _import_error:  # pragma: no cover - dependency missing
+    PaddleOCR = None  # type: ignore
+    PADDLEOCR_AVAILABLE = False
+    _PADDLE_IMPORT_ERROR = _import_error
+
+try:  # pragma: no cover - optional dependency detection
+    import paddlex  # type: ignore
+
+    PADDLEX_AVAILABLE = True
+except Exception:  # pragma: no cover - paddlex is optional
+    PADDLEX_AVAILABLE = False
+
+# ---------------------------------------------------------------------------
+# Helper data structures ----------------------------------------------------
+# ---------------------------------------------------------------------------
+
 
 @dataclass
 class OCRResult:
+    """Container for a single OCR detection."""
+
     text: str
     confidence: float
     bbox: Tuple[int, int, int, int]  # x, y, w, h
 
 
+# ---------------------------------------------------------------------------
+# PaddleOCR parameter helpers ----------------------------------------------
+# ---------------------------------------------------------------------------
+
+
+def _create_safe_paddleocr_kwargs(original: Mapping[str, Any]) -> Dict[str, Any]:
+    """Sanitise PaddleOCR constructor arguments.
+
+    The PaddleOCR 3.x API deprecated a couple of parameters that were still
+    passed by the legacy implementation (`use_angle_cls`, `show_log`,
+    `use_space_char`, `drop_score`).  Passing them verbatim raises runtime
+    errors, so this helper converts or drops them as needed while preserving the
+    rest of the mapping unchanged.
+    """
+
+    safe: Dict[str, Any] = {}
+    for key, value in original.items():
+        if key == "use_angle_cls":
+            # PaddleOCR >= 3.0 renamed the flag to use_textline_orientation.
+            safe["use_textline_orientation"] = bool(value)
+        elif key in {"show_log", "use_space_char"}:
+            # No longer accepted by the constructor – ignore silently.
+            continue
+        elif key == "drop_score":
+            # Newer versions expose the same behaviour via text_rec_score_thresh.
+            safe["text_rec_score_thresh"] = value
+        else:
+            safe[key] = value
+    return safe
+
+
+class OCRModelDownloader:
+    """Utility helpers around the PaddleOCR cache directory."""
+
+    @staticmethod
+    def get_paddleocr_cache_dir() -> Path:
+        """Return the default PaddleOCR cache directory (``~/.paddleocr``)."""
+
+        return Path.home() / ".paddleocr"
+
+    @staticmethod
+    def is_paddleocr_model_available() -> bool:
+        """Heuristic check for locally cached PaddleOCR models.
+
+        PaddleOCR stores downloaded models underneath ``~/.paddleocr``.  The
+        exact layout differs between releases, therefore we simply check for the
+        presence of a handful of well-known directories.
+        """
+
+        cache_dir = OCRModelDownloader.get_paddleocr_cache_dir()
+        if not cache_dir.exists():
+            return False
+
+        expected_names = {
+            "det",
+            "rec",
+            "inference",
+            "pretrained",
+            "whl",
+            "text_detection",
+            "text_recognition",
+        }
+        for child in cache_dir.iterdir():
+            if child.is_dir() and child.name.lower() in expected_names:
+                return True
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Simple PaddleOCR wrapper --------------------------------------------------
+# ---------------------------------------------------------------------------
+
+
 class SimplePaddleOCREngine:
-    """
-    Very small wrapper around PaddleOCR that only uses bundled models.
+    """Small, memory-safe PaddleOCR wrapper used throughout the app."""
 
-    Directory layout expected:
-      app/models/paddleocr/
-        ├─ PP-OCRv5_server_det/   (det model files)
-        └─ PP-OCRv5_server_rec/   (rec model files)
-    """
-
-    def __init__(self, language: str = "ja", confidence_threshold: float = 0.7,
-                 models_root: Optional[Path] = None) -> None:
+    def __init__(
+        self,
+        language: str = "ja",
+        confidence_threshold: float = 0.7,
+        models_root: Optional[Path] = None,
+        *,
+        max_batch_size: int = 4,
+        max_image_pixels: int = 4096 * 4096,
+        max_side_length: int = 4096,
+    ) -> None:
         self.language = language
         self.confidence_threshold = confidence_threshold
-        self.models_root = models_root  # if None, auto-discover under app/models/paddleocr
-        self._ocr = None
+        self.models_root = Path(models_root) if models_root else None
+        self.max_batch_size = max(1, int(max_batch_size))
+        self.max_image_pixels = int(max_image_pixels)
+        self.max_side_length = int(max_side_length)
 
-    # ---------- path resolution ----------
+        self._ocr: Optional[Any] = None
+
+    # ----------------------- model path helpers -----------------------
     def _resolve_models_root(self) -> Path:
-        """
-        Resolve the app's bundled paddleocr models directory.
-        Cross-platform compatible path resolution.
-        Search precedence:
-          1) explicit models_root if provided
-          2) env PADDLE_MODELS_DIR (absolute/relative allowed)
-          3) ascend up to 6 parents from this file to find 'app/models/paddleocr'
-          4) cwd/app/models/paddleocr
-        """
-        # 1) explicit arg
-        if self.models_root and (self.models_root / "PP-OCRv5_server_det").exists():
-            logging.debug(f"Using explicit models_root: {self.models_root}")
-            return self.models_root
+        """Resolve the directory that contains bundled PaddleOCR models."""
 
-        # 2) env var
+        # 1) explicit path supplied during construction
+        if self.models_root is not None:
+            det_dir = self.models_root / "PP-OCRv5_server_det"
+            rec_dir = self.models_root / "PP-OCRv5_server_rec"
+            if det_dir.exists() and rec_dir.exists():
+                logger.debug("Using explicit PaddleOCR model directory: %s", self.models_root)
+                return self.models_root
+
+        # 2) environment variable override
         env_dir = os.environ.get("PADDLE_MODELS_DIR")
         if env_dir:
             try:
-                p = Path(env_dir).resolve()
-                if (p / "PP-OCRv5_server_det").exists():
-                    logging.debug(f"Using env PADDLE_MODELS_DIR: {p}")
-                    return p
-            except Exception as e:
-                logging.warning(f"Invalid PADDLE_MODELS_DIR path '{env_dir}': {e}")
+                env_path = Path(env_dir).resolve()
+                det_dir = env_path / "PP-OCRv5_server_det"
+                rec_dir = env_path / "PP-OCRv5_server_rec"
+                if det_dir.exists() and rec_dir.exists():
+                    logger.debug("Using PADDLE_MODELS_DIR override: %s", env_path)
+                    return env_path
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.warning("Invalid PADDLE_MODELS_DIR '%s': %s", env_dir, exc)
 
-        # 3) ascend parents - with cross-platform path handling
+        # 3) look for app/models/paddleocr relative to this file
         here = Path(__file__).resolve()
         for parent in [here.parent] + list(here.parents)[:6]:
             candidate = parent / "app" / "models" / "paddleocr"
-            if (candidate / "PP-OCRv5_server_det").exists() and (candidate / "PP-OCRv5_server_rec").exists():
-                logging.debug(f"Found models in parent directory: {candidate}")
+            det_dir = candidate / "PP-OCRv5_server_det"
+            rec_dir = candidate / "PP-OCRv5_server_rec"
+            if det_dir.exists() and rec_dir.exists():
+                logger.debug("Found PaddleOCR models under %s", candidate)
                 return candidate
 
-        # 4) cwd fallback
-        candidate = Path.cwd() / "app" / "models" / "paddleocr"
-        if (candidate / "PP-OCRv5_server_det").exists() and (candidate / "PP-OCRv5_server_rec").exists():
-            logging.debug(f"Using cwd models directory: {candidate}")
-            return candidate
+        # 4) fallback to cwd/app/models/paddleocr
+        cwd_candidate = Path.cwd() / "app" / "models" / "paddleocr"
+        det_dir = cwd_candidate / "PP-OCRv5_server_det"
+        rec_dir = cwd_candidate / "PP-OCRv5_server_rec"
+        if det_dir.exists() and rec_dir.exists():
+            logger.debug("Using models from working directory: %s", cwd_candidate)
+            return cwd_candidate
 
-        # 5) Additional Windows-specific search paths
-        if platform.system() == "Windows":
-            # Check for frozen application paths
-            if getattr(sys, 'frozen', False):
+        # 5) additional Windows specific checks (frozen app, AppData)
+        if platform.system() == "Windows":  # pragma: no cover - platform specific
+            if getattr(sys, "frozen", False):
                 frozen_dir = Path(sys.executable).parent / "app" / "models" / "paddleocr"
-                if (frozen_dir / "PP-OCRv5_server_det").exists() and (frozen_dir / "PP-OCRv5_server_rec").exists():
-                    logging.debug(f"Found models in frozen app directory: {frozen_dir}")
+                det_dir = frozen_dir / "PP-OCRv5_server_det"
+                rec_dir = frozen_dir / "PP-OCRv5_server_rec"
+                if det_dir.exists() and rec_dir.exists():
+                    logger.debug("Found models in frozen application directory: %s", frozen_dir)
                     return frozen_dir
 
-            # Check AppData or user directories
-            if 'APPDATA' in os.environ:
-                appdata_dir = Path(os.environ['APPDATA']) / "vlog-subs-tool" / "models" / "paddleocr"
-                if (appdata_dir / "PP-OCRv5_server_det").exists() and (appdata_dir / "PP-OCRv5_server_rec").exists():
-                    logging.debug(f"Found models in AppData: {appdata_dir}")
+            appdata = os.environ.get("APPDATA")
+            if appdata:
+                appdata_dir = Path(appdata) / "vlog-subs-tool" / "models" / "paddleocr"
+                det_dir = appdata_dir / "PP-OCRv5_server_det"
+                rec_dir = appdata_dir / "PP-OCRv5_server_rec"
+                if det_dir.exists() and rec_dir.exists():
+                    logger.debug("Found models in AppData: %s", appdata_dir)
                     return appdata_dir
 
         raise FileNotFoundError(
-            f"Bundled PaddleOCR models not found on {platform.system()}. Expected at app/models/paddleocr/"
-            " with PP-OCRv5_server_det and PP-OCRv5_server_rec subdirs."
-            f" Searched paths: {here.parents[0]}/app/models/paddleocr, {Path.cwd()}/app/models/paddleocr"
+            "Bundled PaddleOCR models not found. Expected app/models/paddleocr "
+            "containing PP-OCRv5_server_det and PP-OCRv5_server_rec."
         )
 
-    # ---------- init ----------
+    # ----------------------- initialisation ---------------------------
     def initialize(self) -> bool:
+        """Initialise PaddleOCR using bundled models.
+
+        Returns ``True`` on success and ``False`` if PaddleOCR could not be
+        initialised.  Errors are logged with additional platform information.
         """
-        Initialize PaddleOCR with bundled models. CPU-only.
-        Cross-platform compatibility ensured for Windows/Linux/macOS.
-        """
+
+        if self._ocr is not None:
+            return True
+
+        if PaddleOCR is None and not PADDLEOCR_AVAILABLE:
+            logger.error("PaddleOCR import failed: %s", _PADDLE_IMPORT_ERROR)
+            return False
+
+        # Apply conservative environment defaults to keep memory usage under
+        # control and make the CPU-only configuration explicit.
+        os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
+        os.environ.setdefault("FLAGS_call_stack_level", "2")
+
+        if platform.system() == "Windows":  # pragma: no cover - platform specific
+            os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+            os.environ.setdefault("OMP_NUM_THREADS", "1")
+            os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+            os.environ.setdefault("PADDLE_CPU_ONLY", "1")
+            os.environ.setdefault("PYTHONPATH", "")
+            logger.debug("Applied Windows specific PaddleOCR environment tweaks")
+
         try:
-            # Cross-platform CPU-only setup
-            os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
-            os.environ.setdefault("FLAGS_call_stack_level", "2")
+            models_root = self._resolve_models_root()
+            det_dir = models_root / "PP-OCRv5_server_det"
+            rec_dir = models_root / "PP-OCRv5_server_rec"
 
-            # Windows-specific environment variables for stability
-            if platform.system() == "Windows":
-                os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
-                os.environ.setdefault("OMP_NUM_THREADS", "1")
-                os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
-                # Windows固有のPaddleOCR問題を回避
-                os.environ.setdefault("PADDLE_CPU_ONLY", "1")
-                os.environ.setdefault("PYTHONPATH", "")  # パス衝突を回避
-                logging.debug("Applied Windows-specific PaddleOCR environment settings")
-
-            root = self._resolve_models_root()
-            det_dir = root / "PP-OCRv5_server_det"
-            rec_dir = root / "PP-OCRv5_server_rec"
-
-            # Ensure paths exist on all platforms
             if not det_dir.exists() or not rec_dir.exists():
                 raise FileNotFoundError(f"Model directories not found: {det_dir}, {rec_dir}")
 
-            lang = "japan" if self.language.lower() in {"ja", "jpn", "japanese"} else self.language
+            lang = (
+                "japan"
+                if self.language.lower() in {"ja", "jpn", "japanese", "japan"}
+                else self.language
+            )
 
-            # Try multiple parameter configurations for cross-platform compatibility
-            success = False
-            error_messages = []
+            config_candidates = [
+                # Newer PaddleOCR (v3.x) parameter names
+                {
+                    "text_detection_model_dir": str(det_dir.resolve()),
+                    "text_recognition_model_dir": str(rec_dir.resolve()),
+                    "lang": lang,
+                    "use_textline_orientation": True,
+                    "use_gpu": False,
+                },
+                # Legacy API compatibility
+                {
+                    "det_model_dir": str(det_dir.resolve()),
+                    "rec_model_dir": str(rec_dir.resolve()),
+                    "lang": lang,
+                    "use_angle_cls": True,
+                    "use_gpu": False,
+                },
+                # Minimal parameters (last resort)
+                {
+                    "det_model_dir": str(det_dir.resolve()),
+                    "rec_model_dir": str(rec_dir.resolve()),
+                    "lang": lang,
+                },
+            ]
 
-            # Configuration 1: Standard PaddleOCR parameters (most compatible)
-            kwargs_standard = {
-                "det_model_dir": str(det_dir.resolve()),
-                "rec_model_dir": str(rec_dir.resolve()),
-                "lang": lang,
-                "use_angle_cls": True,
-                "use_gpu": False,
-                "show_log": False,
-            }
-
-            # Configuration 2: Minimal parameters (fallback)
-            kwargs_minimal = {
-                "det_model_dir": str(det_dir.resolve()),
-                "rec_model_dir": str(rec_dir.resolve()),
-                "lang": lang,
-                "use_gpu": False,
-            }
-
-            # Configuration 3: Basic parameters (last resort)
-            kwargs_basic = {
-                "det_model_dir": str(det_dir.resolve()),
-                "rec_model_dir": str(rec_dir.resolve()),
-                "lang": lang,
-            }
-
-            for config_name, kwargs in [
-                ("standard", kwargs_standard),
-                ("minimal", kwargs_minimal),
-                ("basic", kwargs_basic)
-            ]:
+            errors: List[str] = []
+            for config in config_candidates:
+                kwargs = _create_safe_paddleocr_kwargs(config)
                 try:
-                    logging.debug(f"Platform: {platform.system()}")
-                    logging.debug(f"Trying {config_name} PaddleOCR config: {kwargs}")
-
-                    # モデルパスの存在確認
-                    for key, path in kwargs.items():
-                        if "model_dir" in key and isinstance(path, str):
-                            if not Path(path).exists():
-                                raise FileNotFoundError(f"Model directory not found: {path}")
-
-                    # PaddleOCRインスタンス作成（詳細ログ付き）
-                    logging.debug(f"Creating PaddleOCR instance with config: {config_name}")
-                    self._ocr = PaddleOCR(**kwargs)
-
-                    # 初期化検証
+                    logger.debug("Initialising PaddleOCR on %s with kwargs=%s", platform.system(), kwargs)
+                    self._ocr = PaddleOCR(**kwargs)  # type: ignore[misc]
                     if self._ocr is None:
-                        raise RuntimeError(f"PaddleOCR instance creation failed for {config_name}")
-
-                    logging.info(f"PaddleOCR initialized successfully on {platform.system()} using {config_name} config.")
-                    success = True
-                    break
-
-                except (FileNotFoundError, ImportError) as e:
-                    error_msg = f"{config_name} config failed: {type(e).__name__}: {e}"
-                    error_messages.append(error_msg)
-                    logging.warning(error_msg)
-                    continue
-                except Exception as e:
-                    error_msg = f"{config_name} config failed: {type(e).__name__}: {e}"
-                    error_messages.append(error_msg)
-                    logging.warning(error_msg)
-                    # Windows特有のエラーの詳細ログ
-                    if platform.system() == "Windows":
-                        logging.error(f"Windows-specific error details: {str(e)}")
+                        raise RuntimeError("PaddleOCR returned None instance")
+                    logger.info(
+                        "PaddleOCR initialised successfully on %s using configuration keys: %s",
+                        platform.system(),
+                        ", ".join(sorted(kwargs.keys())),
+                    )
+                    return True
+                except Exception as exc:  # pragma: no cover - exercised via tests
+                    error_msg = f"{type(exc).__name__}: {exc}"
+                    errors.append(error_msg)
+                    logger.warning("PaddleOCR initialisation failed (%s): %s", platform.system(), exc)
+                    self._ocr = None
                     continue
 
-            if not success:
-                combined_errors = "; ".join(error_messages)
-                raise Exception(f"All PaddleOCR configurations failed: {combined_errors}")
-            return True
-        except FileNotFoundError as e:
-            logging.error(f"PaddleOCR model files not found on {platform.system()}: {e}")
+            logger.error("All PaddleOCR configurations failed on %s: %s", platform.system(), "; ".join(errors))
+            return False
+
+        except FileNotFoundError as exc:
+            logger.error("PaddleOCR model files not found on %s: %s", platform.system(), exc)
             self._ocr = None
             return False
-        except ImportError as e:
-            logging.error(f"PaddleOCR import error on {platform.system()}: {e}")
-            self._ocr = None
-            return False
-        except Exception as e:
-            logging.error(f"PaddleOCR initialization failed on {platform.system()}: {e}")
-            logging.error(f"Error type: {type(e).__name__}")
-            if hasattr(e, '__traceback__'):
-                import traceback
-                logging.error(f"Traceback: {traceback.format_exc()}")
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.error("PaddleOCR initialisation failed on %s: %s", platform.system(), exc)
             self._ocr = None
             return False
 
-    # ---------- inference ----------
-    def extract_text(self, image: np.ndarray) -> List[OCRResult]:
+    # ----------------------- inference helpers -----------------------
+    def extract_text(self, image_input: Union[np.ndarray, Mapping[str, Any], Sequence[Any], Any]) -> List[OCRResult]:
+        """Run OCR on the provided image or iterable of images.
+
+        ``image_input`` may be a single ``numpy.ndarray``, a dataclass/dict that
+        exposes an ``image`` attribute/key, or an iterable of such values.  When
+        multiple frames are provided we automatically chunk them into batches to
+        keep the working set small.
         """
-        Run OCR. Returns list of OCRResult with text, confidence, bbox.
-        - Accepts BGR (OpenCV) or grayscale. Ensures uint8 and 3-channel.
-        - Added memory safety checks and image size validation.
-        - Cross-platform compatible OCR result parsing.
-        """
-        if self._ocr is None:
-            logging.error("OCR engine not initialized. Call initialize() first.")
+
+        if self._ocr is None and not self.initialize():
+            logger.error("OCR engine not initialised. Call initialize() first.")
+            return []
+
+        if isinstance(image_input, np.ndarray):
+            return self._extract_from_single(image_input)
+
+        if isinstance(image_input, Mapping):
+            extracted = self._extract_image_array(image_input)
+            return self._extract_from_single(extracted) if extracted is not None else []
+
+        if isinstance(image_input, (str, bytes)):
+            logger.warning("String input is not supported for OCR")
+            return []
+
+        if isinstance(image_input, Sequence):
+            return self._extract_from_sequence(image_input)
+
+        # Handle generic iterables (e.g. generators)
+        if isinstance(image_input, Iterable):
+            return self._extract_from_iterable(image_input)
+
+        extracted = self._extract_image_array(image_input)
+        if extracted is None:
+            logger.warning("Unsupported image input type: %s", type(image_input))
+            return []
+        return self._extract_from_single(extracted)
+
+    # ------------------------------------------------------------------
+    def _extract_from_sequence(self, images: Sequence[Any]) -> List[OCRResult]:
+        results: List[OCRResult] = []
+        if not images:
+            return results
+
+        for batch in self._chunk_sequence(images, self.max_batch_size):
+            results.extend(self._process_batch(batch))
+        return results
+
+    def _extract_from_iterable(self, images: Iterable[Any]) -> List[OCRResult]:
+        results: List[OCRResult] = []
+        batch: List[Any] = []
+        for element in images:
+            batch.append(element)
+            if len(batch) >= self.max_batch_size:
+                results.extend(self._process_batch(batch))
+                batch.clear()
+        if batch:
+            results.extend(self._process_batch(batch))
+        return results
+
+    def _process_batch(self, batch: Sequence[Any]) -> List[OCRResult]:
+        batch_results: List[OCRResult] = []
+        for element in batch:
+            array = self._extract_image_array(element)
+            if array is None:
+                continue
+            batch_results.extend(self._extract_from_single(array))
+        return batch_results
+
+    @staticmethod
+    def _chunk_sequence(seq: Sequence[Any], size: int) -> Iterator[Sequence[Any]]:
+        for idx in range(0, len(seq), size):
+            yield seq[idx : idx + size]
+
+    def _extract_image_array(self, image_like: Any) -> Optional[np.ndarray]:
+        if image_like is None:
+            return None
+        if isinstance(image_like, np.ndarray):
+            return image_like
+
+        # ``VideoFrame`` dataclass from ``sampler.py`` exposes ``image``.
+        if hasattr(image_like, "image"):
+            candidate = getattr(image_like, "image")
+            if isinstance(candidate, np.ndarray):
+                return candidate
+
+        if isinstance(image_like, Mapping):
+            for key in ("image", "frame", "data", "array"):
+                value = image_like.get(key)  # type: ignore[index]
+                if isinstance(value, np.ndarray):
+                    return value
+        return None
+
+    def _preprocess_image(self, image: np.ndarray) -> Optional[np.ndarray]:
+        if image is None or image.size == 0:
+            return None
+
+        if not isinstance(image, np.ndarray):
+            return None
+
+        # Ensure uint8 BGR format expected by PaddleOCR
+        processed = image
+        if processed.dtype != np.uint8:
+            processed = np.clip(processed, 0, 255).astype(np.uint8)
+
+        if processed.ndim == 2:
+            processed = cv2.cvtColor(processed, cv2.COLOR_GRAY2BGR)
+        elif processed.ndim == 3 and processed.shape[2] == 4:
+            processed = cv2.cvtColor(processed, cv2.COLOR_BGRA2BGR)
+        elif processed.ndim != 3:
+            return None
+
+        if not processed.flags.get("C_CONTIGUOUS", False):
+            processed = np.ascontiguousarray(processed)
+
+        height, width = processed.shape[:2]
+        if height <= 0 or width <= 0:
+            return None
+
+        total_pixels = height * width
+        if self.max_image_pixels > 0 and total_pixels > self.max_image_pixels:
+            scale = (self.max_image_pixels / float(total_pixels)) ** 0.5
+            new_w = max(1, int(width * scale))
+            new_h = max(1, int(height * scale))
+            processed = cv2.resize(processed, (new_w, new_h), interpolation=cv2.INTER_AREA)
+            height, width = processed.shape[:2]
+
+        if self.max_side_length > 0 and (height > self.max_side_length or width > self.max_side_length):
+            scale = min(self.max_side_length / float(height), self.max_side_length / float(width))
+            new_w = max(1, int(width * scale))
+            new_h = max(1, int(height * scale))
+            processed = cv2.resize(processed, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+        return processed
+
+    def _extract_from_single(self, image: Optional[np.ndarray]) -> List[OCRResult]:
+        if image is None:
+            return []
+
+        processed = self._preprocess_image(image)
+        if processed is None:
             return []
 
         try:
-            # Input validation for cross-platform compatibility
-            if image is None or image.size == 0:
-                logging.warning("Empty image provided to OCR")
-                return []
+            raw_results = self._ocr.ocr(processed)  # type: ignore[operator]
+        except (MemoryError, RuntimeError, ValueError) as exc:
+            logger.error("PaddleOCR memory/runtime error on %s: %s", platform.system(), exc)
+            return []
+        except Exception as exc:  # pragma: no cover - unexpected runtime issue
+            logger.error("PaddleOCR inference failed on %s: %s", platform.system(), exc)
+            return []
 
-            # Check image dimensions for memory safety
-            h, w = image.shape[:2]
-            if h <= 0 or w <= 0:
-                logging.warning(f"Invalid image dimensions: {w}x{h}")
-                return []
+        return self._parse_ocr_results(raw_results)
 
-            # Prevent excessive memory usage
-            max_dimension = 4096  # 4K resolution limit
-            if h > max_dimension or w > max_dimension:
-                logging.warning(f"Image too large: {w}x{h}, resizing for memory safety")
-                scale = min(max_dimension / w, max_dimension / h)
-                new_w, new_h = int(w * scale), int(h * scale)
-                image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
-                logging.debug(f"Resized to: {new_w}x{new_h}")
+    # ------------------------------------------------------------------
+    def _parse_ocr_results(self, results: Any) -> List[OCRResult]:
+        parsed: List[OCRResult] = []
+        if not results:
+            return parsed
 
-            # Normalize dtype/shape for Paddle
-            if image.dtype != np.uint8:
-                image = image.astype(np.uint8)
-            if image.ndim == 2:
-                image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+        first_item = results[0]
+        if first_item is None:
+            return parsed
 
-            # Ensure contiguous memory layout (important for Windows)
-            if not image.flags['C_CONTIGUOUS']:
-                image = np.ascontiguousarray(image)
+        if isinstance(first_item, Mapping):
+            rec_texts = first_item.get("rec_texts", [])
+            rec_scores = first_item.get("rec_scores", [])
+            rec_polys = first_item.get("rec_polys", [])
+            for text, score, poly in zip(rec_texts, rec_scores, rec_polys):
+                if score is None or float(score) < self.confidence_threshold:
+                    continue
+                if not isinstance(text, str) or not text.strip():
+                    continue
+                bbox = self._polygon_to_bbox(poly)
+                parsed.append(OCRResult(text=text.strip(), confidence=float(score), bbox=bbox))
+            return parsed
 
-            # Cross-platform OCR inference
-            logging.debug(f"Running OCR on {platform.system()} with image shape: {image.shape}")
-            results = self._ocr.ocr(image)
-
-            # Cross-platform result parsing
-            ocr_results: List[OCRResult] = []
-            if results and len(results) > 0:
-                result = results[0]
-                logging.debug(f"OCR result type: {type(result)}, length: {len(result) if result else 0}")
-
-                if result is None:
-                    logging.debug("OCR returned None result")
-                    return ocr_results
-
-                # Handle different result formats across PaddleOCR versions/platforms
-                if hasattr(result, 'get') or isinstance(result, dict):
-                    # Dictionary format (newer PaddleOCR versions)
-                    logging.debug("Processing dictionary format OCR results")
-                    rec_texts = result.get('rec_texts', [])
-                    rec_scores = result.get('rec_scores', [])
-                    rec_polys = result.get('rec_polys', [])
-
-                    for i, text in enumerate(rec_texts):
-                        if i < len(rec_scores) and i < len(rec_polys):
-                            conf = rec_scores[i]
-                            poly = rec_polys[i]
-
-                            if conf < self.confidence_threshold or not text.strip():
-                                continue
-
-                            # Cross-platform bbox calculation
-                            xs = [int(p[0]) for p in poly]
-                            ys = [int(p[1]) for p in poly]
-                            x, y = min(xs), min(ys)
-                            w, h = max(xs) - x, max(ys) - y
-
-                            ocr_results.append(OCRResult(text=text, confidence=float(conf), bbox=(x, y, w, h)))
+        # Legacy list format [[box, (text, score)], ...]
+        try:
+            for item in first_item:
+                if not isinstance(item, (list, tuple)) or len(item) != 2:
+                    continue
+                box, text_conf = item
+                text: str
+                score: float
+                if isinstance(text_conf, (list, tuple)) and len(text_conf) == 2:
+                    text = str(text_conf[0])
+                    score = float(text_conf[1])
                 else:
-                    # List format (traditional PaddleOCR format)
-                    logging.debug("Processing list format OCR results")
-                    for item in result:
-                        try:
-                            if len(item) == 2:
-                                box, text_conf = item
-                                if isinstance(text_conf, (list, tuple)) and len(text_conf) == 2:
-                                    text, conf = text_conf
-                                else:
-                                    text = str(text_conf)
-                                    conf = 1.0
+                    text = str(text_conf)
+                    score = 1.0
 
-                                if conf < self.confidence_threshold or not text.strip():
-                                    continue
+                if score < self.confidence_threshold or not text.strip():
+                    continue
 
-                                # Cross-platform bbox calculation
-                                xs = [int(p[0]) for p in box]
-                                ys = [int(p[1]) for p in box]
-                                x, y = min(xs), min(ys)
-                                w, h = max(xs) - x, max(ys) - y
+                bbox = self._polygon_to_bbox(box)
+                parsed.append(OCRResult(text=text.strip(), confidence=score, bbox=bbox))
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.warning("Failed to parse OCR result item: %s", exc)
 
-                                ocr_results.append(OCRResult(text=text, confidence=float(conf), bbox=(x, y, w, h)))
-                        except Exception as e:
-                            logging.warning(f"Failed to process OCR result item {item}: {e}")
-                            continue
+        return parsed
 
-            logging.debug(f"OCR extraction completed on {platform.system()}: {len(ocr_results)} results")
-            return ocr_results
+    @staticmethod
+    def _polygon_to_bbox(polygon: Any) -> Tuple[int, int, int, int]:
+        try:
+            xs = [int(point[0]) for point in polygon]
+            ys = [int(point[1]) for point in polygon]
+            x = min(xs)
+            y = min(ys)
+            w = max(xs) - x
+            h = max(ys) - y
+            return x, y, w, h
+        except Exception:  # pragma: no cover - fallback for malformed data
+            return 0, 0, 0, 0
 
-        except (MemoryError, RuntimeError, ValueError) as e:
-            logging.error(f"PaddleOCR memory/runtime error on {platform.system()}: {e}")
-            return []
-        except Exception as e:
-            logging.error(f"PaddleOCR inference failed on {platform.system()}: {e}")
-            return []
+
+__all__ = [
+    "OCRResult",
+    "SimplePaddleOCREngine",
+    "PADDLEOCR_AVAILABLE",
+    "PADDLEX_AVAILABLE",
+    "_create_safe_paddleocr_kwargs",
+    "OCRModelDownloader",
+]
