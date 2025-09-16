@@ -128,6 +128,9 @@ class SimplePaddleOCREngine:
                 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
                 os.environ.setdefault("OMP_NUM_THREADS", "1")
                 os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+                # Windows固有のPaddleOCR問題を回避
+                os.environ.setdefault("PADDLE_CPU_ONLY", "1")
+                os.environ.setdefault("PYTHONPATH", "")  # パス衝突を回避
                 logging.debug("Applied Windows-specific PaddleOCR environment settings")
 
             root = self._resolve_models_root()
@@ -144,47 +147,70 @@ class SimplePaddleOCREngine:
             success = False
             error_messages = []
 
-            # Configuration 1: Latest PaddleOCR parameters (preferred)
-            kwargs_latest = {
-                "text_detection_model_dir": str(det_dir.resolve()),
-                "text_recognition_model_dir": str(rec_dir.resolve()),
-                "lang": lang,
-                "use_textline_orientation": True,
-                "text_det_limit_side_len": 1536,  # Limit detection resolution
-                "text_det_limit_type": "max",  # Max dimension limit
-            }
-
-            # Configuration 2: Legacy parameters (fallback for older PaddleOCR versions)
-            kwargs_legacy = {
+            # Configuration 1: Standard PaddleOCR parameters (most compatible)
+            kwargs_standard = {
                 "det_model_dir": str(det_dir.resolve()),
                 "rec_model_dir": str(rec_dir.resolve()),
                 "lang": lang,
                 "use_angle_cls": True,
+                "use_gpu": False,
+                "show_log": False,
             }
 
-            # Configuration 3: Minimal parameters (last resort)
+            # Configuration 2: Minimal parameters (fallback)
             kwargs_minimal = {
+                "det_model_dir": str(det_dir.resolve()),
+                "rec_model_dir": str(rec_dir.resolve()),
+                "lang": lang,
+                "use_gpu": False,
+            }
+
+            # Configuration 3: Basic parameters (last resort)
+            kwargs_basic = {
                 "det_model_dir": str(det_dir.resolve()),
                 "rec_model_dir": str(rec_dir.resolve()),
                 "lang": lang,
             }
 
             for config_name, kwargs in [
-                ("latest", kwargs_latest),
-                ("legacy", kwargs_legacy),
-                ("minimal", kwargs_minimal)
+                ("standard", kwargs_standard),
+                ("minimal", kwargs_minimal),
+                ("basic", kwargs_basic)
             ]:
                 try:
                     logging.debug(f"Platform: {platform.system()}")
                     logging.debug(f"Trying {config_name} PaddleOCR config: {kwargs}")
+
+                    # モデルパスの存在確認
+                    for key, path in kwargs.items():
+                        if "model_dir" in key and isinstance(path, str):
+                            if not Path(path).exists():
+                                raise FileNotFoundError(f"Model directory not found: {path}")
+
+                    # PaddleOCRインスタンス作成（詳細ログ付き）
+                    logging.debug(f"Creating PaddleOCR instance with config: {config_name}")
                     self._ocr = PaddleOCR(**kwargs)
+
+                    # 初期化検証
+                    if self._ocr is None:
+                        raise RuntimeError(f"PaddleOCR instance creation failed for {config_name}")
+
                     logging.info(f"PaddleOCR initialized successfully on {platform.system()} using {config_name} config.")
                     success = True
                     break
-                except Exception as e:
-                    error_msg = f"{config_name} config failed: {e}"
+
+                except (FileNotFoundError, ImportError) as e:
+                    error_msg = f"{config_name} config failed: {type(e).__name__}: {e}"
                     error_messages.append(error_msg)
                     logging.warning(error_msg)
+                    continue
+                except Exception as e:
+                    error_msg = f"{config_name} config failed: {type(e).__name__}: {e}"
+                    error_messages.append(error_msg)
+                    logging.warning(error_msg)
+                    # Windows特有のエラーの詳細ログ
+                    if platform.system() == "Windows":
+                        logging.error(f"Windows-specific error details: {str(e)}")
                     continue
 
             if not success:
