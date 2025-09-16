@@ -571,13 +571,18 @@ class ExtractionProcessor:
                 if time_gap > max_merge_gap_ms:
                     break
 
-                # テキスト類似度チェック
-                similarity = calc.calculate_similarity(
-                    subtitles[i].text,
-                    subtitles[j].text
-                )
+                # 連鎖的重複対応: 既存グループのいずれかとの類似度をチェック
+                is_similar_to_group = False
+                for group_member in current_group:
+                    similarity = calc.calculate_similarity(
+                        group_member.text,
+                        subtitles[j].text
+                    )
+                    if similarity > 0.90:
+                        is_similar_to_group = True
+                        break
 
-                if similarity > 0.90:
+                if is_similar_to_group:
                     current_group.append(subtitles[j])
                     subtitles.pop(j)  # 統合対象を削除
                 else:
