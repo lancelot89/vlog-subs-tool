@@ -891,35 +891,37 @@ class MainWindow(QMainWindow):
 
     def check_ocr_setup(self) -> bool:
         """OCRセットアップの確認（SimplePaddleOCREngine使用）"""
-        # SimplePaddleOCREngineの利用可能性をチェック
-        ocr_engine = SimplePaddleOCREngine()
+        try:
+            # SimplePaddleOCREngineの利用可能性をチェック
+            ocr_engine = SimplePaddleOCREngine()
 
-        if ocr_engine.initialize():
-            logging.info("SimplePaddleOCREngineを使用して字幕抽出を開始します")
-            self.status_label.setText("PaddleOCRエンジンで字幕抽出を開始...")
-            return True
+            if ocr_engine.initialize():
+                logging.info("SimplePaddleOCREngineを使用して字幕抽出を開始します")
+                self.status_label.setText("PaddleOCRエンジンで字幕抽出を開始...")
+                return True
+            else:
+                # 初期化失敗時の詳細メッセージ
+                QMessageBox.critical(
+                    self,
+                    "PaddleOCR初期化エラー",
+                    "PaddleOCRエンジンの初期化に失敗しました。\n\n"
+                    "考えられる原因：\n"
+                    "• モデルファイルが見つからない\n"
+                    "• PaddleOCRライブラリの問題\n"
+                    "• メモリ不足\n"
+                    "• 依存関係の問題\n\n"
+                    "ログを確認してください。"
+                )
+                return False
 
-        # 利用可能なエンジンがない場合のみセットアップダイアログを表示
-        logging.warning("利用可能なOCRエンジンが見つかりません。セットアップダイアログを表示します。")
-
-        # セットアップダイアログを表示
-        setup_dialog = OCRSetupDialog(self)
-        result = setup_dialog.exec()
-
-        if result == setup_dialog.Accepted:
-            # セットアップ完了
-            self.status_label.setText("OCRセットアップが完了しました")
-            return True
-        else:
-            # セットアップをキャンセル
-            QMessageBox.warning(
+        except Exception as e:
+            # 予期しないエラーの場合
+            logging.error(f"OCRセットアップ確認中にエラー: {e}")
+            QMessageBox.critical(
                 self,
-                "警告",
-                "OCRエンジンが利用できません。\n\n"
-                "字幕抽出を行うには以下のいずれかが必要です：\n"
-                "• PaddleOCRのセットアップ\n"
-                "• Tesseractのインストール\n\n"
-                "設定画面からOCRエンジンを設定してください。"
+                "OCRセットアップエラー",
+                f"OCRエンジンの確認中にエラーが発生しました：\n{str(e)}\n\n"
+                "アプリケーションを再起動してお試しください。"
             )
             return False
     
