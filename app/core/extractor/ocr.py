@@ -90,7 +90,7 @@ def _create_safe_paddleocr_kwargs(original: Mapping[str, Any]) -> Dict[str, Any]
         if key == "use_angle_cls":
             # PaddleOCR >= 3.0 renamed the flag to use_textline_orientation.
             safe["use_textline_orientation"] = bool(value)
-        elif key in {"show_log", "use_space_char"}:
+        elif key in {"show_log", "use_space_char", "use_gpu"}:
             # No longer accepted by the constructor – ignore silently.
             continue
         elif key == "drop_score":
@@ -258,6 +258,9 @@ class SimplePaddleOCREngine:
             os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
             os.environ.setdefault("PADDLE_CPU_ONLY", "1")
             os.environ.setdefault("PYTHONPATH", "")
+            # Windows環境でのvector<bool> subscriptエラー回避
+            os.environ.setdefault("PADDLE_SKIP_GPU_MEMORY_INIT", "1")
+            os.environ.setdefault("FLAGS_allocator_strategy", "auto_growth")
             logger.debug("Applied Windows specific PaddleOCR environment tweaks")
 
         try:
@@ -274,28 +277,43 @@ class SimplePaddleOCREngine:
                 else self.language
             )
 
+            # Windows環境でのvector<bool> subscriptエラー回避のための設定
+            is_windows = platform.system() == "Windows"
+
             config_candidates = [
-                # Newer PaddleOCR (v3.x) parameter names
+                # Windows環境向け安全な設定 (PaddleXの高度な機能を無効化)
                 {
+                    "text_detection_model_dir": str(det_dir.resolve()),
+                    "text_recognition_model_dir": str(rec_dir.resolve()),
+                    "lang": lang,
+                    "use_textline_orientation": False,  # Windows環境では無効化
+                    "use_gpu": False,
+                    "use_space_char": True,
+                    "drop_score": 0.5,
+                    "enable_mkldnn": False,  # MKL-DNNを無効化してエラー回避
+                    "max_text_length": 25,
+                } if is_windows else {
                     "text_detection_model_dir": str(det_dir.resolve()),
                     "text_recognition_model_dir": str(rec_dir.resolve()),
                     "lang": lang,
                     "use_textline_orientation": True,
                     "use_gpu": False,
                 },
-                # Legacy API compatibility
+                # Legacy API compatibility (Windows向け調整)
                 {
                     "det_model_dir": str(det_dir.resolve()),
                     "rec_model_dir": str(rec_dir.resolve()),
                     "lang": lang,
-                    "use_angle_cls": True,
+                    "use_angle_cls": False if is_windows else True,  # Windows環境では無効化
                     "use_gpu": False,
+                    "enable_mkldnn": False if is_windows else True,
                 },
-                # Minimal parameters (last resort)
+                # Minimal parameters (最低限の設定)
                 {
                     "det_model_dir": str(det_dir.resolve()),
                     "rec_model_dir": str(rec_dir.resolve()),
                     "lang": lang,
+                    "use_gpu": False,
                 },
             ]
 
@@ -567,6 +585,14 @@ class SimplePaddleOCREngine:
             # PaddleOCRの実行
             raw_results = self._ocr.ocr(processed)  # type: ignore[operator]
 
+        except IndexError as exc:
+            # Windows環境でのvector<bool> subscriptエラーの特別処理
+            if "vector" in str(exc) and "subscript" in str(exc):
+                logger.warning("Windows-specific PaddleX vector error detected, skipping image: %s", exc)
+                return []
+            else:
+                logger.error("PaddleOCR IndexError on %s: %s", platform.system(), exc)
+                return []
         except (MemoryError, RuntimeError, ValueError) as exc:
             logger.error("PaddleOCR memory/runtime error on %s: %s", platform.system(), exc)
             return []
