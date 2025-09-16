@@ -541,50 +541,58 @@ class ExtractionProcessor:
         # 時間順にソート
         sorted_subtitles = sorted(subtitles, key=lambda x: x.start_ms)
 
-        # 段階的な統合処理
-        # 1. テキスト類似度ベースの統合
-        text_merged = self._merge_by_text_similarity(sorted_subtitles)
+        # 時間制約付きの重複統合（近接する類似字幕のみ統合）
+        time_aware_merged = self._merge_time_constrained_duplicates(sorted_subtitles)
 
-        # 2. 時間重複ベースの統合
-        time_merged = self._merge_overlapping_subtitles(text_merged)
+        # 最後に時間重複ベースの統合（従来の重複除去）
+        final_merged = self._merge_overlapping_subtitles(time_aware_merged)
 
-        return time_merged
+        return final_merged
 
-    def _merge_by_text_similarity(self, subtitles: List[SubtitleItem]) -> List[SubtitleItem]:
-        """テキスト類似度による統合"""
+    def _merge_time_constrained_duplicates(self, subtitles: List[SubtitleItem]) -> List[SubtitleItem]:
+        """時間制約付きテキスト類似度による統合（近接する字幕のみ対象）"""
         if not subtitles:
             return []
 
-        text_groups = {}
+        merged = []
         calc = TextSimilarityCalculator()
+        max_merge_gap_ms = 30000  # 30秒以内の字幕のみ統合対象とする
 
-        for subtitle in subtitles:
-            # 既存のグループと比較して類似度の高いものを探す
-            merged_with_existing = False
+        i = 0
+        while i < len(subtitles):
+            current_group = [subtitles[i]]
+            j = i + 1
 
-            for existing_text, group in text_groups.items():
-                similarity = calc.calculate_similarity(subtitle.text, existing_text)
-                if similarity > 0.90:  # 高い類似度（90%以上）で同一テキストと判定
-                    group.append(subtitle)
-                    merged_with_existing = True
+            # 現在の字幕から30秒以内の類似字幕を探す
+            while j < len(subtitles):
+                time_gap = subtitles[j].start_ms - subtitles[i].end_ms
+
+                # 時間間隔が30秒を超えたら統合対象外
+                if time_gap > max_merge_gap_ms:
                     break
 
-            # 新しいグループを作成
-            if not merged_with_existing:
-                text_groups[subtitle.text] = [subtitle]
+                # テキスト類似度チェック
+                similarity = calc.calculate_similarity(
+                    subtitles[i].text,
+                    subtitles[j].text
+                )
 
-        # 各グループを統合
-        merged_subtitles = []
-        for text, group in text_groups.items():
-            if len(group) == 1:
-                # 単一の字幕はそのまま追加
-                merged_subtitles.append(group[0])
+                if similarity > 0.90:
+                    current_group.append(subtitles[j])
+                    subtitles.pop(j)  # 統合対象を削除
+                else:
+                    j += 1
+
+            # グループを統合して追加
+            if len(current_group) == 1:
+                merged.append(current_group[0])
             else:
-                # 複数の字幕を統合
-                merged_subtitle = self._merge_duplicate_group(group)
-                merged_subtitles.append(merged_subtitle)
+                merged_subtitle = self._merge_duplicate_group(current_group)
+                merged.append(merged_subtitle)
 
-        return merged_subtitles
+            i += 1
+
+        return merged
 
     def _merge_overlapping_subtitles(self, subtitles: List[SubtitleItem]) -> List[SubtitleItem]:
         """時間重複している字幕の統合"""
