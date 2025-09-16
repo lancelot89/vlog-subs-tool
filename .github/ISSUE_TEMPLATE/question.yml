@@ -8,16 +8,12 @@ body:
     attributes:
       label: 調査・検討事項
       description: 調査・検討する内容
-    validations:
-      required: true
 
   - type: textarea
     id: background
     attributes:
       label: 背景
       description: なぜ調査・検討が必要か
-    validations:
-      required: true
 
   - type: textarea
     id: questions
@@ -28,16 +24,12 @@ body:
         -
         -
         -
-    validations:
-      required: true
 
   - type: textarea
     id: approach
     attributes:
       label: 調査方法・アプローチ
       description: 調査の進め方
-    validations:
-      required: false
 
   - type: dropdown
     id: priority
@@ -48,8 +40,6 @@ body:
         - High
         - Medium
         - Low
-    validations:
-      required: true
 
   - type: textarea
     id: deliverables
@@ -60,5 +50,17 @@ body:
         - [ ]
         - [ ]
         - [ ]
-    validations:
-      required: true
+
+  - type: textarea
+    id: references
+    attributes:
+      label: 参考資料・画像
+      description: |
+        関連する資料、グラフ、図表、スクリーンショットなど
+        画像をドラッグ&ドロップまたは貼り付けてください
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: 補足
+      description: その他の情報

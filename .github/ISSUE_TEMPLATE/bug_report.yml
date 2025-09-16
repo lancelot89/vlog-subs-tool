@@ -8,32 +8,24 @@ body:
     attributes:
       label: 問題
       description: 発生している問題を記載
-    validations:
-      required: true
 
   - type: textarea
     id: cause
     attributes:
       label: 原因分析
       description: 問題の原因（判明している場合）
-    validations:
-      required: false
 
   - type: textarea
     id: reproduction
     attributes:
       label: 再現手順
       description: 問題を再現する手順
-    validations:
-      required: true
 
   - type: textarea
     id: solution
     attributes:
       label: 解決方針
       description: 修正の方針・方法
-    validations:
-      required: false
 
   - type: dropdown
     id: priority
@@ -44,8 +36,6 @@ body:
         - High
         - Medium
         - Low
-    validations:
-      required: true
 
   - type: textarea
     id: acceptance
@@ -56,5 +46,21 @@ body:
         - [ ]
         - [ ]
         - [ ]
-    validations:
-      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: スクリーンショット・ファイル
+      description: |
+        関連する画像、ログファイル、エラーメッセージなど
+        画像をドラッグ&ドロップまたは貼り付けてください
+
+        ```
+        ログやエラーメッセージをここに貼り付け
+        ```
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: 補足
+      description: その他の情報

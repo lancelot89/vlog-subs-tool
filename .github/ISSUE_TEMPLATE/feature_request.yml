@@ -8,24 +8,18 @@ body:
     attributes:
       label: 機能概要
       description: 実装する機能の概要
-    validations:
-      required: true
 
   - type: textarea
     id: background
     attributes:
       label: 背景・目的
       description: なぜこの機能が必要か
-    validations:
-      required: true
 
   - type: textarea
     id: specification
     attributes:
       label: 仕様・要件
       description: 機能の詳細仕様
-    validations:
-      required: true
 
   - type: dropdown
     id: priority
@@ -36,16 +30,12 @@ body:
         - High
         - Medium
         - Low
-    validations:
-      required: true
 
   - type: textarea
     id: technical_approach
     attributes:
       label: 技術的アプローチ
       description: 実装方針・技術的考慮事項
-    validations:
-      required: false
 
   - type: textarea
     id: acceptance
@@ -56,5 +46,17 @@ body:
         - [ ]
         - [ ]
         - [ ]
-    validations:
-      required: true
+
+  - type: textarea
+    id: mockups
+    attributes:
+      label: モックアップ・画像
+      description: |
+        UI設計、ワイヤーフレーム、参考画像など
+        画像をドラッグ&ドロップまたは貼り付けてください
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: 補足
+      description: その他の情報
