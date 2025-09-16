@@ -1,0 +1,177 @@
+name: ❓ 質問・サポート (Question/Support)
+description: 使い方や技術的な質問 (Ask a question or get support)
+title: "[Question]: "
+labels: ["question", "support"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        質問をありがとうございます。以下の情報を記入して、より適切なサポートを受けられるようにしてください。
+
+  - type: dropdown
+    id: question-type
+    attributes:
+      label: 質問の種類 (Question Type)
+      description: 質問の種類を選択してください
+      options:
+        - 使い方・操作方法 (How to use)
+        - エラー・トラブルシューティング (Troubleshooting)
+        - 設定・カスタマイズ (Configuration)
+        - パフォーマンス (Performance)
+        - インストール・セットアップ (Installation)
+        - 技術的質問 (Technical question)
+        - その他 (Other)
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: バージョン (Version)
+      description: 使用しているアプリのバージョンを記載してください
+      placeholder: "例: v1.0.0, main branch, commit hash"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: 動作環境 (Operating System)
+      description: 使用しているOSを選択してください
+      options:
+        - Windows 10/11
+        - macOS (Intel)
+        - macOS (Apple Silicon)
+        - Ubuntu/Debian
+        - その他 Linux
+        - その他
+    validations:
+      required: true
+
+  - type: textarea
+    id: question-summary
+    attributes:
+      label: 質問の概要 (Question Summary)
+      description: 質問を簡潔に要約してください
+      placeholder: "例: OCR精度を向上させる設定方法について"
+    validations:
+      required: true
+
+  - type: textarea
+    id: question-detail
+    attributes:
+      label: 詳細な質問内容 (Detailed Question)
+      description: 質問の詳細を記載してください。具体的であるほど適切な回答を得られます
+      placeholder: |
+        例:
+        - 何をしたいのか
+        - 何がわからないのか
+        - どこで困っているのか
+        - 調べたことや試したこと
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-you-tried
+    attributes:
+      label: 試したこと (What You've Tried)
+      description: 既に試したことがあれば記載してください
+      placeholder: |
+        例:
+        - 設定画面で○○を変更してみた
+        - ××のドキュメントを確認した
+        - 再インストールを試した
+    validations:
+      required: false
+
+  - type: textarea
+    id: current-situation
+    attributes:
+      label: 現在の状況 (Current Situation)
+      description: 現在どのような状況かを説明してください
+      placeholder: |
+        例:
+        - 字幕の認識精度が低い
+        - 処理速度が遅い
+        - 特定の動画でエラーが発生する
+    validations:
+      required: false
+
+  - type: textarea
+    id: expected-result
+    attributes:
+      label: 期待する結果 (Expected Result)
+      description: どのような結果を期待しているかを記載してください
+      placeholder: |
+        例:
+        - より正確な字幕抽出ができるようになりたい
+        - 処理時間を短縮したい
+        - エラーなく動作させたい
+    validations:
+      required: false
+
+  - type: textarea
+    id: video-info
+    attributes:
+      label: 関連する動画・ファイル情報 (Related Video/File Information)
+      description: 質問に関連する動画ファイルの情報があれば記載してください
+      placeholder: |
+        例:
+        - ファイル形式: MP4
+        - 解像度: 1920x1080
+        - 長さ: 30分
+        - 字幕の特徴: 小さい文字、特殊フォント、背景が複雑
+    validations:
+      required: false
+
+  - type: textarea
+    id: screenshots-logs
+    attributes:
+      label: スクリーンショット・ログ (Screenshots/Logs)
+      description: |
+        関連するスクリーンショットやログがあれば貼り付けてください。
+        画像をドラッグ＆ドロップまたはログをコピー＆ペーストしてください。
+      placeholder: |
+        画像をここにドラッグ＆ドロップするか、
+        ```
+        ログやエラーメッセージをここに貼り付けてください
+        ```
+    validations:
+      required: false
+
+  - type: dropdown
+    id: urgency
+    attributes:
+      label: 緊急度 (Urgency)
+      description: この質問の緊急度を選択してください
+      options:
+        - High (高) - 作業が進まない
+        - Medium (中) - できるだけ早く解決したい
+        - Low (低) - 時間に余裕がある
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: documentation-check
+    attributes:
+      label: ドキュメント確認 (Documentation Check)
+      description: 以下の確認をしましたか？
+      options:
+        - label: README.md を確認した
+        - label: DESIGN.md を確認した
+        - label: 既存のIssueを検索した
+        - label: リリースノートを確認した
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: 補足情報 (Additional Context)
+      description: その他、回答に役立つ情報があれば記載してください
+      placeholder: |
+        例:
+        - 業務での使用か個人使用か
+        - 使用頻度
+        - 他のソフトウェアとの連携
+        - 特殊な環境設定
+    validations:
+      required: false
