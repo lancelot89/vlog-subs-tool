@@ -21,6 +21,7 @@ from .views.table_view import SubtitleTableView
 from .views.translate_view import TranslateView
 from .views.settings_view import SettingsView
 from .dialogs.ocr_setup_dialog import OCRSetupDialog
+from .dialogs.language_selection_dialog import LanguageSelectionDialog
 from .extraction_worker import ExtractionWorker
 from app.core.models import Project, SubtitleItem
 from app.core.format.srt import SRTFormatter, SRTFormatSettings
@@ -204,7 +205,8 @@ class MainWindow(QMainWindow):
         export_ja_action.triggered.connect(self.export_japanese_srt)
         export_menu.addAction(export_ja_action)
         
-        export_all_action = QAction("全言語SRT(&A)", self)
+        export_all_action = QAction("多言語SRT出力...(&A)", self)
+        export_all_action.setShortcut(QKeySequence("Ctrl+Shift+S"))
         export_all_action.triggered.connect(self.export_all_srt)
         export_menu.addAction(export_all_action)
         
@@ -1076,9 +1078,15 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "エラー", f"SRTファイルの保存でエラーが発生しました:\\n{str(e)}")
     
     def export_all_srt(self):
-        """全言語のSRTファイルを出力（現在は日本語のみ）"""
-        # 将来的に多言語対応する際のプレースホルダー
-        self.export_japanese_srt()
+        """多言語SRTファイルの出力"""
+        if not self.current_project or not self.current_project.subtitles:
+            QMessageBox.information(self, "情報", "出力する字幕がありません。\n先に字幕を抽出してください。")
+            return
+
+        # 言語選択ダイアログを表示
+        dialog = LanguageSelectionDialog(self)
+        dialog.export_confirmed.connect(self.on_export_languages_confirmed)
+        dialog.exec()
     
     def show_translate_view(self):
         """翻訳設定画面を表示"""
@@ -1117,6 +1125,138 @@ class MainWindow(QMainWindow):
             pass
         
         self.status_label.setText(f"翻訳データ更新: {len(translations_dict)}言語")
+
+    def on_export_languages_confirmed(self, selected_languages: List[str], export_options: dict):
+        """言語選択確定時の処理"""
+        try:
+            # 出力先フォルダの決定
+            output_folder = self._determine_output_folder(export_options.get("output_folder"))
+
+            # 日本語SRTを必ず出力
+            self._export_japanese_srt_to_folder(output_folder)
+
+            # 翻訳が必要な場合
+            if export_options["translation_provider"] != "none" and selected_languages:
+                # 翻訳＋SRT出力処理を開始
+                self._start_translation_export(selected_languages, export_options, output_folder)
+            else:
+                QMessageBox.information(
+                    self,
+                    "出力完了",
+                    f"日本語SRTファイルを出力しました:\n{output_folder}"
+                )
+                self.status_label.setText("日本語SRTファイル出力完了")
+
+        except Exception as e:
+            QMessageBox.critical(self, "エラー", f"SRT出力でエラーが発生しました:\n{str(e)}")
+
+    def _determine_output_folder(self, custom_folder: Optional[str]) -> Path:
+        """出力先フォルダを決定"""
+        if custom_folder:
+            return Path(custom_folder)
+        elif self.current_video_path:
+            return Path(self.current_video_path).parent
+        else:
+            return Path.cwd()
+
+    def _export_japanese_srt_to_folder(self, output_folder: Path):
+        """指定フォルダに日本語SRTファイルを出力"""
+        if self.current_video_path:
+            video_path = Path(self.current_video_path)
+            default_filename = f"{video_path.stem}.ja.srt"
+        else:
+            default_filename = "subtitles.ja.srt"
+
+        output_path = output_folder / default_filename
+
+        # SRT フォーマッタを作成
+        settings = SRTFormatSettings(
+            encoding="utf-8",
+            with_bom=False,
+            line_ending="lf",
+            max_chars_per_line=42,
+            max_lines=2
+        )
+        formatter = SRTFormatter(settings)
+
+        # SRTファイルを保存
+        success = formatter.save_srt_file(self.current_project.subtitles, output_path)
+
+        if not success:
+            raise Exception("日本語SRTファイルの保存に失敗しました")
+
+    def _start_translation_export(self, selected_languages: List[str], export_options: dict, output_folder: Path):
+        """翻訳＋SRT出力処理を開始"""
+        from .workers.translation_export_worker import TranslationExportWorker
+
+        # プロバイダ設定の準備
+        provider_settings = self._prepare_provider_settings(export_options["translation_provider"])
+
+        # ワーカー作成
+        self.translation_export_worker = TranslationExportWorker(
+            subtitles=self.current_project.subtitles,
+            target_languages=selected_languages,
+            provider_type=export_options["translation_provider"],
+            provider_settings=provider_settings,
+            output_folder=output_folder,
+            video_basename=Path(self.current_video_path).stem if self.current_video_path else "subtitles"
+        )
+
+        # シグナル接続
+        self.translation_export_worker.progress_updated.connect(self.on_translation_progress)
+        self.translation_export_worker.export_completed.connect(self.on_translation_export_completed)
+        self.translation_export_worker.export_error.connect(self.on_translation_export_error)
+
+        # プログレスバー表示
+        self.show_translation_progress()
+
+        # 翻訳開始
+        self.translation_export_worker.start()
+
+    def _prepare_provider_settings(self, provider_type: str) -> dict:
+        """翻訳プロバイダ設定の準備"""
+        if provider_type == "google":
+            # Google Translate設定を取得（設定ファイルまたはデフォルト値）
+            return {
+                "credentials_path": "",  # 設定から取得
+                "glossary_id": None
+            }
+        elif provider_type == "deepl":
+            # DeepL設定を取得
+            return {
+                "api_key": "",  # 設定から取得
+                "use_pro": False
+            }
+        else:
+            return {}
+
+    def show_translation_progress(self):
+        """翻訳進捗表示"""
+        # プログレスバーを表示（実装は後で詳細化）
+        self.status_label.setText("翻訳処理を開始しています...")
+
+    def on_translation_progress(self, message: str, progress: int):
+        """翻訳進捗更新"""
+        self.status_label.setText(f"翻訳処理中: {message} ({progress}%)")
+
+    def on_translation_export_completed(self, exported_files: List[str]):
+        """翻訳SRT出力完了"""
+        file_list = "\n".join([f"・{Path(f).name}" for f in exported_files])
+        QMessageBox.information(
+            self,
+            "出力完了",
+            f"多言語SRTファイルの出力が完了しました:\n\n{file_list}"
+        )
+        self.status_label.setText(f"多言語SRT出力完了: {len(exported_files)}ファイル")
+
+    def on_translation_export_error(self, error_message: str):
+        """翻訳SRT出力エラー"""
+        QMessageBox.critical(
+            self,
+            "翻訳エラー",
+            f"翻訳処理中にエラーが発生しました:\n\n{error_message}"
+        )
+        self.status_label.setText("翻訳処理エラー")
     
     def get_srt_export_settings(self) -> SRTFormatSettings:
         """SRT出力設定を取得（設定画面から）"""
