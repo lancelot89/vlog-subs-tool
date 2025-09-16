@@ -2,8 +2,9 @@
 QC（品質管理）チェックルールの実装
 """
 
-from typing import List, Dict, Any
 from dataclasses import dataclass
+from typing import List
+from typing import Dict, Any
 from enum import Enum
 
 from app.core.models import SubtitleItem, QCResult
