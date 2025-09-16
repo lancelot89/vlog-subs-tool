@@ -632,12 +632,12 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "警告", "動画ファイルが選択されていません。")
             return
 
-        # OCRセットアップ確認
-        if not self.check_ocr_setup():
+        # 抽出開始前の確認ダイアログ（先に表示）
+        if not self._confirm_extraction_start():
             return
 
-        # 抽出開始前の確認ダイアログ
-        if not self._confirm_extraction_start():
+        # OCRセットアップ確認（確認ダイアログの後に実行）
+        if not self.check_ocr_setup():
             return
 
         # 既存の抽出処理を停止
@@ -892,6 +892,11 @@ class MainWindow(QMainWindow):
     def check_ocr_setup(self) -> bool:
         """OCRセットアップの確認（SimplePaddleOCREngine使用）"""
         try:
+            # 初期化開始をユーザーに通知
+            self.status_label.setText("OCRエンジン初期化中...")
+            # UIの更新を強制実行
+            QApplication.processEvents()
+
             # SimplePaddleOCREngineの利用可能性をチェック
             ocr_engine = SimplePaddleOCREngine()
 
