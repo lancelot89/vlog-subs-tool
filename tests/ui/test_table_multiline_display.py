@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 # プロジェクトルートをPythonパスに追加
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from PySide6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget
 from app.ui.views.table_view import SubtitleTableView
