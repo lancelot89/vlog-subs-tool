@@ -17,37 +17,36 @@ from app.core.csv import (
     TranslationWorkflowManager, CSVExportSettings
 )
 from app.core.format.srt import SRTFormatter
-from app.core.translate.provider_google import GoogleTranslateProvider, GoogleTranslateSettings, GoogleTranslateError
-from app.core.translate.provider_deepl import DeepLProvider, DeepLSettings, DeepLError
+from app.core.translate import (
+    TranslationProviderRouter,
+    TranslationProviderType,
+    LocalTranslateProvider,
+    LocalTranslateSettings,
+    LocalTranslateError
+)
 
 
 class TranslationWorker(QThread):
-    """翻訳バックグラウンドワーカー"""
+    """ローカル翻訳バックグラウンドワーカー"""
 
     progress_updated = Signal(str, int)  # message, progress
     translation_completed = Signal(dict)  # translations: Dict[lang, List[SubtitleItem]]
     translation_error = Signal(str)  # error_message
 
     def __init__(self, subtitles: List[SubtitleItem], target_languages: List[str],
-                 provider_type: str, provider_settings: dict):
+                 models_dir: str):
         super().__init__()
         self.subtitles = subtitles
         self.target_languages = target_languages
-        self.provider_type = provider_type
-        self.provider_settings = provider_settings
+        self.models_dir = models_dir
 
     def run(self):
-        """翻訳実行"""
+        """ローカル翻訳実行"""
         try:
             translations = {}
 
-            # プロバイダーの初期化
-            if self.provider_type == "google":
-                provider = self._init_google_provider()
-            elif self.provider_type == "deepl":
-                provider = self._init_deepl_provider()
-            else:
-                raise Exception(f"未対応の翻訳プロバイダ: {self.provider_type}")
+            # ローカル翻訳プロバイダーの初期化
+            router = self._init_local_provider()
 
             # 翻訳テキスト準備
             texts_to_translate = [subtitle.text for subtitle in self.subtitles]
@@ -63,80 +62,67 @@ class TranslationWorker(QThread):
                     total_progress = lang_progress + int(progress / total_languages)
                     self.progress_updated.emit(f"{target_lang}: {message}", total_progress)
 
-                # 翻訳実行
-                translated_texts = provider.translate_batch(
-                    texts_to_translate,
-                    target_lang,
-                    "ja",
-                    progress_callback
+                # ローカル翻訳実行
+                result = router.translate_batch(
+                    texts=texts_to_translate,
+                    target_language=target_lang,
+                    source_language="ja",
+                    progress_callback=progress_callback
                 )
 
-                # 翻訳結果をSubtitleItemに変換
-                translated_subtitles = []
-                for j, translated_text in enumerate(translated_texts):
-                    original_subtitle = self.subtitles[j]
-                    translated_subtitle = SubtitleItem(
-                        index=original_subtitle.index,
-                        start_ms=original_subtitle.start_ms,
-                        end_ms=original_subtitle.end_ms,
-                        text=translated_text,
-                        bbox=original_subtitle.bbox
-                    )
-                    translated_subtitles.append(translated_subtitle)
+                if result.success:
+                    # 翻訳結果をSubtitleItemに変換
+                    translated_subtitles = []
+                    for j, translated_text in enumerate(result.translated_texts):
+                        original_subtitle = self.subtitles[j]
+                        translated_subtitle = SubtitleItem(
+                            index=original_subtitle.index,
+                            start_ms=original_subtitle.start_ms,
+                            end_ms=original_subtitle.end_ms,
+                            text=translated_text,
+                            bbox=original_subtitle.bbox
+                        )
+                        translated_subtitles.append(translated_subtitle)
 
-                translations[target_lang] = translated_subtitles
+                    translations[target_lang] = translated_subtitles
+                else:
+                    raise Exception(f"{target_lang}への翻訳に失敗: {result.error_message}")
 
             self.translation_completed.emit(translations)
 
-        except (GoogleTranslateError, DeepLError) as e:
-            # 翻訳プロバイダー固有エラー
+        except LocalTranslateError as e:
+            # ローカル翻訳固有エラー
+            guidance = ""
             if hasattr(e, 'error_code'):
-                guidance = ""
-                if isinstance(e, GoogleTranslateError):
-                    from app.core.translate.provider_google import GoogleTranslateProvider
-                    temp_provider = GoogleTranslateProvider(GoogleTranslateSettings(""))
-                    guidance = temp_provider.get_error_guidance(e)
-                elif isinstance(e, DeepLError):
-                    from app.core.translate.provider_deepl import DeepLProvider
-                    temp_provider = DeepLProvider(DeepLSettings(""))
-                    guidance = temp_provider.get_error_guidance(e)
+                temp_provider = LocalTranslateProvider(LocalTranslateSettings(self.models_dir))
+                guidance = temp_provider.get_error_guidance(e)
 
-                self.translation_error.emit(f"{str(e)}\\n\\n{guidance}")
-            else:
-                self.translation_error.emit(str(e))
+            self.translation_error.emit(f"{str(e)}\\n\\n{guidance}")
 
         except Exception as e:
             self.translation_error.emit(f"予期しないエラーが発生しました: {str(e)}")
 
-    def _init_google_provider(self) -> GoogleTranslateProvider:
-        """Google翻訳プロバイダーの初期化"""
-        settings = GoogleTranslateSettings(
-            project_id=self.provider_settings.get("project_id", ""),
-            location=self.provider_settings.get("location", "global"),
-            api_key=self.provider_settings.get("api_key"),
-            service_account_path=self.provider_settings.get("service_account_path"),
-            glossary_id=self.provider_settings.get("glossary_id")
+    def _init_local_provider(self) -> TranslationProviderRouter:
+        """ローカル翻訳プロバイダーの初期化"""
+        router = TranslationProviderRouter()
+
+        # ローカル翻訳設定
+        local_settings = LocalTranslateSettings(
+            models_dir=self.models_dir,
+            max_batch_size=4,
+            beam_size=1,
+            length_penalty=0.2,
+            repetition_penalty=1.5,
+            no_repeat_ngram_size=3,
+            max_decoding_length=50
         )
 
-        provider = GoogleTranslateProvider(settings)
-        if not provider.initialize():
-            raise Exception("Google翻訳プロバイダーの初期化に失敗しました")
+        # ローカル翻訳プロバイダーを登録
+        success = router.register_provider(TranslationProviderType.LOCAL, local_settings)
+        if not success:
+            raise Exception("ローカル翻訳プロバイダーの初期化に失敗しました")
 
-        return provider
-
-    def _init_deepl_provider(self) -> DeepLProvider:
-        """DeepL翻訳プロバイダーの初期化"""
-        settings = DeepLSettings(
-            api_key=self.provider_settings.get("api_key", ""),
-            formality=self.provider_settings.get("formality"),
-            use_pro_api=self.provider_settings.get("use_pro_api", False)
-        )
-
-        provider = DeepLProvider(settings)
-        if not provider.initialize():
-            raise Exception("DeepL翻訳プロバイダーの初期化に失敗しました")
-
-        return provider
+        return router
 
 
 class TranslateView(QDialog):
@@ -172,29 +158,26 @@ class TranslateView(QDialog):
     def init_ui(self):
         """UIの初期化"""
         layout = QVBoxLayout(self)
-        
+
         # 翻訳プロバイダ選択
         provider_group = QGroupBox("翻訳プロバイダ")
         provider_layout = QVBoxLayout(provider_group)
-        
+
         self.none_radio = QRadioButton("なし（CSV外部連携）")
-        self.none_radio.setChecked(True)
         provider_layout.addWidget(self.none_radio)
-        
-        self.google_radio = QRadioButton("Google Cloud Translation v3")
-        provider_layout.addWidget(self.google_radio)
-        
-        self.deepl_radio = QRadioButton("DeepL")
-        provider_layout.addWidget(self.deepl_radio)
-        
-        # API設定ボタン
-        api_layout = QHBoxLayout()
-        self.api_settings_btn = QPushButton("API設定")
-        self.api_settings_btn.clicked.connect(self.show_api_settings)
-        api_layout.addWidget(self.api_settings_btn)
-        api_layout.addStretch()
-        provider_layout.addLayout(api_layout)
-        
+
+        self.local_radio = QRadioButton("ローカル翻訳（オフライン）")
+        self.local_radio.setChecked(True)  # デフォルトでローカル翻訳を選択
+        provider_layout.addWidget(self.local_radio)
+
+        # モデル設定情報
+        info_layout = QHBoxLayout()
+        info_label = QLabel("※ 初回実行時にモデルを自動ダウンロードします（約250MB）")
+        info_label.setStyleSheet("color: #666; font-size: 11px;")
+        info_layout.addWidget(info_label)
+        info_layout.addStretch()
+        provider_layout.addLayout(info_layout)
+
         layout.addWidget(provider_group)
         
         # 対象言語選択
@@ -322,24 +305,6 @@ class TranslateView(QDialog):
         log_layout.addWidget(self.log_text)
         layout.addWidget(log_group)
     
-    def show_api_settings(self):
-        """API設定ダイアログを表示"""
-        if self.google_radio.isChecked():
-            self.show_google_api_settings()
-        elif self.deepl_radio.isChecked():
-            self.show_deepl_api_settings()
-        else:
-            QMessageBox.information(self, "情報", "CSV外部連携モードではAPI設定は不要です")
-    
-    def show_google_api_settings(self):
-        """Google Cloud Translation API設定"""
-        dialog = GoogleApiSettingsDialog(self)
-        dialog.exec()
-    
-    def show_deepl_api_settings(self):
-        """DeepL API設定"""
-        dialog = DeepLApiSettingsDialog(self)
-        dialog.exec()
     
     def browse_glossary(self):
         """用語集ファイルを参照"""
@@ -372,15 +337,9 @@ class TranslateView(QDialog):
             )
             return
 
-        # 翻訳プロバイダーを確認
-        if self.google_radio.isChecked():
-            if not self.validate_google_settings():
-                return
-            provider_name = "Google Translate"
-        elif self.deepl_radio.isChecked():
-            if not self.validate_deepl_settings():
-                return
-            provider_name = "DeepL"
+        # ローカル翻訳の確認
+        if self.local_radio.isChecked():
+            provider_name = "ローカル翻訳（オフライン）"
         else:
             QMessageBox.warning(self, "警告", "翻訳プロバイダが選択されていません。")
             return
@@ -393,12 +352,15 @@ class TranslateView(QDialog):
         self.close_btn.setEnabled(False)
 
         try:
-            # 翻訳ワーカーを開始
+            # モデル保存ディレクトリを作成
+            models_dir = Path.home() / ".vlog-subs-tool" / "translation_models"
+            models_dir.mkdir(parents=True, exist_ok=True)
+
+            # ローカル翻訳ワーカーを開始
             self.translation_worker = TranslationWorker(
                 subtitles=self.subtitles,
                 target_languages=selected_languages,
-                provider_type="google" if self.google_radio.isChecked() else "deepl",
-                provider_settings=self.get_provider_settings()
+                models_dir=str(models_dir)
             )
 
             self.translation_worker.progress_updated.connect(self.on_translation_progress)
@@ -409,19 +371,6 @@ class TranslateView(QDialog):
         except Exception as e:
             self.on_translation_error(f"翻訳初期化エラー: {str(e)}")
 
-    def validate_google_settings(self) -> bool:
-        """Google Translate設定検証"""
-        # TODO: 実際の設定チェックを実装
-        # 設定画面からGoogle APIの設定を取得してチェック
-        self.log_text.append("Google Translate設定を確認中...")
-        return True
-
-    def validate_deepl_settings(self) -> bool:
-        """DeepL設定検証"""
-        # TODO: 実際の設定チェックを実装
-        # 設定画面からDeepL APIの設定を取得してチェック
-        self.log_text.append("DeepL設定を確認中...")
-        return True
 
     def get_selected_languages(self) -> List[str]:
         """選択された翻訳言語一覧を取得"""
@@ -436,10 +385,6 @@ class TranslateView(QDialog):
             selected.append('ar')
         return selected
 
-    def get_provider_settings(self) -> dict:
-        """プロバイダ設定を取得"""
-        # TODO: 設定画面から実際の設定を取得
-        return {}
 
     def on_translation_progress(self, message: str, progress: int):
         """翻訳進捗更新"""
@@ -715,85 +660,3 @@ class TranslateView(QDialog):
         if self.project and self.project.settings.video_path:
             return Path(self.project.settings.video_path).stem
         return "subtitles"
-
-
-class GoogleApiSettingsDialog(QDialog):
-    """Google Cloud Translation API設定ダイアログ"""
-    
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Google Cloud Translation API設定")
-        self.setModal(True)
-        self.resize(400, 300)
-        
-        layout = QVBoxLayout(self)
-        
-        layout.addWidget(QLabel("Project ID:"))
-        self.project_id_edit = QLineEdit()
-        layout.addWidget(self.project_id_edit)
-        
-        layout.addWidget(QLabel("Location:"))
-        self.location_edit = QLineEdit()
-        self.location_edit.setText("global")
-        layout.addWidget(self.location_edit)
-        
-        layout.addWidget(QLabel("API Key:"))
-        self.api_key_edit = QLineEdit()
-        self.api_key_edit.setEchoMode(QLineEdit.Password)
-        layout.addWidget(self.api_key_edit)
-        
-        # ボタン
-        button_layout = QHBoxLayout()
-        self.save_btn = QPushButton("保存")
-        self.save_btn.clicked.connect(self.save_settings)
-        button_layout.addWidget(self.save_btn)
-        
-        self.cancel_btn = QPushButton("キャンセル")
-        self.cancel_btn.clicked.connect(self.reject)
-        button_layout.addWidget(self.cancel_btn)
-        
-        layout.addLayout(button_layout)
-    
-    def save_settings(self):
-        """設定を保存"""
-        # TODO: 実際の設定保存処理
-        self.accept()
-
-
-class DeepLApiSettingsDialog(QDialog):
-    """DeepL API設定ダイアログ"""
-    
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("DeepL API設定")
-        self.setModal(True)
-        self.resize(400, 200)
-        
-        layout = QVBoxLayout(self)
-        
-        layout.addWidget(QLabel("API Key:"))
-        self.api_key_edit = QLineEdit()
-        self.api_key_edit.setEchoMode(QLineEdit.Password)
-        layout.addWidget(self.api_key_edit)
-        
-        layout.addWidget(QLabel("フォーマリティ:"))
-        self.formality_combo = QComboBox()
-        self.formality_combo.addItems(["default", "more", "less"])
-        layout.addWidget(self.formality_combo)
-        
-        # ボタン
-        button_layout = QHBoxLayout()
-        self.save_btn = QPushButton("保存")
-        self.save_btn.clicked.connect(self.save_settings)
-        button_layout.addWidget(self.save_btn)
-        
-        self.cancel_btn = QPushButton("キャンセル")
-        self.cancel_btn.clicked.connect(self.reject)
-        button_layout.addWidget(self.cancel_btn)
-        
-        layout.addLayout(button_layout)
-    
-    def save_settings(self):
-        """設定を保存"""
-        # TODO: 実際の設定保存処理
-        self.accept()
