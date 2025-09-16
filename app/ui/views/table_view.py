@@ -5,10 +5,10 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget,
     QTableWidgetItem, QHeaderView, QAbstractItemView, QMenu,
-    QMessageBox, QInputDialog
+    QMessageBox, QInputDialog, QApplication
 )
 from PySide6.QtCore import Qt, Signal, QPoint
-from PySide6.QtGui import QFont, QColor, QAction
+from PySide6.QtGui import QFont, QColor, QAction, QPalette
 from typing import List, Optional
 
 from app.core.models import SubtitleItem
@@ -267,7 +267,9 @@ class SubtitleTableView(QWidget):
             for col in range(self.table.columnCount()):
                 item = self.table.item(self.current_highlight_row, col)
                 if item:
-                    item.setBackground(QColor())
+                    # システムのデフォルト背景色に戻す
+                    default_bg = QApplication.palette().color(QPalette.Base)
+                    item.setBackground(default_bg)
         
         # 現在時間に該当する字幕を検索
         current_row = -1
