@@ -101,7 +101,14 @@ class SubtitleTableView(QWidget):
         self.table.setColumnWidth(0, 50)   # インデックス
         self.table.setColumnWidth(1, 100)  # 開始時間
         self.table.setColumnWidth(2, 100)  # 終了時間
-        
+
+        # 垂直ヘッダーの設定（行の高さを可変にする）
+        vertical_header = self.table.verticalHeader()
+        vertical_header.setSectionResizeMode(QHeaderView.ResizeToContents)
+
+        # 改行表示のための設定
+        self.table.setWordWrap(True)
+
         # 選択モード設定
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -141,26 +148,37 @@ class SubtitleTableView(QWidget):
     def refresh_table(self):
         """テーブルを更新"""
         self.table.setRowCount(len(self.subtitles))
-        
+
         for row, subtitle in enumerate(self.subtitles):
             # インデックス
             index_item = QTableWidgetItem(str(subtitle.index))
             index_item.setFlags(index_item.flags() & ~Qt.ItemIsEditable)
             index_item.setTextAlignment(Qt.AlignCenter)
             self.table.setItem(row, 0, index_item)
-            
+
             # 開始時間
             start_time = self.format_time(subtitle.start_ms)
             start_item = QTableWidgetItem(start_time)
             self.table.setItem(row, 1, start_item)
-            
+
             # 終了時間
             end_time = self.format_time(subtitle.end_ms)
             end_item = QTableWidgetItem(end_time)
             self.table.setItem(row, 2, end_item)
-            
-            # 本文
+
+            # 本文 (改行対応)
             text_item = QTableWidgetItem(subtitle.text)
+
+            # 改行が含まれている場合の特別処理
+            if '\n' in subtitle.text:
+                # 改行を表示するためにWordWrapを有効化
+                text_item.setData(Qt.DisplayRole, subtitle.text)
+
+                # 行数に応じて行の高さを調整
+                line_count = subtitle.text.count('\n') + 1
+                row_height = max(40, line_count * 25)  # 最小40px、1行あたり25px
+                self.table.setRowHeight(row, row_height)
+
             self.table.setItem(row, 3, text_item)
     
     def format_time(self, time_ms: int) -> str:
