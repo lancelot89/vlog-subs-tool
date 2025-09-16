@@ -286,19 +286,33 @@ class SubtitleCSVImporter:
         """標準CSVから字幕アイテムを作成"""
         try:
             indices = self._get_column_indices(headers)
-            
+
             index = int(row[indices.get("index", 0)])
-            start_ms = int(row[indices.get("start_time_ms", 1)])
-            end_ms = int(row[indices.get("end_time_ms", 2)])
-            text = row[indices.get("text", 3)]
-            
+
+            # 新しい形式（開始時間/終了時間）を優先、古い形式にもフォールバック
+            if indices.get("start_time_ms") is not None and indices.get("end_time_ms") is not None:
+                # 古い形式：ミリ秒数値
+                start_ms = int(row[indices.get("start_time_ms")])
+                end_ms = int(row[indices.get("end_time_ms")])
+            elif indices.get("start_time") is not None and indices.get("end_time") is not None:
+                # 新しい形式：MM:SS.mmm
+                start_ms = self._parse_time_from_csv(row[indices.get("start_time")])
+                end_ms = self._parse_time_from_csv(row[indices.get("end_time")])
+            else:
+                # デフォルトフォールバック
+                start_ms = self._parse_time_from_csv(row[1]) if len(row) > 1 else 0
+                end_ms = self._parse_time_from_csv(row[2]) if len(row) > 2 else 0
+
+            text_index = indices.get("text", 4)  # 字幕テキスト列のデフォルトインデックス調整
+            text = row[text_index] if text_index < len(row) else ""
+
             return SubtitleItem(
                 index=index,
                 start_ms=start_ms,
                 end_ms=end_ms,
                 text=text
             )
-            
+
         except (ValueError, IndexError) as e:
             print(f"標準字幕作成エラー (行{row_index}): {e}")
             return None
