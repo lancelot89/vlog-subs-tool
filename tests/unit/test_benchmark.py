@@ -716,6 +716,59 @@ class TestComprehensiveAnalysis(unittest.TestCase):
         issues = diagnostics.diagnose_performance_issues(result)
         self.assertIsInstance(issues, list)
 
+    def test_memory_tracking_cumulative_growth(self):
+        """メモリ使用量がベンチマーク全体の累積増加を正しく追跡することをテスト."""
+        from unittest.mock import MagicMock
+
+        image_set = BenchmarkImageSet()
+
+        # モックOCRエンジンでメモリ増加をシミュレート
+        mock_ocr = MagicMock()
+
+        # メモリ使用量を段階的に増加させるモック
+        memory_values = [100.0, 120.0, 150.0, 180.0, 200.0]  # 段階的増加
+        memory_call_count = 0
+
+        def mock_get_memory():
+            nonlocal memory_call_count
+            if memory_call_count < len(memory_values):
+                value = memory_values[memory_call_count]
+                memory_call_count += 1
+                return value
+            return memory_values[-1]
+
+        # get_memory_usage関数をモック化
+        import app.core.benchmark
+        original_get_memory = app.core.benchmark.get_memory_usage
+        app.core.benchmark.get_memory_usage = mock_get_memory
+
+        try:
+            # テスト画像を制限して実行
+            image_set.images = {"small_text": "test.png"}
+            image_set.expected_results = {"small_text": "test"}
+
+            # ダミー画像作成
+            test_image_path = image_set.base_dir / "test.png"
+            image_set.base_dir.mkdir(exist_ok=True)
+            test_image_path.touch()
+
+            mock_ocr.extract_text.return_value = "test result"
+
+            benchmark = OCRBenchmark(mock_ocr, image_set)
+            result = benchmark.run_full_benchmark()
+
+            # メモリ使用量が累積増加を反映していることを確認
+            # ベースライン値からの増分が正しく記録されていることを確認
+            self.assertGreater(result.memory_usage, 0)  # 何らかのメモリ増加が記録されている
+            self.assertEqual(result.memory_usage, 20.0)  # ベースライン(100) → ピーク(120) = 20MB増加
+
+            # ダミーファイル削除
+            test_image_path.unlink()
+
+        finally:
+            # 元の関数に戻す
+            app.core.benchmark.get_memory_usage = original_get_memory
+
 
 if __name__ == '__main__':
     unittest.main()

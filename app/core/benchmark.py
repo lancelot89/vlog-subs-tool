@@ -403,7 +403,10 @@ class OCRBenchmark:
         processing_times = {}
         accuracy_scores = {}
         errors = {}
-        memory_usage = 0.0
+
+        # ベンチマーク開始時のベースラインメモリを測定
+        baseline_memory = get_memory_usage()
+        peak_memory = baseline_memory
 
         # 各テスト画像でベンチマーク実行
         for image_key in self.image_set.list_available_images():
@@ -416,7 +419,6 @@ class OCRBenchmark:
             logger.info("ベンチマーク実行中: %s", image_key)
 
             start_time = time.time()
-            start_memory = get_memory_usage()
 
             try:
                 # OCR実行
@@ -439,9 +441,9 @@ class OCRBenchmark:
                 processing_times[image_key] = processing_time
                 accuracy_scores[image_key] = accuracy
 
-                # メモリ使用量更新
-                current_memory = get_memory_usage() - start_memory
-                memory_usage = max(memory_usage, current_memory)
+                # 絶対的なピークメモリ使用量を追跡
+                current_memory = get_memory_usage()
+                peak_memory = max(peak_memory, current_memory)
 
                 logger.debug("結果 %s: 時間=%.3fs, 精度=%.3f, 期待=\"%s\", 実際=\"%s\"",
                            image_key, processing_time, accuracy, expected_text, extracted_text)
@@ -452,12 +454,15 @@ class OCRBenchmark:
                 logger.error("ベンチマークエラー %s: %s", image_key, error_msg)
 
         # 結果をまとめて返す
+        # ベースラインからの最大増加量を計算
+        max_memory_increase = peak_memory - baseline_memory
+
         return BenchmarkResult(
             platform=platform.system(),
             cpu_info=get_cpu_info(),
             processing_time=processing_times,
             accuracy_score=accuracy_scores,
-            memory_usage=memory_usage,
+            memory_usage=max_memory_increase,
             thread_config=get_current_thread_config(),
             ocr_settings=self._get_ocr_settings(),
             timestamp=datetime.now().isoformat(),
