@@ -634,16 +634,16 @@ class SimplePaddleOCREngine:
         # プロセスはタイムアウト時に強制終了可能でスレッドリークを防ぐ
         try:
             return self._run_ocr_in_process(image, timeout_seconds)
+        except TimeoutError:
+            # タイムアウトエラーは伝播させてフォールバックでの再フリーズを防ぐ
+            logger.error("Process-based OCR timed out on Apple Silicon, aborting to prevent re-freeze")
+            raise
         except Exception as e:
             logger.error("Process-based OCR failed on Apple Silicon: %s", e)
-            # プロセス実行に失敗した場合、エンジンが無効化されていたら再初期化
-            if self._ocr is None:
-                logger.warning("Reinitializing OCR engine for fallback execution")
-                if not self.initialize():
-                    raise RuntimeError("Failed to reinitialize OCR engine for fallback")
-            # 通常のスレッドベース実行にフォールバック
-            logger.warning("Falling back to direct OCR execution")
-            return self._ocr.ocr(image)  # type: ignore[operator]
+            # プロセス作成などの技術的な失敗の場合のみフォールバック
+            # ただし、直接実行も同様にフリーズする可能性があるため空の結果を返す
+            logger.warning("Process creation failed, returning empty OCR result to avoid potential freeze")
+            return []
 
     def _run_ocr_in_process(self, image: np.ndarray, timeout_seconds: int) -> Any:
         """プロセスベースでOCRを実行（Apple Silicon専用）"""

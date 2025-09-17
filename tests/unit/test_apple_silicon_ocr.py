@@ -123,11 +123,9 @@ class TestAppleSiliconOCR(unittest.TestCase):
                 self.engine._ocr.ocr.return_value = [{"fallback": "result"}]
                 return True
 
-            with patch.object(self.engine, 'initialize', side_effect=mock_initialize):
-                # Process timeout should trigger fallback, which should succeed
-                result = self.engine._run_ocr_with_timeout(test_image, timeout_seconds=1)
-                # Verify fallback was executed successfully
-                self.assertEqual(result, [{"fallback": "result"}])
+            # Process timeout should raise TimeoutError (no fallback to avoid re-freeze)
+            with self.assertRaises(TimeoutError):
+                self.engine._run_ocr_with_timeout(test_image, timeout_seconds=1)
 
             # Verify that the process was terminated
             mock_process.terminate.assert_called_once()
@@ -233,12 +231,11 @@ class TestAppleSiliconOCR(unittest.TestCase):
 
         # Mock multiprocessing to raise an exception
         with patch('multiprocessing.Process', side_effect=Exception("Process creation failed")):
-            # Test that fallback to direct execution works
+            # Test that empty result is returned when process creation fails
             result = self.engine._run_ocr_with_timeout(test_image, timeout_seconds=1)
 
-            # Verify direct OCR execution was called as fallback
-            mock_ocr.ocr.assert_called_once_with(test_image)
-            self.assertEqual(result, [{"fallback": "result"}])
+            # Verify empty result is returned to avoid potential freeze
+            self.assertEqual(result, [])
 
 
 if __name__ == '__main__':
