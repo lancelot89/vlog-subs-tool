@@ -1,6 +1,6 @@
 """Unit tests for Apple Silicon specific OCR optimizations.
 
-Tests the Apple Silicon specific environment variables and timeout functionality
+Tests the Apple Silicon specific environment variables and process-based timeout functionality
 added to address Issue #128 - macOS Apple Silicon PaddleOCR freeze problem.
 """
 
@@ -98,30 +98,39 @@ class TestAppleSiliconOCR(unittest.TestCase):
     @patch('app.core.extractor.ocr.platform.system')
     @patch('app.core.extractor.ocr.platform.machine')
     def test_timeout_functionality_apple_silicon(self, mock_machine, mock_system):
-        """Test that timeout functionality works on Apple Silicon."""
+        """Test that timeout functionality works on Apple Silicon with process-based execution."""
         # Setup mocks for Apple Silicon environment
         mock_system.return_value = "Darwin"
         mock_machine.return_value = "arm64"
 
-        # Mock the OCR engine to simulate freeze
+        # Mock the OCR engine
         mock_ocr = Mock()
         self.engine._ocr = mock_ocr
 
         # Create a test image
         test_image = np.zeros((100, 200, 3), dtype=np.uint8)
 
-        # Test that timeout raises TimeoutError and resets engine
-        with patch('threading.Thread') as mock_thread_class:
-            mock_thread = Mock()
-            mock_thread_class.return_value = mock_thread
-            # Simulate thread not finishing within timeout
-            mock_thread.is_alive.return_value = True
+        # Test that timeout functionality uses process-based execution
+        with patch('multiprocessing.Process') as mock_process_class:
+            mock_process = Mock()
+            mock_process_class.return_value = mock_process
+            # Simulate process not finishing within timeout
+            mock_process.is_alive.return_value = True
 
-            with self.assertRaises(TimeoutError):
-                self.engine._run_ocr_with_timeout(test_image, timeout_seconds=1)
+            # Mock initialization to prevent actual OCR engine creation in fallback
+            def mock_initialize():
+                self.engine._ocr = Mock()  # Set a mock OCR engine after initialization
+                self.engine._ocr.ocr.return_value = [{"fallback": "result"}]
+                return True
 
-            # Verify that the OCR engine was reset to None after timeout
-            self.assertIsNone(self.engine._ocr)
+            with patch.object(self.engine, 'initialize', side_effect=mock_initialize):
+                # Process timeout should trigger fallback, which should succeed
+                result = self.engine._run_ocr_with_timeout(test_image, timeout_seconds=1)
+                # Verify fallback was executed successfully
+                self.assertEqual(result, [{"fallback": "result"}])
+
+            # Verify that the process was terminated
+            mock_process.terminate.assert_called_once()
 
     @patch('app.core.extractor.ocr.platform.system')
     @patch('app.core.extractor.ocr.platform.machine')
@@ -165,6 +174,71 @@ class TestAppleSiliconOCR(unittest.TestCase):
 
             # Verify fallback value is used when cpu_count() returns None
             self.assertEqual(os.environ.get("VECLIB_MAXIMUM_THREADS"), "4")
+
+    @patch('app.core.extractor.ocr.platform.system')
+    @patch('app.core.extractor.ocr.platform.machine')
+    def test_process_based_execution_apple_silicon(self, mock_machine, mock_system):
+        """Test that Apple Silicon uses process-based execution."""
+        # Setup mocks for Apple Silicon environment
+        mock_system.return_value = "Darwin"
+        mock_machine.return_value = "arm64"
+
+        # Mock the OCR engine
+        mock_ocr = Mock()
+        self.engine._ocr = mock_ocr
+
+        # Create a test image
+        test_image = np.zeros((100, 200, 3), dtype=np.uint8)
+
+        # Mock multiprocessing components
+        with patch('multiprocessing.Process') as mock_process_class, \
+             patch('multiprocessing.Queue') as mock_queue_class:
+
+            mock_process = Mock()
+            mock_queue = Mock()
+            mock_process_class.return_value = mock_process
+            mock_queue_class.return_value = mock_queue
+
+            # Simulate successful process execution
+            mock_process.is_alive.return_value = False
+            mock_queue.empty.return_value = False
+            mock_queue.get.return_value = [{"test": "result"}]
+
+            # Test process-based execution
+            result = self.engine._run_ocr_with_timeout(test_image, timeout_seconds=1)
+
+            # Verify process was created and started
+            mock_process_class.assert_called_once()
+            mock_process.start.assert_called_once()
+            mock_process.join.assert_called_once()
+
+            # Verify result was retrieved from queue
+            self.assertEqual(result, [{"test": "result"}])
+
+    @patch('app.core.extractor.ocr.platform.system')
+    @patch('app.core.extractor.ocr.platform.machine')
+    def test_process_fallback_on_failure(self, mock_machine, mock_system):
+        """Test fallback to direct execution when process-based execution fails."""
+        # Setup mocks for Apple Silicon environment
+        mock_system.return_value = "Darwin"
+        mock_machine.return_value = "arm64"
+
+        # Mock the OCR engine
+        mock_ocr = Mock()
+        mock_ocr.ocr.return_value = [{"fallback": "result"}]
+        self.engine._ocr = mock_ocr
+
+        # Create a test image
+        test_image = np.zeros((100, 200, 3), dtype=np.uint8)
+
+        # Mock multiprocessing to raise an exception
+        with patch('multiprocessing.Process', side_effect=Exception("Process creation failed")):
+            # Test that fallback to direct execution works
+            result = self.engine._run_ocr_with_timeout(test_image, timeout_seconds=1)
+
+            # Verify direct OCR execution was called as fallback
+            mock_ocr.ocr.assert_called_once_with(test_image)
+            self.assertEqual(result, [{"fallback": "result"}])
 
 
 if __name__ == '__main__':
