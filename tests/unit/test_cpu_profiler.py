@@ -209,15 +209,30 @@ DESKTOP,Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz,8,16
         # Also need to mock the instance variable
         self.profiler.machine = "x86_64"
 
-        # Mock /proc/cpuinfo content
+        # Mock /proc/cpuinfo content for single socket system
         cpuinfo_content = """processor	: 0
 model name	: AMD Ryzen 5 3600 6-Core Processor
+physical id	: 0
+core id		: 0
 processor	: 1
 model name	: AMD Ryzen 5 3600 6-Core Processor
+physical id	: 0
+core id		: 1
 processor	: 2
 model name	: AMD Ryzen 5 3600 6-Core Processor
+physical id	: 0
+core id		: 2
+processor	: 3
+model name	: AMD Ryzen 5 3600 6-Core Processor
+physical id	: 0
 core id		: 0
+processor	: 4
+model name	: AMD Ryzen 5 3600 6-Core Processor
+physical id	: 0
 core id		: 1
+processor	: 5
+model name	: AMD Ryzen 5 3600 6-Core Processor
+physical id	: 0
 core id		: 2
 flags		: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl nonstop_tsc cpuid extd_apicid aperfmperf pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpb cat_l3 cdp_l3 hw_pstate sme ssbd mba sev ibrs ibpb stibp vmmcall fsgsbase bmi1 avx2 smep bmi2 cqm rdt_a rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local clzero irperf xsaveerptr rdpru wbnoinvd arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold avic v_vmsave_vmload vgif umip rdpid overflow_recov succor smca
 """
@@ -227,10 +242,53 @@ flags		: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36
 
         self.assertEqual(profile.architecture, "x86_64")
         self.assertEqual(profile.vendor, "AMD")
-        self.assertEqual(profile.cores_physical, 3)  # 3 unique core IDs
-        self.assertEqual(profile.cores_logical, 3)   # 3 processors
+        self.assertEqual(profile.cores_physical, 3)  # 3 unique (physical_id, core_id) pairs: (0,0), (0,1), (0,2)
+        self.assertEqual(profile.cores_logical, 6)   # 6 processors (with hyperthreading)
         self.assertEqual(profile.generation, 2)      # Ryzen 3xxx = Zen 2
         self.assertEqual(profile.name, "AMD Ryzen 5 3600 6-Core Processor")
+        self.assertEqual(profile.platform_name, "Linux")
+        self.assertIn("AVX2", profile.features)
+        self.assertIn("SSE4.2", profile.features)
+
+    @patch('builtins.open', new_callable=mock_open)
+    @patch('app.core.cpu_profiler.platform.system')
+    @patch('app.core.cpu_profiler.platform.machine')
+    def test_detect_linux_cpu_multi_socket(self, mock_machine, mock_system, mock_file):
+        """Test Linux CPU detection for multi-socket systems."""
+        mock_system.return_value = "Linux"
+        mock_machine.return_value = "x86_64"
+
+        # Also need to mock the instance variable
+        self.profiler.machine = "x86_64"
+
+        # Mock /proc/cpuinfo content for dual socket system
+        cpuinfo_content = """processor	: 0
+model name	: Intel(R) Xeon(R) CPU E5-2660 v3 @ 2.60GHz
+physical id	: 0
+core id		: 0
+processor	: 1
+model name	: Intel(R) Xeon(R) CPU E5-2660 v3 @ 2.60GHz
+physical id	: 0
+core id		: 1
+processor	: 2
+model name	: Intel(R) Xeon(R) CPU E5-2660 v3 @ 2.60GHz
+physical id	: 1
+core id		: 0
+processor	: 3
+model name	: Intel(R) Xeon(R) CPU E5-2660 v3 @ 2.60GHz
+physical id	: 1
+core id		: 1
+flags		: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm cpuid_fault epb invpcid_single pti ssbd ibrs ibpb stibp tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm xsaveopt cqm_llc cqm_occup_llc dtherm ida arat pln pts md_clear flush_l1d
+"""
+        mock_file.return_value.read.return_value = cpuinfo_content
+
+        profile = self.profiler._detect_linux_cpu()
+
+        self.assertEqual(profile.architecture, "x86_64")
+        self.assertEqual(profile.vendor, "Intel")
+        self.assertEqual(profile.cores_physical, 4)  # 4 unique (physical_id, core_id) pairs: (0,0), (0,1), (1,0), (1,1)
+        self.assertEqual(profile.cores_logical, 4)   # 4 processors
+        self.assertEqual(profile.name, "Intel(R) Xeon(R) CPU E5-2660 v3 @ 2.60GHz")
         self.assertEqual(profile.platform_name, "Linux")
         self.assertIn("AVX2", profile.features)
         self.assertIn("SSE4.2", profile.features)

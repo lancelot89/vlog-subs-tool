@@ -187,9 +187,21 @@ class CPUProfiler:
             processor_matches = re.findall(r'^processor\s*:', content, re.MULTILINE)
             logical_cores = len(processor_matches)
 
-            # Try to get physical cores
+            # Try to get physical cores by counting unique (physical id, core id) pairs
+            # This handles multi-socket systems correctly
+            physical_id_matches = re.findall(r'^physical id\s*:\s*(\d+)', content, re.MULTILINE)
             core_id_matches = re.findall(r'^core id\s*:\s*(\d+)', content, re.MULTILINE)
-            physical_cores = len(set(core_id_matches)) if core_id_matches else logical_cores
+
+            if physical_id_matches and core_id_matches and len(physical_id_matches) == len(core_id_matches):
+                # Count unique (physical_id, core_id) pairs for multi-socket systems
+                unique_cores = set(zip(physical_id_matches, core_id_matches))
+                physical_cores = len(unique_cores)
+            elif core_id_matches:
+                # Fallback to unique core IDs (single socket system)
+                physical_cores = len(set(core_id_matches))
+            else:
+                # No core id information available, assume logical = physical
+                physical_cores = logical_cores
 
             vendor = self._extract_vendor(name)
             generation = self._extract_generation(name, vendor)
