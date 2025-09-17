@@ -42,6 +42,8 @@ import queue
 import subprocess
 import re
 
+from app.core.cpu_profiler import get_adaptive_thread_config
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -65,101 +67,8 @@ except Exception:  # pragma: no cover - paddlex is optional
     PADDLEX_AVAILABLE = False
 
 # ---------------------------------------------------------------------------
-# Windows Performance Optimization Helpers ---------------------------------
+# Legacy helpers - now replaced by cpu_profiler module ---------------------
 # ---------------------------------------------------------------------------
-
-def _get_cpu_info():
-    """Get CPU information for Windows optimization."""
-    try:
-        if platform.system() == "Windows":
-            # Use wmic to get CPU information
-            result = subprocess.run(
-                ["wmic", "cpu", "get", "Name,NumberOfCores,NumberOfLogicalProcessors", "/format:csv"],
-                capture_output=True, text=True, timeout=5
-            )
-            if result.returncode == 0:
-                lines = [line.strip() for line in result.stdout.split('\n') if line.strip()]
-                for line in lines[1:]:  # Skip header
-                    parts = line.split(',')
-                    if len(parts) >= 3:
-                        name = parts[1] if len(parts) > 1 else ""
-                        cores = parts[2] if len(parts) > 2 else "0"
-                        logical = parts[3] if len(parts) > 3 else "0"
-                        return {
-                            "name": name,
-                            "cores": int(cores) if cores.isdigit() else 0,
-                            "logical_processors": int(logical) if logical.isdigit() else 0
-                        }
-        else:
-            # For non-Windows, use /proc/cpuinfo
-            try:
-                with open('/proc/cpuinfo', 'r') as f:
-                    content = f.read()
-                    name_match = re.search(r'model name\s*:\s*(.+)', content)
-                    name = name_match.group(1).strip() if name_match else "Unknown"
-
-                    # Count processor entries with flexible whitespace handling
-                    processor_matches = re.findall(r'^processor\s*:', content, re.MULTILINE)
-                    cores = len(processor_matches)
-
-                    return {
-                        "name": name,
-                        "cores": cores,
-                        "logical_processors": cores
-                    }
-            except Exception:
-                pass
-    except Exception as e:
-        logger.debug("Failed to get CPU info: %s", e)
-
-    # Fallback
-    return {
-        "name": "Unknown",
-        "cores": os.cpu_count() or 4,
-        "logical_processors": os.cpu_count() or 4
-    }
-
-def _get_cpu_generation(cpu_name):
-    """Extract Intel CPU generation from name."""
-    if "Intel" in cpu_name:
-        # Look for patterns like "i7-10700K" or "i5-11400"
-        match = re.search(r'i[3579]-(\d{1,2})\d{3}', cpu_name)
-        if match:
-            gen_str = match.group(1)
-            # Handle single digit (8th gen) vs double digit (10th gen+)
-            if len(gen_str) == 1:
-                return int(gen_str)
-            else:
-                return int(gen_str)
-        # Look for newer naming like "12th Gen"
-        match = re.search(r'(\d+)th Gen', cpu_name)
-        if match:
-            return int(match.group(1))
-    return 8  # Conservative default
-
-def _get_optimal_windows_threads(cpu_info):
-    """Calculate optimal thread count for Windows OCR performance."""
-    cpu_count = cpu_info.get("logical_processors", os.cpu_count() or 4)
-    cpu_name = cpu_info.get("name", "")
-    cpu_generation = _get_cpu_generation(cpu_name)
-
-    logger.debug("CPU: %s, Generation: %d, Logical CPUs: %d", cpu_name, cpu_generation, cpu_count)
-
-    # Intel 10th generation and newer can handle more aggressive threading
-    if cpu_generation >= 10 and "Intel" in cpu_name:
-        optimal = min(6, max(2, cpu_count))
-    # AMD Ryzen processors generally handle threading well
-    elif "AMD" in cpu_name and ("Ryzen" in cpu_name or "EPYC" in cpu_name):
-        optimal = min(6, max(2, cpu_count))
-    # Conservative setting for older Intel CPUs (8-9th gen) - cap at 3 threads
-    elif "Intel" in cpu_name:
-        optimal = min(3, max(2, cpu_count // 2))
-    # Very conservative for unknown CPUs
-    else:
-        optimal = min(3, max(2, cpu_count // 4))
-
-    logger.debug("Calculated optimal thread count: %d", optimal)
-    return optimal
 
 # ---------------------------------------------------------------------------
 # Helper data structures ----------------------------------------------------
@@ -357,45 +266,40 @@ class SimplePaddleOCREngine:
         os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
         os.environ.setdefault("FLAGS_call_stack_level", "2")
 
-        # Apple Silicon specific optimizations
-        if platform.system() == "Darwin" and platform.machine() == "arm64":  # pragma: no cover - platform specific
-            # Optimize for Apple Silicon M1/M2/M3 processors
-            os.environ.setdefault("VECLIB_MAXIMUM_THREADS", str(min(8, os.cpu_count() or 4)))
-            os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")  # Disable OpenBLAS to avoid conflicts
-            os.environ.setdefault("MKL_NUM_THREADS", "1")
-            os.environ.setdefault("PADDLE_CPU_ONLY", "1")
-            os.environ.setdefault("BLAS", "Accelerate")  # Prefer Apple Accelerate framework
-            os.environ.setdefault("FLAGS_use_mkldnn", "false")  # Disable MKLDNN on Apple Silicon
-            os.environ.setdefault("FLAGS_allocator_strategy", "auto_growth")
-            logger.debug("Applied Apple Silicon specific PaddleOCR environment tweaks")
+        # Use adaptive CPU profiling for optimal performance across all platforms
+        try:
+            thread_config = get_adaptive_thread_config()
 
-        if platform.system() == "Windows":  # pragma: no cover - platform specific
-            # Get CPU information for optimal thread configuration
-            cpu_info = _get_cpu_info()
-            optimal_threads = _get_optimal_windows_threads(cpu_info)
+            # Apply the optimized environment variables
+            env_vars = thread_config.to_env_vars()
+            for key, value in env_vars.items():
+                os.environ.setdefault(key, value)
 
-            # Apply optimized threading configuration
-            os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
-            os.environ.setdefault("OMP_NUM_THREADS", str(optimal_threads))
-            os.environ.setdefault("OPENBLAS_NUM_THREADS", str(optimal_threads))
-            os.environ.setdefault("PADDLE_CPU_ONLY", "1")
-            os.environ.setdefault("PYTHONPATH", "")
+            # Platform-specific additional optimizations
+            if platform.system() == "Darwin" and platform.machine() == "arm64":
+                # Apple Silicon additional tweaks
+                os.environ.setdefault("PADDLE_CPU_ONLY", "1")
+                os.environ.setdefault("BLAS", "Accelerate")  # Prefer Apple Accelerate framework
+                os.environ.setdefault("FLAGS_use_mkldnn", "false")  # Disable MKLDNN on Apple Silicon
+                os.environ.setdefault("FLAGS_allocator_strategy", "auto_growth")
+                logger.debug("Applied Apple Silicon specific PaddleOCR environment tweaks")
 
-            # Intel specific optimizations
-            if "Intel" in cpu_info.get("name", ""):
-                os.environ.setdefault("MKL_NUM_THREADS", str(optimal_threads))
-                os.environ.setdefault("INTEL_NUM_THREADS", str(optimal_threads))
+            elif platform.system() == "Windows":
+                # Windows additional tweaks for stability
+                os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+                os.environ.setdefault("PADDLE_CPU_ONLY", "1")
+                os.environ.setdefault("PYTHONPATH", "")
+                os.environ.setdefault("PADDLE_SKIP_GPU_MEMORY_INIT", "1")
+                os.environ.setdefault("FLAGS_allocator_strategy", "auto_growth")
+                logger.debug("Applied Windows stability tweaks")
 
-            # AMD specific optimizations
-            elif "AMD" in cpu_info.get("name", ""):
-                os.environ.setdefault("OPENBLAS_CORETYPE", "RYZEN")
+            logger.info("Applied adaptive CPU optimization: %s", thread_config)
 
-            # Windows環境でのvector<bool> subscriptエラー回避
-            os.environ.setdefault("PADDLE_SKIP_GPU_MEMORY_INIT", "1")
-            os.environ.setdefault("FLAGS_allocator_strategy", "auto_growth")
-
-            logger.info("Applied Windows performance optimizations: %d threads for %s",
-                       optimal_threads, cpu_info.get("name", "Unknown CPU"))
+        except Exception as e:
+            logger.warning("Failed to apply adaptive CPU optimization, using fallback: %s", e)
+            # Fallback to basic configuration
+            os.environ.setdefault("OMP_NUM_THREADS", "2")
+            os.environ.setdefault("OPENBLAS_NUM_THREADS", "2")
 
         try:
             models_root = self._resolve_models_root()
@@ -411,14 +315,31 @@ class SimplePaddleOCREngine:
                 else self.language
             )
 
-            # Windows環境でのvector<bool> subscriptエラー回避のための設定
+            # Cross-platform progressive configuration based on CPU profile
             is_windows = platform.system() == "Windows"
+
+            # Get CPU profile for intelligent configuration selection
+            try:
+                from app.core.cpu_profiler import CPUProfiler
+                profiler = CPUProfiler()
+                cpu_profile = profiler.detect_cpu_profile()
+
+                # Determine if we can use aggressive optimization based on CPU profile
+                use_aggressive = (
+                    (cpu_profile.vendor == "Intel" and cpu_profile.generation and cpu_profile.generation >= 10) or
+                    (cpu_profile.vendor == "AMD" and cpu_profile.generation and cpu_profile.generation >= 2) or  # Zen2+
+                    (cpu_profile.vendor == "Apple")
+                )
+
+                logger.debug("CPU Profile: %s %s gen %s, using aggressive: %s",
+                           cpu_profile.vendor, cpu_profile.architecture, cpu_profile.generation, use_aggressive)
+
+            except Exception as e:
+                logger.warning("Failed to get CPU profile for configuration selection: %s", e)
+                use_aggressive = False
 
             if is_windows:
                 # Windows環境では段階的に性能向上設定を試行
-                cpu_info = _get_cpu_info()
-                cpu_generation = _get_cpu_generation(cpu_info.get("name", ""))
-
                 config_candidates = [
                     # Phase 1: 積極的性能最適化 (新しいCPU向け)
                     {
@@ -431,7 +352,7 @@ class SimplePaddleOCREngine:
                         "drop_score": 0.5,
                         "enable_mkldnn": True,  # MKL-DNN有効化
                         "max_text_length": 25,
-                    } if cpu_generation >= 10 else None,
+                    } if use_aggressive else None,
                     # Phase 2: 中程度の最適化
                     {
                         "text_detection_model_dir": str(det_dir.resolve()),
