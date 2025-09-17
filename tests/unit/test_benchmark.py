@@ -679,6 +679,43 @@ class TestComprehensiveAnalysis(unittest.TestCase):
         self.assertIsInstance(analysis_result["result"], BenchmarkResult)
         self.assertIsInstance(analysis_result["text_report"], str)
 
+    def test_diagnose_platform_issues_with_non_numeric_omp_threads(self):
+        """OMP_NUM_THREADSが非数値の場合のテスト."""
+        diagnostics = PerformanceDiagnostics()
+
+        # 非数値のOMP_NUM_THREADSを持つ結果
+        result = BenchmarkResult(
+            platform="Windows",
+            cpu_info="Intel Core i7-10700K",
+            processing_time={"small_text": 6.0},  # 遅い処理時間
+            accuracy_score={"small_text": 0.9},
+            memory_usage=150.0,
+            thread_config={"OMP_NUM_THREADS": "auto"},  # 非数値
+            ocr_settings={"language": "ja"},
+            timestamp="2025-01-01T12:00:00",
+            errors={}
+        )
+
+        # ValueErrorが発生しないことを確認
+        issues = diagnostics.diagnose_performance_issues(result)
+
+        # 適切な診断結果が返されることを確認
+        self.assertIsInstance(issues, list)
+
+        # Windows固有の問題が検出されることを確認
+        windows_issues = [issue for issue in issues if "Windows" in issue.description]
+        self.assertTrue(len(windows_issues) > 0)
+
+        # カンマ区切り値のテスト
+        result.thread_config = {"OMP_NUM_THREADS": "1,2,3,4"}
+        issues = diagnostics.diagnose_performance_issues(result)
+        self.assertIsInstance(issues, list)
+
+        # 空文字列のテスト
+        result.thread_config = {"OMP_NUM_THREADS": ""}
+        issues = diagnostics.diagnose_performance_issues(result)
+        self.assertIsInstance(issues, list)
+
 
 if __name__ == '__main__':
     unittest.main()

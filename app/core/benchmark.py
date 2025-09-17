@@ -691,7 +691,17 @@ class PerformanceDiagnostics:
             if "intel" in cpu_info:
                 thread_config = result.thread_config
                 omp_threads = thread_config.get("OMP_NUM_THREADS")
-                if not omp_threads or int(omp_threads) < 4:
+
+                # OMP_NUM_THREADSを安全に数値変換
+                omp_threads_num = None
+                if omp_threads:
+                    try:
+                        omp_threads_num = int(omp_threads)
+                    except (ValueError, TypeError):
+                        # "auto"やカンマ区切り値などの場合は無視
+                        pass
+
+                if not omp_threads or omp_threads_num is None or omp_threads_num < 4:
                     issues.append(Issue(
                         severity="Medium",
                         description="Intel CPUでスレッド数が最適化されていない",
