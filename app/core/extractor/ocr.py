@@ -97,7 +97,11 @@ def _get_cpu_info():
                     content = f.read()
                     name_match = re.search(r'model name\s*:\s*(.+)', content)
                     name = name_match.group(1).strip() if name_match else "Unknown"
-                    cores = content.count('processor\t:')
+
+                    # Count processor entries with flexible whitespace handling
+                    processor_matches = re.findall(r'^processor\s*:', content, re.MULTILINE)
+                    cores = len(processor_matches)
+
                     return {
                         "name": name,
                         "cores": cores,
