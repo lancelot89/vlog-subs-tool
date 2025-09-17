@@ -39,6 +39,8 @@ import time
 import multiprocessing
 import pickle
 import queue
+import subprocess
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +63,103 @@ try:  # pragma: no cover - optional dependency detection
     PADDLEX_AVAILABLE = True
 except Exception:  # pragma: no cover - paddlex is optional
     PADDLEX_AVAILABLE = False
+
+# ---------------------------------------------------------------------------
+# Windows Performance Optimization Helpers ---------------------------------
+# ---------------------------------------------------------------------------
+
+def _get_cpu_info():
+    """Get CPU information for Windows optimization."""
+    try:
+        if platform.system() == "Windows":
+            # Use wmic to get CPU information
+            result = subprocess.run(
+                ["wmic", "cpu", "get", "Name,NumberOfCores,NumberOfLogicalProcessors", "/format:csv"],
+                capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0:
+                lines = [line.strip() for line in result.stdout.split('\n') if line.strip()]
+                for line in lines[1:]:  # Skip header
+                    parts = line.split(',')
+                    if len(parts) >= 3:
+                        name = parts[1] if len(parts) > 1 else ""
+                        cores = parts[2] if len(parts) > 2 else "0"
+                        logical = parts[3] if len(parts) > 3 else "0"
+                        return {
+                            "name": name,
+                            "cores": int(cores) if cores.isdigit() else 0,
+                            "logical_processors": int(logical) if logical.isdigit() else 0
+                        }
+        else:
+            # For non-Windows, use /proc/cpuinfo
+            try:
+                with open('/proc/cpuinfo', 'r') as f:
+                    content = f.read()
+                    name_match = re.search(r'model name\s*:\s*(.+)', content)
+                    name = name_match.group(1).strip() if name_match else "Unknown"
+
+                    # Count processor entries with flexible whitespace handling
+                    processor_matches = re.findall(r'^processor\s*:', content, re.MULTILINE)
+                    cores = len(processor_matches)
+
+                    return {
+                        "name": name,
+                        "cores": cores,
+                        "logical_processors": cores
+                    }
+            except Exception:
+                pass
+    except Exception as e:
+        logger.debug("Failed to get CPU info: %s", e)
+
+    # Fallback
+    return {
+        "name": "Unknown",
+        "cores": os.cpu_count() or 4,
+        "logical_processors": os.cpu_count() or 4
+    }
+
+def _get_cpu_generation(cpu_name):
+    """Extract Intel CPU generation from name."""
+    if "Intel" in cpu_name:
+        # Look for patterns like "i7-10700K" or "i5-11400"
+        match = re.search(r'i[3579]-(\d{1,2})\d{3}', cpu_name)
+        if match:
+            gen_str = match.group(1)
+            # Handle single digit (8th gen) vs double digit (10th gen+)
+            if len(gen_str) == 1:
+                return int(gen_str)
+            else:
+                return int(gen_str)
+        # Look for newer naming like "12th Gen"
+        match = re.search(r'(\d+)th Gen', cpu_name)
+        if match:
+            return int(match.group(1))
+    return 8  # Conservative default
+
+def _get_optimal_windows_threads(cpu_info):
+    """Calculate optimal thread count for Windows OCR performance."""
+    cpu_count = cpu_info.get("logical_processors", os.cpu_count() or 4)
+    cpu_name = cpu_info.get("name", "")
+    cpu_generation = _get_cpu_generation(cpu_name)
+
+    logger.debug("CPU: %s, Generation: %d, Logical CPUs: %d", cpu_name, cpu_generation, cpu_count)
+
+    # Intel 10th generation and newer can handle more aggressive threading
+    if cpu_generation >= 10 and "Intel" in cpu_name:
+        optimal = min(6, max(2, cpu_count))
+    # AMD Ryzen processors generally handle threading well
+    elif "AMD" in cpu_name and ("Ryzen" in cpu_name or "EPYC" in cpu_name):
+        optimal = min(6, max(2, cpu_count))
+    # Conservative setting for older Intel CPUs (8-9th gen) - cap at 3 threads
+    elif "Intel" in cpu_name:
+        optimal = min(3, max(2, cpu_count // 2))
+    # Very conservative for unknown CPUs
+    else:
+        optimal = min(3, max(2, cpu_count // 4))
+
+    logger.debug("Calculated optimal thread count: %d", optimal)
+    return optimal
 
 # ---------------------------------------------------------------------------
 # Helper data structures ----------------------------------------------------
@@ -271,15 +370,32 @@ class SimplePaddleOCREngine:
             logger.debug("Applied Apple Silicon specific PaddleOCR environment tweaks")
 
         if platform.system() == "Windows":  # pragma: no cover - platform specific
+            # Get CPU information for optimal thread configuration
+            cpu_info = _get_cpu_info()
+            optimal_threads = _get_optimal_windows_threads(cpu_info)
+
+            # Apply optimized threading configuration
             os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
-            os.environ.setdefault("OMP_NUM_THREADS", "1")
-            os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+            os.environ.setdefault("OMP_NUM_THREADS", str(optimal_threads))
+            os.environ.setdefault("OPENBLAS_NUM_THREADS", str(optimal_threads))
             os.environ.setdefault("PADDLE_CPU_ONLY", "1")
             os.environ.setdefault("PYTHONPATH", "")
+
+            # Intel specific optimizations
+            if "Intel" in cpu_info.get("name", ""):
+                os.environ.setdefault("MKL_NUM_THREADS", str(optimal_threads))
+                os.environ.setdefault("INTEL_NUM_THREADS", str(optimal_threads))
+
+            # AMD specific optimizations
+            elif "AMD" in cpu_info.get("name", ""):
+                os.environ.setdefault("OPENBLAS_CORETYPE", "RYZEN")
+
             # Windows環境でのvector<bool> subscriptエラー回避
             os.environ.setdefault("PADDLE_SKIP_GPU_MEMORY_INIT", "1")
             os.environ.setdefault("FLAGS_allocator_strategy", "auto_growth")
-            logger.debug("Applied Windows specific PaddleOCR environment tweaks")
+
+            logger.info("Applied Windows performance optimizations: %d threads for %s",
+                       optimal_threads, cpu_info.get("name", "Unknown CPU"))
 
         try:
             models_root = self._resolve_models_root()
@@ -298,61 +414,116 @@ class SimplePaddleOCREngine:
             # Windows環境でのvector<bool> subscriptエラー回避のための設定
             is_windows = platform.system() == "Windows"
 
-            config_candidates = [
-                # Windows環境向け安全な設定 (PaddleXの高度な機能を無効化)
-                {
-                    "text_detection_model_dir": str(det_dir.resolve()),
-                    "text_recognition_model_dir": str(rec_dir.resolve()),
-                    "lang": lang,
-                    "use_textline_orientation": False,  # Windows環境では無効化
-                    "use_gpu": False,
-                    "use_space_char": True,
-                    "drop_score": 0.5,
-                    "enable_mkldnn": False,  # MKL-DNNを無効化してエラー回避
-                    "max_text_length": 25,
-                } if is_windows else {
-                    "text_detection_model_dir": str(det_dir.resolve()),
-                    "text_recognition_model_dir": str(rec_dir.resolve()),
-                    "lang": lang,
-                    "use_textline_orientation": True,
-                    "use_gpu": False,
-                },
-                # Legacy API compatibility (Windows向け調整)
-                {
-                    "det_model_dir": str(det_dir.resolve()),
-                    "rec_model_dir": str(rec_dir.resolve()),
-                    "lang": lang,
-                    "use_angle_cls": False if is_windows else True,  # Windows環境では無効化
-                    "use_gpu": False,
-                    "enable_mkldnn": False if is_windows else True,
-                },
-                # Minimal parameters (最低限の設定)
-                {
-                    "det_model_dir": str(det_dir.resolve()),
-                    "rec_model_dir": str(rec_dir.resolve()),
-                    "lang": lang,
-                    "use_gpu": False,
-                },
-            ]
+            if is_windows:
+                # Windows環境では段階的に性能向上設定を試行
+                cpu_info = _get_cpu_info()
+                cpu_generation = _get_cpu_generation(cpu_info.get("name", ""))
+
+                config_candidates = [
+                    # Phase 1: 積極的性能最適化 (新しいCPU向け)
+                    {
+                        "text_detection_model_dir": str(det_dir.resolve()),
+                        "text_recognition_model_dir": str(rec_dir.resolve()),
+                        "lang": lang,
+                        "use_textline_orientation": True,  # 角度検出有効化
+                        "use_gpu": False,
+                        "use_space_char": True,
+                        "drop_score": 0.5,
+                        "enable_mkldnn": True,  # MKL-DNN有効化
+                        "max_text_length": 25,
+                    } if cpu_generation >= 10 else None,
+                    # Phase 2: 中程度の最適化
+                    {
+                        "text_detection_model_dir": str(det_dir.resolve()),
+                        "text_recognition_model_dir": str(rec_dir.resolve()),
+                        "lang": lang,
+                        "use_textline_orientation": False,
+                        "use_gpu": False,
+                        "use_space_char": True,
+                        "drop_score": 0.5,
+                        "enable_mkldnn": True,  # MKL-DNN有効化のみ
+                        "max_text_length": 25,
+                    },
+                    # Phase 3: 安全設定 (従来の設定)
+                    {
+                        "text_detection_model_dir": str(det_dir.resolve()),
+                        "text_recognition_model_dir": str(rec_dir.resolve()),
+                        "lang": lang,
+                        "use_textline_orientation": False,
+                        "use_gpu": False,
+                        "use_space_char": True,
+                        "drop_score": 0.5,
+                        "enable_mkldnn": False,
+                        "max_text_length": 25,
+                    },
+                    # Phase 4: Legacy API fallback
+                    {
+                        "det_model_dir": str(det_dir.resolve()),
+                        "rec_model_dir": str(rec_dir.resolve()),
+                        "lang": lang,
+                        "use_angle_cls": False,
+                        "use_gpu": False,
+                        "enable_mkldnn": False,
+                    },
+                ]
+                # Remove None entries
+                config_candidates = [config for config in config_candidates if config is not None]
+            else:
+                # 非Windows環境では従来の設定
+                config_candidates = [
+                    {
+                        "text_detection_model_dir": str(det_dir.resolve()),
+                        "text_recognition_model_dir": str(rec_dir.resolve()),
+                        "lang": lang,
+                        "use_textline_orientation": True,
+                        "use_gpu": False,
+                    },
+                    # Legacy API compatibility
+                    {
+                        "det_model_dir": str(det_dir.resolve()),
+                        "rec_model_dir": str(rec_dir.resolve()),
+                        "lang": lang,
+                        "use_angle_cls": True,
+                        "use_gpu": False,
+                        "enable_mkldnn": True,
+                    },
+                    # Minimal parameters
+                    {
+                        "det_model_dir": str(det_dir.resolve()),
+                        "rec_model_dir": str(rec_dir.resolve()),
+                        "lang": lang,
+                        "use_gpu": False,
+                    },
+                ]
 
             errors: List[str] = []
-            for config in config_candidates:
+            for i, config in enumerate(config_candidates):
                 kwargs = _create_safe_paddleocr_kwargs(config)
                 try:
+                    # Windows環境での段階的試行をログ出力
+                    if is_windows:
+                        phase_names = ["Aggressive Performance", "Moderate Optimization", "Safe Configuration", "Legacy Fallback"]
+                        phase_name = phase_names[min(i, len(phase_names) - 1)]
+                        logger.info("Trying Windows %s configuration...", phase_name)
+
                     logger.debug("Initialising PaddleOCR on %s with kwargs=%s", platform.system(), kwargs)
                     self._ocr = PaddleOCR(**kwargs)  # type: ignore[misc]
                     if self._ocr is None:
                         raise RuntimeError("PaddleOCR returned None instance")
-                    logger.info(
-                        "PaddleOCR initialised successfully on %s using configuration keys: %s",
-                        platform.system(),
-                        ", ".join(sorted(kwargs.keys())),
-                    )
+
+                    success_msg = f"PaddleOCR initialised successfully on {platform.system()}"
+                    if is_windows and i < len(phase_names):
+                        success_msg += f" using {phase_names[i]}"
+                    success_msg += f" with features: {', '.join(sorted(kwargs.keys()))}"
+                    logger.info(success_msg)
                     return True
                 except Exception as exc:  # pragma: no cover - exercised via tests
                     error_msg = f"{type(exc).__name__}: {exc}"
                     errors.append(error_msg)
-                    logger.warning("PaddleOCR initialisation failed (%s): %s", platform.system(), exc)
+                    if is_windows:
+                        logger.warning("Windows optimization phase %d failed: %s", i + 1, exc)
+                    else:
+                        logger.warning("PaddleOCR initialisation failed (%s): %s", platform.system(), exc)
                     self._ocr = None
                     continue
 
