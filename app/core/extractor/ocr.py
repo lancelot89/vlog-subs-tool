@@ -151,9 +151,9 @@ def _get_optimal_windows_threads(cpu_info):
     # AMD Ryzen processors generally handle threading well
     elif "AMD" in cpu_name and ("Ryzen" in cpu_name or "EPYC" in cpu_name):
         optimal = min(6, max(2, cpu_count))
-    # Conservative setting for older Intel CPUs (but still better than single thread)
+    # Conservative setting for older Intel CPUs (8-9th gen) - cap at 3 threads
     elif "Intel" in cpu_name:
-        optimal = min(4, max(2, cpu_count // 2))
+        optimal = min(3, max(2, cpu_count // 2))
     # Very conservative for unknown CPUs
     else:
         optimal = min(3, max(2, cpu_count // 4))
