@@ -644,7 +644,14 @@ class SimplePaddleOCREngine:
 
         if worker_thread.is_alive():
             logger.error("OCR operation timed out on Apple Silicon after %d seconds", timeout_seconds)
-            # スレッドは継続しているが、結果を返さずに処理を終了
+            logger.warning("Reinitializing PaddleOCR engine due to timeout to prevent thread leaks")
+
+            # タイムアウト時は OCR エンジンを無効化して再初期化を強制
+            # これによりハングしたスレッドの影響を受けない新しいエンジンインスタンスを作成
+            self._ocr = None
+
+            # 次回の extract_text 呼び出し時に initialize() が再実行され、
+            # 新しいPaddleOCRインスタンスが作成される
             raise TimeoutError(f"OCR operation timed out after {timeout_seconds} seconds on Apple Silicon")
 
         if exception_occurred[0] is not None:

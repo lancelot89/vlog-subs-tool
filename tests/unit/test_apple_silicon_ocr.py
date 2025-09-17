@@ -110,7 +110,7 @@ class TestAppleSiliconOCR(unittest.TestCase):
         # Create a test image
         test_image = np.zeros((100, 200, 3), dtype=np.uint8)
 
-        # Test that timeout raises TimeoutError
+        # Test that timeout raises TimeoutError and resets engine
         with patch('threading.Thread') as mock_thread_class:
             mock_thread = Mock()
             mock_thread_class.return_value = mock_thread
@@ -119,6 +119,9 @@ class TestAppleSiliconOCR(unittest.TestCase):
 
             with self.assertRaises(TimeoutError):
                 self.engine._run_ocr_with_timeout(test_image, timeout_seconds=1)
+
+            # Verify that the OCR engine was reset to None after timeout
+            self.assertIsNone(self.engine._ocr)
 
     @patch('app.core.extractor.ocr.platform.system')
     @patch('app.core.extractor.ocr.platform.machine')
