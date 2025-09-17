@@ -33,6 +33,9 @@ import sys
 
 import cv2  # type: ignore
 import numpy as np
+import signal
+import threading
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -251,6 +254,18 @@ class SimplePaddleOCREngine:
         # control and make the CPU-only configuration explicit.
         os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
         os.environ.setdefault("FLAGS_call_stack_level", "2")
+
+        # Apple Silicon specific optimizations
+        if platform.system() == "Darwin" and platform.machine() == "arm64":  # pragma: no cover - platform specific
+            # Optimize for Apple Silicon M1/M2/M3 processors
+            os.environ.setdefault("VECLIB_MAXIMUM_THREADS", str(min(8, os.cpu_count() or 4)))
+            os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")  # Disable OpenBLAS to avoid conflicts
+            os.environ.setdefault("MKL_NUM_THREADS", "1")
+            os.environ.setdefault("PADDLE_CPU_ONLY", "1")
+            os.environ.setdefault("BLAS", "Accelerate")  # Prefer Apple Accelerate framework
+            os.environ.setdefault("FLAGS_use_mkldnn", "false")  # Disable MKLDNN on Apple Silicon
+            os.environ.setdefault("FLAGS_allocator_strategy", "auto_growth")
+            logger.debug("Applied Apple Silicon specific PaddleOCR environment tweaks")
 
         if platform.system() == "Windows":  # pragma: no cover - platform specific
             os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
@@ -582,8 +597,8 @@ class SimplePaddleOCREngine:
 
             logger.debug(f"Sending image to OCR: shape={processed.shape}, dtype={processed.dtype}, contiguous={processed.flags.c_contiguous}")
 
-            # PaddleOCRの実行
-            raw_results = self._ocr.ocr(processed)  # type: ignore[operator]
+            # PaddleOCRの実行（Apple Siliconでのフリーズ対策でタイムアウト付き）
+            raw_results = self._run_ocr_with_timeout(processed, timeout_seconds=30)
 
         except IndexError as exc:
             # Windows環境でのvector<bool> subscriptエラーの特別処理
@@ -593,6 +608,9 @@ class SimplePaddleOCREngine:
             else:
                 logger.error("PaddleOCR IndexError on %s: %s", platform.system(), exc)
                 return []
+        except TimeoutError as exc:
+            logger.error("PaddleOCR timeout on %s: %s", platform.system(), exc)
+            return []
         except (MemoryError, RuntimeError, ValueError) as exc:
             logger.error("PaddleOCR memory/runtime error on %s: %s", platform.system(), exc)
             return []
@@ -603,6 +621,36 @@ class SimplePaddleOCREngine:
             return []
 
         return self._parse_ocr_results(raw_results)
+
+    def _run_ocr_with_timeout(self, image: np.ndarray, timeout_seconds: int = 30) -> Any:
+        """Apple Siliconでのフリーズ対策: タイムアウト付きでOCRを実行"""
+        if platform.system() != "Darwin" or platform.machine() != "arm64":
+            # Apple Silicon以外では通常の実行
+            return self._ocr.ocr(image)  # type: ignore[operator]
+
+        # Apple Siliconの場合はタイムアウト付きで実行
+        result = [None]
+        exception_occurred = [None]
+
+        def ocr_worker():
+            try:
+                result[0] = self._ocr.ocr(image)  # type: ignore[operator]
+            except Exception as e:
+                exception_occurred[0] = e
+
+        worker_thread = threading.Thread(target=ocr_worker, daemon=True)
+        worker_thread.start()
+        worker_thread.join(timeout=timeout_seconds)
+
+        if worker_thread.is_alive():
+            logger.error("OCR operation timed out on Apple Silicon after %d seconds", timeout_seconds)
+            # スレッドは継続しているが、結果を返さずに処理を終了
+            raise TimeoutError(f"OCR operation timed out after {timeout_seconds} seconds on Apple Silicon")
+
+        if exception_occurred[0] is not None:
+            raise exception_occurred[0]
+
+        return result[0]
 
     # ------------------------------------------------------------------
     def _parse_ocr_results(self, results: Any) -> List[OCRResult]:
