@@ -33,6 +33,12 @@ import sys
 
 import cv2  # type: ignore
 import numpy as np
+import signal
+import threading
+import time
+import multiprocessing
+import pickle
+import queue
 
 logger = logging.getLogger(__name__)
 
@@ -251,6 +257,18 @@ class SimplePaddleOCREngine:
         # control and make the CPU-only configuration explicit.
         os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
         os.environ.setdefault("FLAGS_call_stack_level", "2")
+
+        # Apple Silicon specific optimizations
+        if platform.system() == "Darwin" and platform.machine() == "arm64":  # pragma: no cover - platform specific
+            # Optimize for Apple Silicon M1/M2/M3 processors
+            os.environ.setdefault("VECLIB_MAXIMUM_THREADS", str(min(8, os.cpu_count() or 4)))
+            os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")  # Disable OpenBLAS to avoid conflicts
+            os.environ.setdefault("MKL_NUM_THREADS", "1")
+            os.environ.setdefault("PADDLE_CPU_ONLY", "1")
+            os.environ.setdefault("BLAS", "Accelerate")  # Prefer Apple Accelerate framework
+            os.environ.setdefault("FLAGS_use_mkldnn", "false")  # Disable MKLDNN on Apple Silicon
+            os.environ.setdefault("FLAGS_allocator_strategy", "auto_growth")
+            logger.debug("Applied Apple Silicon specific PaddleOCR environment tweaks")
 
         if platform.system() == "Windows":  # pragma: no cover - platform specific
             os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
@@ -582,8 +600,8 @@ class SimplePaddleOCREngine:
 
             logger.debug(f"Sending image to OCR: shape={processed.shape}, dtype={processed.dtype}, contiguous={processed.flags.c_contiguous}")
 
-            # PaddleOCRの実行
-            raw_results = self._ocr.ocr(processed)  # type: ignore[operator]
+            # PaddleOCRの実行（Apple Siliconでのフリーズ対策でタイムアウト付き）
+            raw_results = self._run_ocr_with_timeout(processed, timeout_seconds=30)
 
         except IndexError as exc:
             # Windows環境でのvector<bool> subscriptエラーの特別処理
@@ -593,6 +611,9 @@ class SimplePaddleOCREngine:
             else:
                 logger.error("PaddleOCR IndexError on %s: %s", platform.system(), exc)
                 return []
+        except TimeoutError as exc:
+            logger.error("PaddleOCR timeout on %s: %s", platform.system(), exc)
+            return []
         except (MemoryError, RuntimeError, ValueError) as exc:
             logger.error("PaddleOCR memory/runtime error on %s: %s", platform.system(), exc)
             return []
@@ -603,6 +624,87 @@ class SimplePaddleOCREngine:
             return []
 
         return self._parse_ocr_results(raw_results)
+
+    def _run_ocr_with_timeout(self, image: np.ndarray, timeout_seconds: int = 30) -> Any:
+        """Apple Siliconでのフリーズ対策: プロセスベースのタイムアウト付きOCR実行"""
+        if platform.system() != "Darwin" or platform.machine() != "arm64":
+            # Apple Silicon以外では通常の実行
+            return self._ocr.ocr(image)  # type: ignore[operator]
+
+        # Apple Siliconの場合はプロセスベースでタイムアウト付き実行
+        # プロセスはタイムアウト時に強制終了可能でスレッドリークを防ぐ
+        try:
+            return self._run_ocr_in_process(image, timeout_seconds)
+        except TimeoutError:
+            # タイムアウトエラーは伝播させてフォールバックでの再フリーズを防ぐ
+            logger.error("Process-based OCR timed out on Apple Silicon, aborting to prevent re-freeze")
+            raise
+        except Exception as e:
+            logger.error("Process-based OCR failed on Apple Silicon: %s", e)
+            # プロセス作成などの技術的な失敗の場合のみフォールバック
+            # ただし、直接実行も同様にフリーズする可能性があるため空の結果を返す
+            logger.warning("Process creation failed, returning empty OCR result to avoid potential freeze")
+            return []
+
+    def _run_ocr_in_process(self, image: np.ndarray, timeout_seconds: int) -> Any:
+        """プロセスベースでOCRを実行（Apple Silicon専用）"""
+        # プロセス間でPaddleOCRエンジンを共有できないため、
+        # 設定情報を渡して子プロセス内でエンジンを再初期化
+        engine_config = {
+            'models_root': str(self.models_root) if self.models_root else None,
+            'language': self.language,
+            'confidence_threshold': self.confidence_threshold,
+            'max_image_pixels': self.max_image_pixels,
+            'max_side_length': self.max_side_length,
+        }
+
+        # マルチプロセシング用のキューで結果を受け取る
+        result_queue = multiprocessing.Queue()
+
+        # 子プロセスでOCR実行
+        process = multiprocessing.Process(
+            target=_ocr_worker_process,
+            args=(engine_config, image, result_queue),
+            daemon=True
+        )
+
+        process.start()
+        process.join(timeout=timeout_seconds)
+
+        if process.is_alive():
+            logger.error("OCR process timed out on Apple Silicon after %d seconds", timeout_seconds)
+            # プロセスを強制終了（スレッドと違い確実に終了可能）
+            process.terminate()
+            process.join(timeout=5)  # 終了を待機
+            if process.is_alive():
+                logger.warning("Force killing OCR process")
+                process.kill()
+                process.join()
+
+            # プロセス終了後はエンジンを無効化して次回再初期化
+            self._ocr = None
+            raise TimeoutError(f"OCR process timed out after {timeout_seconds} seconds on Apple Silicon")
+
+        # プロセスが正常終了した場合は結果を取得
+        # Queue.empty()は信頼性がないため、get_nowait()でレースコンディションを回避
+        try:
+            result_data = result_queue.get_nowait()
+            if isinstance(result_data, dict) and 'error' in result_data:
+                raise Exception(result_data['error'])
+            return result_data
+        except queue.Empty:
+            # キューが空の場合
+            # プロセス終了後も結果転送が完了していない可能性があるため短時間待機して再試行
+            try:
+                result_data = result_queue.get(timeout=2.0)
+                if isinstance(result_data, dict) and 'error' in result_data:
+                    raise Exception(result_data['error'])
+                return result_data
+            except queue.Empty:
+                raise RuntimeError("OCR process completed but no result was returned")
+        except Exception as e:
+            # その他のエラー（result_dataの処理エラーなど）
+            raise e
 
     # ------------------------------------------------------------------
     def _parse_ocr_results(self, results: Any) -> List[OCRResult]:
@@ -664,6 +766,51 @@ class SimplePaddleOCREngine:
             return x, y, w, h
         except Exception:  # pragma: no cover - fallback for malformed data
             return 0, 0, 0, 0
+
+
+# ---------------------------------------------------------------------------
+# Process worker function for Apple Silicon OCR -------------------------------
+# ---------------------------------------------------------------------------
+
+def _ocr_worker_process(engine_config: Dict[str, Any], image: np.ndarray, result_queue: multiprocessing.Queue) -> None:
+    """子プロセスでOCRを実行（Apple Silicon用）"""
+    try:
+        # 子プロセス内でPaddleOCRエンジンを初期化
+        if not PADDLEOCR_AVAILABLE:
+            result_queue.put({'error': 'PaddleOCR not available in worker process'})
+            return
+
+        # Apple Silicon最適化の環境変数を設定
+        os.environ.setdefault("VECLIB_MAXIMUM_THREADS", str(min(8, os.cpu_count() or 4)))
+        os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+        os.environ.setdefault("MKL_NUM_THREADS", "1")
+        os.environ.setdefault("PADDLE_CPU_ONLY", "1")
+        os.environ.setdefault("BLAS", "Accelerate")
+        os.environ.setdefault("FLAGS_use_mkldnn", "false")
+        os.environ.setdefault("FLAGS_allocator_strategy", "auto_growth")
+        os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
+        os.environ.setdefault("FLAGS_call_stack_level", "2")
+
+        # 一時的なエンジンインスタンスを作成
+        temp_engine = SimplePaddleOCREngine(
+            language=engine_config['language'],
+            confidence_threshold=engine_config['confidence_threshold'],
+            models_root=Path(engine_config['models_root']) if engine_config['models_root'] else None,
+            max_image_pixels=engine_config['max_image_pixels'],
+            max_side_length=engine_config['max_side_length'],
+        )
+
+        # エンジンを初期化
+        if not temp_engine.initialize():
+            result_queue.put({'error': 'Failed to initialize PaddleOCR in worker process'})
+            return
+
+        # OCR実行
+        ocr_result = temp_engine._ocr.ocr(image)  # type: ignore[operator]
+        result_queue.put(ocr_result)
+
+    except Exception as e:
+        result_queue.put({'error': str(e)})
 
 
 __all__ = [
