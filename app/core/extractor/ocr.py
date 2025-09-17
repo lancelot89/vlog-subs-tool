@@ -38,6 +38,7 @@ import threading
 import time
 import multiprocessing
 import pickle
+import queue
 
 logger = logging.getLogger(__name__)
 
@@ -685,13 +686,25 @@ class SimplePaddleOCREngine:
             raise TimeoutError(f"OCR process timed out after {timeout_seconds} seconds on Apple Silicon")
 
         # プロセスが正常終了した場合は結果を取得
-        if not result_queue.empty():
-            result_data = result_queue.get()
+        # Queue.empty()は信頼性がないため、get_nowait()でレースコンディションを回避
+        try:
+            result_data = result_queue.get_nowait()
             if isinstance(result_data, dict) and 'error' in result_data:
                 raise Exception(result_data['error'])
             return result_data
-        else:
-            raise RuntimeError("OCR process completed but no result was returned")
+        except queue.Empty:
+            # キューが空の場合
+            # プロセス終了後も結果転送が完了していない可能性があるため短時間待機して再試行
+            try:
+                result_data = result_queue.get(timeout=2.0)
+                if isinstance(result_data, dict) and 'error' in result_data:
+                    raise Exception(result_data['error'])
+                return result_data
+            except queue.Empty:
+                raise RuntimeError("OCR process completed but no result was returned")
+        except Exception as e:
+            # その他のエラー（result_dataの処理エラーなど）
+            raise e
 
     # ------------------------------------------------------------------
     def _parse_ocr_results(self, results: Any) -> List[OCRResult]:

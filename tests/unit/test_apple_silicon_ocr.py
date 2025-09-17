@@ -9,6 +9,7 @@ import platform
 import unittest
 from unittest.mock import Mock, patch
 import numpy as np
+import queue
 
 from app.core.extractor.ocr import SimplePaddleOCREngine
 
@@ -199,8 +200,7 @@ class TestAppleSiliconOCR(unittest.TestCase):
 
             # Simulate successful process execution
             mock_process.is_alive.return_value = False
-            mock_queue.empty.return_value = False
-            mock_queue.get.return_value = [{"test": "result"}]
+            mock_queue.get_nowait.return_value = [{"test": "result"}]
 
             # Test process-based execution
             result = self.engine._run_ocr_with_timeout(test_image, timeout_seconds=1)
@@ -210,7 +210,8 @@ class TestAppleSiliconOCR(unittest.TestCase):
             mock_process.start.assert_called_once()
             mock_process.join.assert_called_once()
 
-            # Verify result was retrieved from queue
+            # Verify result was retrieved from queue using get_nowait
+            mock_queue.get_nowait.assert_called_once()
             self.assertEqual(result, [{"test": "result"}])
 
     @patch('app.core.extractor.ocr.platform.system')
@@ -236,6 +237,43 @@ class TestAppleSiliconOCR(unittest.TestCase):
 
             # Verify empty result is returned to avoid potential freeze
             self.assertEqual(result, [])
+
+    @patch('app.core.extractor.ocr.platform.system')
+    @patch('app.core.extractor.ocr.platform.machine')
+    def test_queue_race_condition_handling(self, mock_machine, mock_system):
+        """Test that queue race conditions are handled properly."""
+        # Setup mocks for Apple Silicon environment
+        mock_system.return_value = "Darwin"
+        mock_machine.return_value = "arm64"
+
+        # Mock the OCR engine
+        mock_ocr = Mock()
+        self.engine._ocr = mock_ocr
+
+        # Create a test image
+        test_image = np.zeros((100, 200, 3), dtype=np.uint8)
+
+        # Mock multiprocessing components
+        with patch('multiprocessing.Process') as mock_process_class, \
+             patch('multiprocessing.Queue') as mock_queue_class:
+
+            mock_process = Mock()
+            mock_queue = Mock()
+            mock_process_class.return_value = mock_process
+            mock_queue_class.return_value = mock_queue
+
+            # Simulate process finishing but queue initially empty (race condition)
+            mock_process.is_alive.return_value = False
+            mock_queue.get_nowait.side_effect = queue.Empty()
+            mock_queue.get.return_value = [{"delayed": "result"}]
+
+            # Test that result is eventually retrieved despite race condition
+            result = self.engine._run_ocr_with_timeout(test_image, timeout_seconds=1)
+
+            # Verify both get_nowait and get with timeout were called
+            mock_queue.get_nowait.assert_called_once()
+            mock_queue.get.assert_called_once_with(timeout=2.0)
+            self.assertEqual(result, [{"delayed": "result"}])
 
 
 if __name__ == '__main__':
