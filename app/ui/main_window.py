@@ -1571,6 +1571,10 @@ class MainWindow(QMainWindow):
             project_manager = get_project_manager()
             settings_manager = get_settings_manager()
 
+            # 現在の状態を保存（ロールバック用）
+            previous_project = project_manager.current_project
+            previous_file_path = project_manager.current_file_path
+
             # プロジェクトファイルを読み込み
             project_data = project_manager.load_project(Path(file_path))
 
@@ -1590,6 +1594,9 @@ class MainWindow(QMainWindow):
                 )
 
                 if reply == QMessageBox.No:
+                    # ユーザーがキャンセルした場合、ProjectManagerの状態をロールバック
+                    project_manager.current_project = previous_project
+                    project_manager.current_file_path = previous_file_path
                     return
 
             # 動画ファイルの確認
@@ -1666,18 +1673,36 @@ class MainWindow(QMainWindow):
             )
 
         except FileNotFoundError:
+            # エラー時もProjectManagerの状態をロールバック
+            try:
+                project_manager.current_project = previous_project
+                project_manager.current_file_path = previous_file_path
+            except:
+                pass
             QMessageBox.critical(
                 self,
                 "エラー",
                 f"プロジェクトファイルが見つかりません:\n{file_path}"
             )
         except ValueError as e:
+            # エラー時もProjectManagerの状態をロールバック
+            try:
+                project_manager.current_project = previous_project
+                project_manager.current_file_path = previous_file_path
+            except:
+                pass
             QMessageBox.critical(
                 self,
                 "形式エラー",
                 f"プロジェクトファイルの形式が正しくありません:\n{str(e)}"
             )
         except Exception as e:
+            # エラー時もProjectManagerの状態をロールバック
+            try:
+                project_manager.current_project = previous_project
+                project_manager.current_file_path = previous_file_path
+            except:
+                pass
             logging.error(f"プロジェクト読み込みエラー: {e}")
             QMessageBox.critical(
                 self,
