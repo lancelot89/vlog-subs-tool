@@ -91,9 +91,7 @@ class TestSubtitleCSVExporter:
 
     def test_custom_settings(self, sample_subtitles, temp_dir):
         """カスタム設定のテスト"""
-        settings = CSVExportSettings(
-            with_bom=False, include_metadata=False, delimiter=";"
-        )
+        settings = CSVExportSettings(with_bom=False, include_metadata=False, delimiter=";")
         exporter = SubtitleCSVExporter(settings)
         output_path = temp_dir / "custom.csv"
 
@@ -159,14 +157,9 @@ class TestSubtitleCSVImporter:
         importer = SubtitleCSVImporter()
 
         assert importer._detect_language_from_filename(Path("test_en.csv")) == "en"
-        assert (
-            importer._detect_language_from_filename(Path("video_zh_translated.csv"))
-            == "zh"
-        )
+        assert importer._detect_language_from_filename(Path("video_zh_translated.csv")) == "zh"
         assert importer._detect_language_from_filename(Path("korean_ko.csv")) == "ko"
-        assert (
-            importer._detect_language_from_filename(Path("japanese.csv")) == "unknown"
-        )
+        assert importer._detect_language_from_filename(Path("japanese.csv")) == "unknown"
 
     def test_parse_time_from_csv(self):
         """CSV時間解析のテスト"""
@@ -268,9 +261,7 @@ class TestTranslationWorkflowManager:
         manager = TranslationWorkflowManager(temp_dir)
         readme_path = temp_dir / "test_readme.md"
 
-        success = manager._create_workflow_readme(
-            "test_video", ["en", "zh"], readme_path
-        )
+        success = manager._create_workflow_readme("test_video", ["en", "zh"], readme_path)
         assert success
         assert readme_path.exists()
 

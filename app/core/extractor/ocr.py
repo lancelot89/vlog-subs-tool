@@ -199,9 +199,7 @@ class SimplePaddleOCREngine:
             det_dir = self.models_root / "PP-OCRv5_server_det"
             rec_dir = self.models_root / "PP-OCRv5_server_rec"
             if det_dir.exists() and rec_dir.exists():
-                logger.debug(
-                    "Using explicit PaddleOCR model directory: %s", self.models_root
-                )
+                logger.debug("Using explicit PaddleOCR model directory: %s", self.models_root)
                 return self.models_root
 
         # 2) environment variable override
@@ -238,15 +236,11 @@ class SimplePaddleOCREngine:
         # 5) additional Windows specific checks (frozen app, AppData)
         if platform.system() == "Windows":  # pragma: no cover - platform specific
             if getattr(sys, "frozen", False):
-                frozen_dir = (
-                    Path(sys.executable).parent / "app" / "models" / "paddleocr"
-                )
+                frozen_dir = Path(sys.executable).parent / "app" / "models" / "paddleocr"
                 det_dir = frozen_dir / "PP-OCRv5_server_det"
                 rec_dir = frozen_dir / "PP-OCRv5_server_rec"
                 if det_dir.exists() and rec_dir.exists():
-                    logger.debug(
-                        "Found models in frozen application directory: %s", frozen_dir
-                    )
+                    logger.debug("Found models in frozen application directory: %s", frozen_dir)
                     return frozen_dir
 
             appdata = os.environ.get("APPDATA")
@@ -296,16 +290,12 @@ class SimplePaddleOCREngine:
             if platform.system() == "Darwin" and platform.machine() == "arm64":
                 # Apple Silicon additional tweaks
                 os.environ.setdefault("PADDLE_CPU_ONLY", "1")
-                os.environ.setdefault(
-                    "BLAS", "Accelerate"
-                )  # Prefer Apple Accelerate framework
+                os.environ.setdefault("BLAS", "Accelerate")  # Prefer Apple Accelerate framework
                 os.environ.setdefault(
                     "FLAGS_use_mkldnn", "false"
                 )  # Disable MKLDNN on Apple Silicon
                 os.environ.setdefault("FLAGS_allocator_strategy", "auto_growth")
-                logger.debug(
-                    "Applied Apple Silicon specific PaddleOCR environment tweaks"
-                )
+                logger.debug("Applied Apple Silicon specific PaddleOCR environment tweaks")
 
             elif platform.system() == "Windows":
                 # Windows additional tweaks for stability
@@ -319,9 +309,7 @@ class SimplePaddleOCREngine:
             logger.info("Applied adaptive CPU optimization: %s", thread_config)
 
         except Exception as e:
-            logger.warning(
-                "Failed to apply adaptive CPU optimization, using fallback: %s", e
-            )
+            logger.warning("Failed to apply adaptive CPU optimization, using fallback: %s", e)
             # Fallback to basic configuration
             os.environ.setdefault("OMP_NUM_THREADS", "2")
             os.environ.setdefault("OPENBLAS_NUM_THREADS", "2")
@@ -332,9 +320,7 @@ class SimplePaddleOCREngine:
             rec_dir = models_root / "PP-OCRv5_server_rec"
 
             if not det_dir.exists() or not rec_dir.exists():
-                raise FileNotFoundError(
-                    f"Model directories not found: {det_dir}, {rec_dir}"
-                )
+                raise FileNotFoundError(f"Model directories not found: {det_dir}, {rec_dir}")
 
             lang = (
                 "japan"
@@ -374,9 +360,7 @@ class SimplePaddleOCREngine:
                 )
 
             except Exception as e:
-                logger.warning(
-                    "Failed to get CPU profile for configuration selection: %s", e
-                )
+                logger.warning("Failed to get CPU profile for configuration selection: %s", e)
                 use_aggressive = False
 
             if is_windows:
@@ -430,9 +414,7 @@ class SimplePaddleOCREngine:
                     },
                 ]
                 # Remove None entries
-                config_candidates = [
-                    config for config in config_candidates if config is not None
-                ]
+                config_candidates = [config for config in config_candidates if config is not None]
             else:
                 # 非Windows環境では従来の設定
                 config_candidates = [
@@ -485,9 +467,7 @@ class SimplePaddleOCREngine:
                     if self._ocr is None:
                         raise RuntimeError("PaddleOCR returned None instance")
 
-                    success_msg = (
-                        f"PaddleOCR initialised successfully on {platform.system()}"
-                    )
+                    success_msg = f"PaddleOCR initialised successfully on {platform.system()}"
                     if is_windows and i < len(phase_names):
                         success_msg += f" using {phase_names[i]}"
                     success_msg += f" with features: {', '.join(sorted(kwargs.keys()))}"
@@ -497,9 +477,7 @@ class SimplePaddleOCREngine:
                     error_msg = f"{type(exc).__name__}: {exc}"
                     errors.append(error_msg)
                     if is_windows:
-                        logger.warning(
-                            "Windows optimization phase %d failed: %s", i + 1, exc
-                        )
+                        logger.warning("Windows optimization phase %d failed: %s", i + 1, exc)
                     else:
                         logger.warning(
                             "PaddleOCR initialisation failed (%s): %s",
@@ -517,15 +495,11 @@ class SimplePaddleOCREngine:
             return False
 
         except FileNotFoundError as exc:
-            logger.error(
-                "PaddleOCR model files not found on %s: %s", platform.system(), exc
-            )
+            logger.error("PaddleOCR model files not found on %s: %s", platform.system(), exc)
             self._ocr = None
             return False
         except Exception as exc:  # pragma: no cover - defensive logging
-            logger.error(
-                "PaddleOCR initialisation failed on %s: %s", platform.system(), exc
-            )
+            logger.error("PaddleOCR initialisation failed on %s: %s", platform.system(), exc)
             self._ocr = None
             return False
 
@@ -658,14 +632,10 @@ class SimplePaddleOCREngine:
                 elif processed.shape[2] == 1:
                     processed = cv2.cvtColor(processed, cv2.COLOR_GRAY2BGR)
                 elif processed.shape[2] != 3:
-                    logger.warning(
-                        f"Unsupported number of channels: {processed.shape[2]}"
-                    )
+                    logger.warning(f"Unsupported number of channels: {processed.shape[2]}")
                     return None
             else:
-                logger.warning(
-                    f"Unexpected image format after conversion: {processed.shape}"
-                )
+                logger.warning(f"Unexpected image format after conversion: {processed.shape}")
                 return None
 
             # メモリレイアウトの確認と修正
@@ -690,9 +660,7 @@ class SimplePaddleOCREngine:
                 new_w = max(10, int(width * scale))  # 最小サイズを保証
                 new_h = max(10, int(height * scale))
                 try:
-                    processed = cv2.resize(
-                        processed, (new_w, new_h), interpolation=cv2.INTER_AREA
-                    )
+                    processed = cv2.resize(processed, (new_w, new_h), interpolation=cv2.INTER_AREA)
                     if processed is None or processed.size == 0:
                         logger.warning("Resize operation failed (max_pixels)")
                         return None
@@ -712,9 +680,7 @@ class SimplePaddleOCREngine:
                 new_w = max(10, int(width * scale))  # 最小サイズを保証
                 new_h = max(10, int(height * scale))
                 try:
-                    processed = cv2.resize(
-                        processed, (new_w, new_h), interpolation=cv2.INTER_AREA
-                    )
+                    processed = cv2.resize(processed, (new_w, new_h), interpolation=cv2.INTER_AREA)
                     if processed is None or processed.size == 0:
                         logger.warning("Resize operation failed (max_side)")
                         return None
@@ -735,9 +701,7 @@ class SimplePaddleOCREngine:
                 return None
 
             if processed.ndim != 3 or processed.shape[2] != 3:
-                logger.warning(
-                    f"Final processed image has invalid format: {processed.shape}"
-                )
+                logger.warning(f"Final processed image has invalid format: {processed.shape}")
                 return None
 
             return processed
@@ -800,9 +764,7 @@ class SimplePaddleOCREngine:
             logger.error("PaddleOCR timeout on %s: %s", platform.system(), exc)
             return []
         except (MemoryError, RuntimeError, ValueError) as exc:
-            logger.error(
-                "PaddleOCR memory/runtime error on %s: %s", platform.system(), exc
-            )
+            logger.error("PaddleOCR memory/runtime error on %s: %s", platform.system(), exc)
             return []
         except Exception as exc:  # pragma: no cover - unexpected runtime issue
             logger.error("PaddleOCR inference failed on %s: %s", platform.system(), exc)
@@ -813,9 +775,7 @@ class SimplePaddleOCREngine:
 
         return self._parse_ocr_results(raw_results)
 
-    def _run_ocr_with_timeout(
-        self, image: np.ndarray, timeout_seconds: int = 30
-    ) -> Any:
+    def _run_ocr_with_timeout(self, image: np.ndarray, timeout_seconds: int = 30) -> Any:
         """Apple Siliconでのフリーズ対策: プロセスベースのタイムアウト付きOCR実行"""
         if platform.system() != "Darwin" or platform.machine() != "arm64":
             # Apple Silicon以外では通常の実行
@@ -925,9 +885,7 @@ class SimplePaddleOCREngine:
                 if not isinstance(text, str) or not text.strip():
                     continue
                 bbox = self._polygon_to_bbox(poly)
-                parsed.append(
-                    OCRResult(text=text.strip(), confidence=float(score), bbox=bbox)
-                )
+                parsed.append(OCRResult(text=text.strip(), confidence=float(score), bbox=bbox))
             return parsed
 
         # Legacy list format [[box, (text, score)], ...]
@@ -987,9 +945,7 @@ def _ocr_worker_process(
             return
 
         # Apple Silicon最適化の環境変数を設定
-        os.environ.setdefault(
-            "VECLIB_MAXIMUM_THREADS", str(min(8, os.cpu_count() or 4))
-        )
+        os.environ.setdefault("VECLIB_MAXIMUM_THREADS", str(min(8, os.cpu_count() or 4)))
         os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
         os.environ.setdefault("MKL_NUM_THREADS", "1")
         os.environ.setdefault("PADDLE_CPU_ONLY", "1")
@@ -1004,9 +960,7 @@ def _ocr_worker_process(
             language=engine_config["language"],
             confidence_threshold=engine_config["confidence_threshold"],
             models_root=(
-                Path(engine_config["models_root"])
-                if engine_config["models_root"]
-                else None
+                Path(engine_config["models_root"]) if engine_config["models_root"] else None
             ),
             max_image_pixels=engine_config["max_image_pixels"],
             max_side_length=engine_config["max_side_length"],
@@ -1014,9 +968,7 @@ def _ocr_worker_process(
 
         # エンジンを初期化
         if not temp_engine.initialize():
-            result_queue.put(
-                {"error": "Failed to initialize PaddleOCR in worker process"}
-            )
+            result_queue.put({"error": "Failed to initialize PaddleOCR in worker process"})
             return
 
         # OCR実行

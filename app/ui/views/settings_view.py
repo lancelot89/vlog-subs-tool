@@ -385,24 +385,16 @@ class SettingsView(QDialog):
             else:
                 self.ocr_engine_combo.setCurrentIndex(1)
 
-            self.ocr_confidence_spin.setValue(
-                int(settings.extraction.ocr_confidence * 100)
-            )
+            self.ocr_confidence_spin.setValue(int(settings.extraction.ocr_confidence * 100))
 
             # 整形設定
             self.max_chars_spin.setValue(settings.formatting.max_chars)
             self.max_lines_spin.setValue(settings.formatting.max_lines)
             self.min_duration_spin.setValue(settings.formatting.min_duration)
-            self.similarity_spin.setValue(
-                int(settings.formatting.similarity_threshold * 100)
-            )
+            self.similarity_spin.setValue(int(settings.formatting.similarity_threshold * 100))
             self.merge_gap_spin.setValue(settings.formatting.merge_gap)
-            self.normalize_punctuation_check.setChecked(
-                settings.formatting.normalize_punctuation
-            )
-            self.normalize_whitespace_check.setChecked(
-                settings.formatting.normalize_whitespace
-            )
+            self.normalize_punctuation_check.setChecked(settings.formatting.normalize_punctuation)
+            self.normalize_whitespace_check.setChecked(settings.formatting.normalize_whitespace)
             self.remove_duplicate_check.setChecked(settings.formatting.remove_duplicate)
 
             # 出力設定
@@ -411,9 +403,7 @@ class SettingsView(QDialog):
             self.encoding_combo.setCurrentText(settings.output.encoding)
             self.srt_bom_check.setChecked(settings.output.srt_bom)
             self.srt_crlf_check.setChecked(settings.output.srt_crlf)
-            self.default_languages_combo.setCurrentText(
-                settings.output.default_languages
-            )
+            self.default_languages_combo.setCurrentText(settings.output.default_languages)
             self.auto_translate_check.setChecked(settings.output.auto_translate)
 
             if settings.output.overwrite_mode == "ask":
@@ -553,9 +543,7 @@ class SettingsView(QDialog):
             logging.error(f"設定保存エラー: {e}")
             from PySide6.QtWidgets import QMessageBox
 
-            QMessageBox.critical(
-                self, "エラー", f"設定保存中にエラーが発生しました:\n{str(e)}"
-            )
+            QMessageBox.critical(self, "エラー", f"設定保存中にエラーが発生しました:\n{str(e)}")
 
     def get_settings(self):
         """現在の設定値を取得"""
@@ -566,9 +554,7 @@ class SettingsView(QDialog):
             "roi_mode": "bottom" if self.roi_bottom_radio.isChecked() else "auto",
             "bottom_ratio": self.bottom_ratio_spin.value() / 100.0,
             "ocr_engine": (
-                "paddleocr"
-                if self.ocr_engine_combo.currentIndex() == 0
-                else "tesseract"
+                "paddleocr" if self.ocr_engine_combo.currentIndex() == 0 else "tesseract"
             ),
             "ocr_confidence": self.ocr_confidence_spin.value() / 100.0,
             # 整形設定

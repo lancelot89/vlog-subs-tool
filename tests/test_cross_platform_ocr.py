@@ -61,9 +61,7 @@ class TestCrossPlatformOCR:
                         raise Exception("Parameter not supported")
                     return MagicMock()  # Third attempt succeeds
 
-                with patch(
-                    "app.core.extractor.ocr.PaddleOCR", side_effect=mock_paddle_ocr_init
-                ):
+                with patch("app.core.extractor.ocr.PaddleOCR", side_effect=mock_paddle_ocr_init):
                     result = engine.initialize()
 
                     # Should have tried all three configurations
@@ -86,18 +84,16 @@ class TestCrossPlatformOCR:
                     with patch("pathlib.Path.exists") as mock_exists:
                         # Mock that frozen app directory exists
                         def exists_side_effect(self):
-                            return str(self).endswith("PP-OCRv5_server_det") or str(
-                                self
-                            ).endswith("PP-OCRv5_server_rec")
+                            return str(self).endswith("PP-OCRv5_server_det") or str(self).endswith(
+                                "PP-OCRv5_server_rec"
+                            )
 
                         mock_exists.side_effect = exists_side_effect
 
                         try:
                             result = engine._resolve_models_root()
                             # Should find the frozen application path
-                            assert "myapp.exe" not in str(
-                                result
-                            )  # Should be parent directory
+                            assert "myapp.exe" not in str(result)  # Should be parent directory
                         except FileNotFoundError:
                             # Expected if mocking doesn't fully work
                             pass
@@ -120,9 +116,7 @@ class TestCrossPlatformOCR:
             for i, img in enumerate(test_images):
                 try:
                     result = engine.extract_text(img)
-                    assert isinstance(
-                        result, list
-                    ), f"Test image {i} should return list"
+                    assert isinstance(result, list), f"Test image {i} should return list"
                 except Exception as e:
                     pytest.fail(f"Test image {i} failed preprocessing: {e}")
 
@@ -190,9 +184,7 @@ class TestCrossPlatformOCR:
             for i, test_case in enumerate(test_cases):
                 try:
                     result = engine.extract_text(test_case)
-                    assert isinstance(
-                        result, list
-                    ), f"Memory safety test {i} should return list"
+                    assert isinstance(result, list), f"Memory safety test {i} should return list"
                 except Exception as e:
                     pytest.fail(f"Memory safety test {i} failed: {e}")
 
@@ -225,9 +217,7 @@ class TestCrossPlatformOCR:
 
                     # Check that Windows-specific logging occurred
                     platform_logs = [msg for msg in log_messages if "Windows" in msg]
-                    assert (
-                        len(platform_logs) > 0
-                    ), "Should have Windows-specific log messages"
+                    assert len(platform_logs) > 0, "Should have Windows-specific log messages"
 
         finally:
             logger.removeHandler(handler)

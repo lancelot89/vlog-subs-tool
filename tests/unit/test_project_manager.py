@@ -71,9 +71,7 @@ class TestProjectManager:
 
     def test_create_new_project(self, project_manager):
         """新しいプロジェクト作成のテスト"""
-        project_data = project_manager.create_new_project(
-            "新プロジェクト", "/path/to/video.mp4"
-        )
+        project_data = project_manager.create_new_project("新プロジェクト", "/path/to/video.mp4")
 
         assert project_data.metadata.name == "新プロジェクト"
         assert project_data.video_file_path == "/path/to/video.mp4"
@@ -139,18 +137,14 @@ class TestProjectManager:
         # 不正なJSONファイルを作成
         invalid_file.write_text("invalid json content", encoding="utf-8")
 
-        with pytest.raises(
-            ValueError, match="プロジェクトファイルの形式が正しくありません"
-        ):
+        with pytest.raises(ValueError, match="プロジェクトファイルの形式が正しくありません"):
             project_manager.load_project(invalid_file)
 
     def test_update_subtitles(self, project_manager, sample_project_data):
         """字幕データ更新のテスト"""
         project_manager.current_project = sample_project_data
 
-        new_subtitles = [
-            SubtitleItem(index=1, start_ms=2000, end_ms=4000, text="新しい字幕")
-        ]
+        new_subtitles = [SubtitleItem(index=1, start_ms=2000, end_ms=4000, text="新しい字幕")]
 
         project_manager.update_subtitles(new_subtitles)
 
@@ -162,17 +156,13 @@ class TestProjectManager:
         """翻訳データ更新のテスト"""
         project_manager.current_project = sample_project_data
 
-        new_translations = [
-            SubtitleItem(index=1, start_ms=1000, end_ms=3000, text="Bonjour")
-        ]
+        new_translations = [SubtitleItem(index=1, start_ms=1000, end_ms=3000, text="Bonjour")]
 
         project_manager.update_translations("fr", new_translations)
 
         assert "fr" in project_manager.current_project.translations
         assert len(project_manager.current_project.translations["fr"]) == 1
-        assert (
-            project_manager.current_project.translations["fr"][0]["text"] == "Bonjour"
-        )
+        assert project_manager.current_project.translations["fr"][0]["text"] == "Bonjour"
 
     def test_update_without_current_project(self, project_manager):
         """現在のプロジェクトがない場合の更新テスト"""
@@ -204,9 +194,7 @@ class TestProjectManager:
         errors = project_manager.validate_project_data(invalid_data)
         assert len(errors) >= 3  # 複数のエラーが検出される
 
-    def test_backup_creation(
-        self, project_manager, sample_project_data, temp_project_dir
-    ):
+    def test_backup_creation(self, project_manager, sample_project_data, temp_project_dir):
         """バックアップファイル作成のテスト"""
         temp_project_dir.mkdir(parents=True, exist_ok=True)
         project_file = temp_project_dir / "test.subproj"
@@ -227,9 +215,7 @@ class TestProjectManager:
             backup_data = json.load(f)
         assert backup_data["metadata"]["name"] == "テストプロジェクト"  # 古い名前
 
-    def test_save_as_project(
-        self, project_manager, sample_project_data, temp_project_dir
-    ):
+    def test_save_as_project(self, project_manager, sample_project_data, temp_project_dir):
         """名前を付けて保存のテスト"""
         temp_project_dir.mkdir(parents=True, exist_ok=True)
         original_file = temp_project_dir / "original.subproj"
@@ -273,9 +259,7 @@ class TestProjectManager:
         # TODO: より詳細な変更検出の実装後にテストを追加
         assert project_manager.is_project_modified()
 
-    def test_export_legacy_format(
-        self, project_manager, sample_project_data, temp_project_dir
-    ):
+    def test_export_legacy_format(self, project_manager, sample_project_data, temp_project_dir):
         """レガシー形式でのエクスポートテスト"""
         temp_project_dir.mkdir(parents=True, exist_ok=True)
         export_file = temp_project_dir / "legacy.json"

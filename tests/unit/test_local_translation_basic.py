@@ -27,9 +27,7 @@ class TestBasicTranslationProviderRouter(unittest.TestCase):
         result = self.router.register_provider(TranslationProviderType.MOCK, None)
 
         self.assertTrue(result)
-        self.assertIn(
-            TranslationProviderType.MOCK, self.router.get_available_providers()
-        )
+        self.assertIn(TranslationProviderType.MOCK, self.router.get_available_providers())
         self.assertEqual(self.router.default_provider, TranslationProviderType.MOCK)
 
     def test_mock_translation(self):
@@ -51,9 +49,7 @@ class TestBasicTranslationProviderRouter(unittest.TestCase):
         """空テキスト翻訳のテスト"""
         self.router.register_provider(TranslationProviderType.MOCK, None)
 
-        result = self.router.translate_batch(
-            texts=[], target_language="en", source_language="ja"
-        )
+        result = self.router.translate_batch(texts=[], target_language="en", source_language="ja")
 
         self.assertTrue(result.success)
         self.assertEqual(len(result.translated_texts), 0)
@@ -61,9 +57,7 @@ class TestBasicTranslationProviderRouter(unittest.TestCase):
     def test_provider_availability_check(self):
         """プロバイダー可用性チェックのテスト"""
         # 未登録プロバイダー
-        self.assertFalse(
-            self.router.is_provider_available(TranslationProviderType.LOCAL)
-        )
+        self.assertFalse(self.router.is_provider_available(TranslationProviderType.LOCAL))
 
         # プロバイダー登録後
         self.router.register_provider(TranslationProviderType.MOCK, None)

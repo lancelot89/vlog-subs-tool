@@ -127,9 +127,7 @@ def setup_japanese_support(app):
 
             # 全てのフォールバックが失敗した場合
             if not selected_font:
-                selected_font = (
-                    font_database.families()[0] if font_database.families() else "Arial"
-                )
+                selected_font = font_database.families()[0] if font_database.families() else "Arial"
 
         # アプリケーション全体のフォント設定
         font = QFont(selected_font, 10)
@@ -393,9 +391,7 @@ class MainWindow(QMainWindow):
         self.table_view.subtitle_selected.connect(self.player_view.seek_to_time)
 
         # プレビュー時間変更時のテーブル同期
-        self.player_view.time_changed.connect(
-            self.table_view.highlight_current_subtitle
-        )
+        self.player_view.time_changed.connect(self.table_view.highlight_current_subtitle)
 
         # 新しい同期機能
         self.table_view.seek_requested.connect(self.player_view.seek_to_time)
@@ -437,10 +433,7 @@ class MainWindow(QMainWindow):
 
     def seek_frame_back(self):
         """1フレーム戻る"""
-        if (
-            hasattr(self.player_view, "current_frame")
-            and self.player_view.current_frame > 0
-        ):
+        if hasattr(self.player_view, "current_frame") and self.player_view.current_frame > 0:
             self.player_view.seek_to_frame(self.player_view.current_frame - 1)
 
     def seek_frame_forward(self):
@@ -614,10 +607,7 @@ class MainWindow(QMainWindow):
         self.extract_btn.setEnabled(True)
         self.translate_btn.setEnabled(True)
         self.csv_export_btn.setEnabled(True)
-        if (
-            hasattr(self, "csv_export_menu_action")
-            and self.csv_export_menu_action is not None
-        ):
+        if hasattr(self, "csv_export_menu_action") and self.csv_export_menu_action is not None:
             self.csv_export_menu_action.setEnabled(True)
         self.export_srt_btn.setEnabled(True)
 
@@ -633,9 +623,7 @@ class MainWindow(QMainWindow):
         logging.info("エラー時: 自動抽出ボタンを元の状態に戻します")
         self._restore_extract_button()
 
-        QMessageBox.critical(
-            self, "抽出エラー", f"字幕の抽出に失敗しました:\\n{error_message}"
-        )
+        QMessageBox.critical(self, "抽出エラー", f"字幕の抽出に失敗しました:\\n{error_message}")
 
         # UI状態をリセット
         self.extract_btn.setEnabled(True)
@@ -736,8 +724,7 @@ class MainWindow(QMainWindow):
         reply = QMessageBox.question(
             self,
             "キャンセル確認",
-            "字幕抽出を中止しますか？\n\n"
-            "進行中の処理が停止され、現在までの結果は破棄されます。",
+            "字幕抽出を中止しますか？\n\n" "進行中の処理が停止され、現在までの結果は破棄されます。",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
@@ -871,9 +858,7 @@ class MainWindow(QMainWindow):
             is_in_toolbar = self.cancel_btn in toolbar_children
             logging.info(f"キャンセルボタンはツールバーに含まれる: {is_in_toolbar}")
         else:
-            logging.warning(
-                "キャンセルボタンの親ウィジェット（ツールバー）が見つかりません"
-            )
+            logging.warning("キャンセルボタンの親ウィジェット（ツールバー）が見つかりません")
 
         # 全体UI更新
         logging.info("段階3: ウィンドウ全体更新")
@@ -893,15 +878,11 @@ class MainWindow(QMainWindow):
         final_size = self.cancel_btn.size()
         final_pos = self.cancel_btn.pos()
 
-        logging.info(
-            f"🛑 強制表示完了 - visible: {final_visible}, enabled: {final_enabled}"
-        )
+        logging.info(f"🛑 強制表示完了 - visible: {final_visible}, enabled: {final_enabled}")
         logging.info(f"🛑 最終状態 - size: {final_size}, pos: {final_pos}")
 
         if not final_visible:
-            logging.error(
-                "⚠️ 警告: すべての処理を実行してもキャンセルボタンが表示されていません"
-            )
+            logging.error("⚠️ 警告: すべての処理を実行してもキャンセルボタンが表示されていません")
 
     def _restore_extract_button(self):
         """自動抽出ボタンを元の状態に戻す"""
@@ -1000,14 +981,10 @@ class MainWindow(QMainWindow):
             # 結果表示
             self.show_qc_results(qc_results, summary)
 
-            self.status_label.setText(
-                f"QCチェック完了: {summary['total']}件の問題を検出"
-            )
+            self.status_label.setText(f"QCチェック完了: {summary['total']}件の問題を検出")
 
         except Exception as e:
-            QMessageBox.critical(
-                self, "エラー", f"QCチェックでエラーが発生しました:\\n{str(e)}"
-            )
+            QMessageBox.critical(self, "エラー", f"QCチェックでエラーが発生しました:\\n{str(e)}")
 
     def show_qc_results(self, qc_results, summary):
         """QC結果を表示"""
@@ -1052,9 +1029,7 @@ class MainWindow(QMainWindow):
     def save_project(self):
         """プロジェクトを保存"""
         if not self.current_project:
-            QMessageBox.information(
-                self, "保存エラー", "保存するプロジェクトがありません。"
-            )
+            QMessageBox.information(self, "保存エラー", "保存するプロジェクトがありません。")
             return
 
         try:
@@ -1077,9 +1052,7 @@ class MainWindow(QMainWindow):
                 self.status_label.setText(
                     f"プロジェクトを保存しました: {file_path.name if file_path else 'project.subproj'}"
                 )
-                self.project_saved.emit(
-                    str(file_path) if file_path else "project.subproj"
-                )
+                self.project_saved.emit(str(file_path) if file_path else "project.subproj")
             else:
                 QMessageBox.warning(
                     self,
@@ -1096,9 +1069,7 @@ class MainWindow(QMainWindow):
     def save_project_as(self):
         """名前を付けてプロジェクトを保存"""
         if not self.current_project:
-            QMessageBox.information(
-                self, "保存エラー", "保存するプロジェクトがありません。"
-            )
+            QMessageBox.information(self, "保存エラー", "保存するプロジェクトがありません。")
             return
 
         # デフォルトの保存先を設定マネージャーから取得
@@ -1133,12 +1104,8 @@ class MainWindow(QMainWindow):
                     project_manager.update_subtitles(subtitles)
 
                 # プロジェクトを指定されたパスに保存
-                if project_manager.save_as_project(
-                    current_project_data, Path(file_path)
-                ):
-                    self.status_label.setText(
-                        f"プロジェクトを保存しました: {Path(file_path).name}"
-                    )
+                if project_manager.save_as_project(current_project_data, Path(file_path)):
+                    self.status_label.setText(f"プロジェクトを保存しました: {Path(file_path).name}")
                     self.project_saved.emit(file_path)
 
                     # 最近使用したファイルに追加
@@ -1212,9 +1179,7 @@ class MainWindow(QMainWindow):
             formatter = SRTFormatter(settings)
 
             # SRTファイルを保存
-            success = formatter.save_srt_file(
-                self.current_project.subtitles, Path(file_path)
-            )
+            success = formatter.save_srt_file(self.current_project.subtitles, Path(file_path))
 
             if success:
                 QMessageBox.information(
@@ -1222,9 +1187,7 @@ class MainWindow(QMainWindow):
                 )
                 self.status_label.setText(f"SRTファイルを保存: {Path(file_path).name}")
             else:
-                QMessageBox.critical(
-                    self, "保存エラー", "SRTファイルの保存に失敗しました。"
-                )
+                QMessageBox.critical(self, "保存エラー", "SRTファイルの保存に失敗しました。")
 
         except Exception as e:
             QMessageBox.critical(
@@ -1331,17 +1294,11 @@ class MainWindow(QMainWindow):
             else:
                 # 一部失敗
                 success_langs = [lang for lang, success in results.items() if success]
-                failed_langs = [
-                    lang for lang, success in results.items() if not success
-                ]
+                failed_langs = [lang for lang, success in results.items() if not success]
 
                 message = f"エクスポート結果:\n\n"
-                message += (
-                    f"成功: {len(success_langs)}ファイル ({', '.join(success_langs)})\n"
-                )
-                message += (
-                    f"失敗: {len(failed_langs)}ファイル ({', '.join(failed_langs)})\n\n"
-                )
+                message += f"成功: {len(success_langs)}ファイル ({', '.join(success_langs)})\n"
+                message += f"失敗: {len(failed_langs)}ファイル ({', '.join(failed_langs)})\n\n"
                 message += f"出力先: {output_dir}"
 
                 if success_count > 0:
@@ -1349,9 +1306,7 @@ class MainWindow(QMainWindow):
                 else:
                     QMessageBox.critical(self, "エクスポート失敗", message)
 
-                self.status_label.setText(
-                    f"多言語SRT出力: {success_count}/{total_count}成功"
-                )
+                self.status_label.setText(f"多言語SRT出力: {success_count}/{total_count}成功")
 
         except Exception as e:
             QMessageBox.critical(
@@ -1415,9 +1370,7 @@ class MainWindow(QMainWindow):
                             translated_subtitles.append(translated_subtitle)
 
                         translation_results[target_lang] = translated_subtitles
-                        logging.info(
-                            f"翻訳完了: {target_lang} ({len(translated_subtitles)}件)"
-                        )
+                        logging.info(f"翻訳完了: {target_lang} ({len(translated_subtitles)}件)")
 
                     else:
                         # 翻訳失敗の場合は元のテキストにプレフィックス付きで使用
@@ -1505,22 +1458,16 @@ class MainWindow(QMainWindow):
 
         try:
             exporter = SubtitleCSVExporter()
-            success = exporter.export_standard(
-                self.table_view.subtitles, Path(file_path)
-            )
+            success = exporter.export_standard(self.table_view.subtitles, Path(file_path))
 
             if success:
-                QMessageBox.information(
-                    self, "保存完了", f"元データCSVを保存しました\n{file_path}"
-                )
+                QMessageBox.information(self, "保存完了", f"元データCSVを保存しました\n{file_path}")
                 self.status_label.setText(f"CSVを出力: {Path(file_path).name}")
             else:
                 QMessageBox.critical(self, "エラー", "CSVエクスポートに失敗しました。")
         except Exception as e:
             logging.exception("CSVエクスポートでエラーが発生しました")
-            QMessageBox.critical(
-                self, "エラー", f"CSVエクスポートに失敗しました\n{str(e)}"
-            )
+            QMessageBox.critical(self, "エラー", f"CSVエクスポートに失敗しました\n{str(e)}")
 
     def show_translate_view(self):
         """翻訳設定画面を表示"""
@@ -1688,9 +1635,8 @@ class MainWindow(QMainWindow):
             errors = project_manager.validate_project_data(project_data)
             if errors:
                 # エラーがある場合は警告表示（続行可能）
-                error_msg = (
-                    "プロジェクトファイルに以下の問題があります:\n\n"
-                    + "\n".join(f"• {error}" for error in errors)
+                error_msg = "プロジェクトファイルに以下の問題があります:\n\n" + "\n".join(
+                    f"• {error}" for error in errors
                 )
                 error_msg += "\n\n続行しますか？"
 
@@ -1740,27 +1686,19 @@ class MainWindow(QMainWindow):
 
             # 字幕データをテーブルに設定
             subtitle_items = project_data.get_subtitle_items()
-            if (
-                subtitle_items
-                and hasattr(self.table_view, "model")
-                and self.table_view.model()
-            ):
+            if subtitle_items and hasattr(self.table_view, "model") and self.table_view.model():
                 self.table_view.model().set_subtitles(subtitle_items)
 
             # 翻訳データを設定
             for language, translated_items in project_data.translations.items():
                 if translated_items:
-                    translated_subtitles = project_data.get_translated_subtitles(
-                        language
-                    )
+                    translated_subtitles = project_data.get_translated_subtitles(language)
                     if translated_subtitles:
                         # 翻訳ビューに設定（メソッドが存在する場合のみ）
                         if hasattr(self, "translate_view") and hasattr(
                             self.translate_view, "set_translations"
                         ):
-                            self.translate_view.set_translations(
-                                language, translated_subtitles
-                            )
+                            self.translate_view.set_translations(language, translated_subtitles)
                         else:
                             # 代替手段: 翻訳データをプロジェクトに保持するだけ
                             logging.info(
@@ -1780,9 +1718,7 @@ class MainWindow(QMainWindow):
             settings_manager.add_recent_file(file_path)
 
             # ステータス更新
-            self.status_label.setText(
-                f"プロジェクト読み込み完了: {project_data.metadata.name}"
-            )
+            self.status_label.setText(f"プロジェクト読み込み完了: {project_data.metadata.name}")
             self.setWindowTitle(f"VLog字幕ツール - {project_data.metadata.name}")
 
             message = (

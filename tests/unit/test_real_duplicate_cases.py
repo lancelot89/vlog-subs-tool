@@ -53,9 +53,7 @@ class MockTextSimilarityCalculator:
             return 1.0
 
         # 長さ比
-        len_ratio = min(len(norm_text1), len(norm_text2)) / max(
-            len(norm_text1), len(norm_text2)
-        )
+        len_ratio = min(len(norm_text1), len(norm_text2)) / max(len(norm_text1), len(norm_text2))
         if len_ratio < 0.8:
             return 0.0
 
@@ -93,9 +91,7 @@ def merge_time_constrained_duplicates(
                 break
 
             # テキスト類似度チェック
-            similarity = calc.calculate_similarity(
-                subtitles_copy[i].text, subtitles_copy[j].text
-            )
+            similarity = calc.calculate_similarity(subtitles_copy[i].text, subtitles_copy[j].text)
 
             if similarity > 0.90:
                 current_group.append(subtitles_copy[j])
@@ -221,9 +217,7 @@ def test_real_duplicate_cases():
     # 1. 図書館関連が統合されているか
     library_found = any("図書館" in s.text for s in merged_subtitles)
     # 2. シャワー関連が統合されているか
-    shower_found = any(
-        "シャワー" in s.text or "シヤワー" in s.text for s in merged_subtitles
-    )
+    shower_found = any("シャワー" in s.text or "シヤワー" in s.text for s in merged_subtitles)
     # 3. カレー蕎麦関連が統合されているか
     curry_found = any("カレー蕎麦" in s.text for s in merged_subtitles)
 

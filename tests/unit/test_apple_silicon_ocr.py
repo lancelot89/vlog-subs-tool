@@ -26,9 +26,7 @@ class TestAppleSiliconOCR(unittest.TestCase):
     @patch("app.core.extractor.ocr.platform.system")
     @patch("app.core.extractor.ocr.platform.machine")
     @patch("app.core.extractor.ocr.os.cpu_count")
-    def test_apple_silicon_environment_variables(
-        self, mock_cpu_count, mock_machine, mock_system
-    ):
+    def test_apple_silicon_environment_variables(self, mock_cpu_count, mock_machine, mock_system):
         """Test that Apple Silicon specific environment variables are set correctly."""
         # Setup mocks for Apple Silicon environment
         mock_system.return_value = "Darwin"
@@ -242,9 +240,7 @@ class TestAppleSiliconOCR(unittest.TestCase):
         test_image = np.zeros((100, 200, 3), dtype=np.uint8)
 
         # Mock multiprocessing to raise an exception
-        with patch(
-            "multiprocessing.Process", side_effect=Exception("Process creation failed")
-        ):
+        with patch("multiprocessing.Process", side_effect=Exception("Process creation failed")):
             # Test that empty result is returned when process creation fails
             result = self.engine._run_ocr_with_timeout(test_image, timeout_seconds=1)
 

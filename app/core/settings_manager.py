@@ -114,9 +114,7 @@ class SettingsManager:
         # プラットフォーム別の設定フォルダ
         if platform.system() == "Windows":
             # Windows: %APPDATA%
-            config_dir = Path(
-                os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming")
-            )
+            config_dir = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
         elif platform.system() == "Darwin":  # macOS
             # macOS: ~/Library/Application Support
             config_dir = Path.home() / "Library" / "Application Support"
@@ -143,9 +141,7 @@ class SettingsManager:
                 # バージョン確認
                 file_version = settings_dict.get("version", "1.0.0")
                 if file_version != "1.0.0":
-                    self.logger.warning(
-                        f"設定ファイルのバージョンが異なります: {file_version}"
-                    )
+                    self.logger.warning(f"設定ファイルのバージョンが異なります: {file_version}")
 
                 # 設定オブジェクトに変換
                 self._settings = self._dict_to_settings(settings_dict)
@@ -240,11 +236,7 @@ class SettingsManager:
             if "ui" in settings_dict:
                 ui_dict = settings_dict["ui"]
                 default_settings.ui = UISettings(
-                    **{
-                        k: v
-                        for k, v in ui_dict.items()
-                        if k in UISettings.__dataclass_fields__
-                    }
+                    **{k: v for k, v in ui_dict.items() if k in UISettings.__dataclass_fields__}
                 )
 
             if "version" in settings_dict:
@@ -331,16 +323,10 @@ class SettingsManager:
         errors = []
 
         # 抽出設定の検証
-        if (
-            settings.extraction.fps_sample < 0.5
-            or settings.extraction.fps_sample > 10.0
-        ):
+        if settings.extraction.fps_sample < 0.5 or settings.extraction.fps_sample > 10.0:
             errors.append("サンプリングFPSは0.5から10.0の間で設定してください")
 
-        if (
-            settings.extraction.ocr_confidence < 0.0
-            or settings.extraction.ocr_confidence > 1.0
-        ):
+        if settings.extraction.ocr_confidence < 0.0 or settings.extraction.ocr_confidence > 1.0:
             errors.append("OCR信頼度は0から1の間で設定してください")
 
         # 整形設定の検証
@@ -354,17 +340,13 @@ class SettingsManager:
         if settings.output.output_folder:
             output_path = Path(settings.output.output_folder)
             if not output_path.parent.exists():
-                errors.append(
-                    f"出力フォルダの親ディレクトリが存在しません: {output_path.parent}"
-                )
+                errors.append(f"出力フォルダの親ディレクトリが存在しません: {output_path.parent}")
 
         return errors
 
     def migrate_settings(self, old_version: str, new_version: str) -> bool:
         """設定ファイルのマイグレーション"""
-        self.logger.info(
-            f"設定ファイルをマイグレーション: {old_version} → {new_version}"
-        )
+        self.logger.info(f"設定ファイルをマイグレーション: {old_version} → {new_version}")
 
         # 現在は v1.0.0 のみサポート
         if old_version == new_version:

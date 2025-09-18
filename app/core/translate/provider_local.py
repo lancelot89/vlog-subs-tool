@@ -119,9 +119,7 @@ class ModelManager:
                 progress_callback(f"モデル {model_id} をダウンロード中...", 10)
 
             if not CTRANSLATE2_AVAILABLE:
-                raise LocalTranslateError(
-                    "CTranslate2が利用できません", "PACKAGE_MISSING"
-                )
+                raise LocalTranslateError("CTranslate2が利用できません", "PACKAGE_MISSING")
 
             # Hugging Faceからモデルをロード
             model = transformers.MarianMTModel.from_pretrained(model_id)
@@ -170,9 +168,7 @@ class ModelManager:
 
             try:
                 if not CTRANSLATE2_AVAILABLE:
-                    raise LocalTranslateError(
-                        "CTranslate2が利用できません", "PACKAGE_MISSING"
-                    )
+                    raise LocalTranslateError("CTranslate2が利用できません", "PACKAGE_MISSING")
 
                 # CTranslate2モデルをロード
                 translator = ctranslate2.Translator(
@@ -183,9 +179,7 @@ class ModelManager:
                 )
 
                 # トークナイザーをロード
-                tokenizer = transformers.MarianTokenizer.from_pretrained(
-                    str(model_path)
-                )
+                tokenizer = transformers.MarianTokenizer.from_pretrained(str(model_path))
 
                 # キャッシュに保存
                 self.loaded_models[lang_pair] = translator
@@ -196,13 +190,9 @@ class ModelManager:
 
             except Exception as e:
                 logging.error(f"モデルロードエラー: {e}")
-                raise LocalTranslateError(
-                    f"モデルのロードに失敗: {str(e)}", "MODEL_LOAD_FAILED", e
-                )
+                raise LocalTranslateError(f"モデルのロードに失敗: {str(e)}", "MODEL_LOAD_FAILED", e)
 
-    def get_translation_route(
-        self, src_lang: str, tgt_lang: str
-    ) -> List[Tuple[str, str]]:
+    def get_translation_route(self, src_lang: str, tgt_lang: str) -> List[Tuple[str, str]]:
         """翻訳ルートを取得（直接 or ピボット）"""
         direct_pair = (src_lang, tgt_lang)
         if direct_pair in self.SUPPORTED_PAIRS:
@@ -254,9 +244,7 @@ class LocalTranslateProvider:
             return True
 
         except Exception as e:
-            raise LocalTranslateError(
-                f"初期化に失敗しました: {str(e)}", "INIT_FAILED", e
-            )
+            raise LocalTranslateError(f"初期化に失敗しました: {str(e)}", "INIT_FAILED", e)
 
     def _preprocess_text(self, text: str, src_lang: str) -> str:
         """テキストの前処理"""
@@ -295,9 +283,7 @@ class LocalTranslateProvider:
         if not texts:
             return []
 
-        translator, tokenizer = self.model_manager.load_model(
-            src_lang, tgt_lang, self.settings
-        )
+        translator, tokenizer = self.model_manager.load_model(src_lang, tgt_lang, self.settings)
 
         # テキストの前処理
         processed_texts = [self._preprocess_text(text, src_lang) for text in texts]
@@ -358,9 +344,7 @@ class LocalTranslateProvider:
     ) -> List[str]:
         """バッチ翻訳実行"""
         if not self.is_initialized:
-            raise LocalTranslateError(
-                "プロバイダが初期化されていません", "NOT_INITIALIZED"
-            )
+            raise LocalTranslateError("プロバイダが初期化されていません", "NOT_INITIALIZED")
 
         if not texts:
             return []
@@ -485,6 +469,4 @@ class LocalTranslateProvider:
             ),
         }
 
-        return guidance_map.get(
-            error.error_code, f"予期しないエラーが発生しました：{str(error)}"
-        )
+        return guidance_map.get(error.error_code, f"予期しないエラーが発生しました：{str(error)}")

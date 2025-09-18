@@ -154,9 +154,7 @@ class QCResult:
         severity: str = "warning",
     ):
         self.subtitle_index = subtitle_index
-        self.error_type = (
-            error_type  # "time_overlap", "duration_short", "text_long", etc.
-        )
+        self.error_type = error_type  # "time_overlap", "duration_short", "text_long", etc.
         self.message = message
         self.severity = severity  # "error", "warning", "info"
 

@@ -224,9 +224,7 @@ class TestSettingsManager:
         """クロスプラットフォームでのパス処理テスト"""
         # 各プラットフォーム用のパスをテスト
         with patch("platform.system", return_value="Windows"):
-            with patch.dict(
-                "os.environ", {"APPDATA": str(Path.home() / "AppData" / "Roaming")}
-            ):
+            with patch.dict("os.environ", {"APPDATA": str(Path.home() / "AppData" / "Roaming")}):
                 windows_manager = SettingsManager()
                 windows_path = windows_manager._get_settings_path()
                 assert "vlog-subs-tool" in str(windows_path)

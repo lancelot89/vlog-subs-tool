@@ -55,9 +55,7 @@ class ProjectData:
                 )
                 subtitle_items.append(item)
             except (KeyError, TypeError) as e:
-                logging.warning(
-                    f"字幕データの読み込みに失敗: {subtitle_data}, エラー: {e}"
-                )
+                logging.warning(f"字幕データの読み込みに失敗: {subtitle_data}, エラー: {e}")
         return subtitle_items
 
     def get_translated_subtitles(self, language: str) -> Optional[List[SubtitleItem]]:
@@ -76,9 +74,7 @@ class ProjectData:
                 )
                 translated_items.append(item)
             except (KeyError, TypeError) as e:
-                logging.warning(
-                    f"翻訳データの読み込みに失敗: {trans_data}, エラー: {e}"
-                )
+                logging.warning(f"翻訳データの読み込みに失敗: {trans_data}, エラー: {e}")
         return translated_items
 
 
@@ -120,9 +116,7 @@ class ProjectManager:
     def load_project(self, file_path: Path) -> ProjectData:
         """プロジェクトファイルを読み込み"""
         if not file_path.exists():
-            raise FileNotFoundError(
-                f"プロジェクトファイルが見つかりません: {file_path}"
-            )
+            raise FileNotFoundError(f"プロジェクトファイルが見つかりません: {file_path}")
 
         if file_path.suffix.lower() != ".subproj":
             raise ValueError(f"サポートされていないファイル形式: {file_path.suffix}")
@@ -136,9 +130,7 @@ class ProjectManager:
             # バージョン確認
             file_version = project_dict.get("metadata", {}).get("version", "1.0.0")
             if file_version != "1.0.0":
-                self.logger.warning(
-                    f"プロジェクトファイルのバージョンが異なります: {file_version}"
-                )
+                self.logger.warning(f"プロジェクトファイルのバージョンが異なります: {file_version}")
 
             # プロジェクトデータに変換
             project_data = self._dict_to_project_data(project_dict)
@@ -165,9 +157,7 @@ class ProjectManager:
         except Exception as e:
             raise RuntimeError(f"プロジェクト読み込みエラー: {e}")
 
-    def save_project(
-        self, project_data: ProjectData, file_path: Optional[Path] = None
-    ) -> bool:
+    def save_project(self, project_data: ProjectData, file_path: Optional[Path] = None) -> bool:
         """プロジェクトを保存"""
         if file_path is None:
             if self.current_file_path is None:
