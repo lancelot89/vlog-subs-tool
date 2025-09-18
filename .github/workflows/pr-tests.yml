@@ -96,9 +96,9 @@ jobs:
             from core.models import SubtitleItem
             from core.extractor.ocr import SimplePaddleOCREngine
             from core.format.srt import SRTFormatter
-            print('✅ Core modules import successfully')
+            print('Success: Core modules import successfully')
         except Exception as e:
-            print(f'❌ Import failed: {e}')
+            print(f'Error: Import failed: {e}')
             sys.exit(1)
         "
 
