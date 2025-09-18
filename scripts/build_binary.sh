@@ -51,7 +51,7 @@ check_environment() {
     # PyInstaller確認
     if ! command -v pyinstaller &> /dev/null; then
         log_warn "PyInstallerがインストールされていません。インストール中..."
-        pip install pyinstaller>=6.15.0
+        pip install 'pyinstaller>=6.15.0'
     fi
 
     # 重要な依存関係確認
