@@ -24,7 +24,7 @@ jobs:
     if: github.event.inputs.test_platform == 'all' || github.event.inputs.test_platform == 'linux'
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -84,7 +84,7 @@ jobs:
     if: github.event.inputs.test_platform == 'all' || github.event.inputs.test_platform == 'windows'
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -129,7 +129,7 @@ jobs:
     if: github.event.inputs.test_platform == 'all' || github.event.inputs.test_platform == 'macos'
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - name: Set up Python
       uses: actions/setup-python@v4
