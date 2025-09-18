@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
     QTextEdit, QPlainTextEdit
 )
 from PySide6.QtCore import Qt, Signal, QPoint, QModelIndex
-from PySide6.QtGui import QFont, QColor, QAction, QPalette, QKeyEvent
+from PySide6.QtGui import QFont, QColor, QAction, QPalette, QKeyEvent, QTextOption
 from typing import List, Optional
 
 from app.core.models import SubtitleItem
@@ -24,7 +24,7 @@ class MultilineTextDelegate(QStyledItemDelegate):
         """エディターを作成"""
         if index.column() == 3:  # 本文列の場合
             editor = QPlainTextEdit(parent)
-            editor.setWordWrapMode(QPlainTextEdit.WidgetWidth)
+            editor.setWordWrapMode(QTextOption.WrapAtWordBoundaryOrAnywhere)
             # イベントフィルターを設定
             editor.installEventFilter(self)
             return editor
@@ -331,10 +331,13 @@ class SubtitleTableView(QWidget):
             time_ms = subtitle.start_ms if column == 1 else subtitle.end_ms
             self.seek_requested.emit(time_ms)
         elif column == 3:  # 本文列をダブルクリック
-            # ループ再生設定
-            self.loop_region_set.emit(subtitle.start_ms, subtitle.end_ms)
+            # 編集モードを開始
+            item = self.table.item(row, column)
+            if item:
+                self.table.editItem(item)
+            return  # 本文列では自動シークをしない
 
-        # いずれの場合も該当位置にシーク
+        # 開始時間・終了時間列の場合のみ該当位置にシーク
         self.seek_requested.emit(subtitle.start_ms)
     
     def highlight_current_subtitle(self, time_ms: int):
