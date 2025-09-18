@@ -5,13 +5,67 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget,
     QTableWidgetItem, QHeaderView, QAbstractItemView, QMenu,
-    QMessageBox, QInputDialog, QApplication
+    QMessageBox, QInputDialog, QApplication, QStyledItemDelegate,
+    QTextEdit, QPlainTextEdit
 )
-from PySide6.QtCore import Qt, Signal, QPoint
-from PySide6.QtGui import QFont, QColor, QAction, QPalette
+from PySide6.QtCore import Qt, Signal, QPoint, QModelIndex
+from PySide6.QtGui import QFont, QColor, QAction, QPalette, QKeyEvent, QTextOption
 from typing import List, Optional
 
 from app.core.models import SubtitleItem
+
+
+class MultilineTextDelegate(QStyledItemDelegate):
+    """複数行テキスト編集用のカスタムデリゲート"""
+
+    next_subtitle_requested = Signal()  # 次の字幕への移動シグナル
+
+    def createEditor(self, parent, option, index):
+        """エディターを作成"""
+        if index.column() == 3:  # 本文列の場合
+            editor = QPlainTextEdit(parent)
+            editor.setWordWrapMode(QTextOption.WrapAtWordBoundaryOrAnywhere)
+            # イベントフィルターを設定
+            editor.installEventFilter(self)
+            return editor
+        return super().createEditor(parent, option, index)
+
+    def setEditorData(self, editor, index):
+        """エディターにデータを設定"""
+        if isinstance(editor, QPlainTextEdit):
+            text = index.model().data(index, Qt.EditRole)
+            editor.setPlainText(text or "")
+        else:
+            super().setEditorData(editor, index)
+
+    def setModelData(self, editor, model, index):
+        """エディターからモデルにデータを設定"""
+        if isinstance(editor, QPlainTextEdit):
+            text = editor.toPlainText()
+            model.setData(index, text, Qt.EditRole)
+        else:
+            super().setModelData(editor, model, index)
+
+    def eventFilter(self, editor, event):
+        """キーイベントのフィルタリング"""
+        if isinstance(editor, QPlainTextEdit) and event.type() == event.Type.KeyPress:
+            key_event = event
+
+            # Ctrl+Enter (Windows/Linux) または Cmd+Enter (Mac) で次の字幕に移動
+            if (key_event.key() == Qt.Key_Return and
+                key_event.modifiers() & (Qt.ControlModifier | Qt.MetaModifier)):
+
+                # エディターを閉じて次の字幕に移動
+                self.commitData.emit(editor)
+                self.closeEditor.emit(editor)
+                self.next_subtitle_requested.emit()
+                return True
+
+            # 通常のEnterキーは改行として処理（デフォルト動作）
+            elif key_event.key() == Qt.Key_Return and not key_event.modifiers():
+                return False  # デフォルトの改行動作を許可
+
+        return super().eventFilter(editor, event)
 
 
 class SubtitleTableView(QWidget):
@@ -90,6 +144,11 @@ class SubtitleTableView(QWidget):
         self.table = QTableWidget()
         self.table.setColumnCount(4)
         self.table.setHorizontalHeaderLabels(["#", "開始", "終了", "本文"])
+
+        # 複数行テキスト編集用デリゲートを設定
+        self.multiline_delegate = MultilineTextDelegate()
+        self.multiline_delegate.next_subtitle_requested.connect(self.move_to_next_subtitle)
+        self.table.setItemDelegateForColumn(3, self.multiline_delegate)  # 本文列用
         
         # テーブルの設定
         header = self.table.horizontalHeader()
@@ -272,10 +331,13 @@ class SubtitleTableView(QWidget):
             time_ms = subtitle.start_ms if column == 1 else subtitle.end_ms
             self.seek_requested.emit(time_ms)
         elif column == 3:  # 本文列をダブルクリック
-            # ループ再生設定
-            self.loop_region_set.emit(subtitle.start_ms, subtitle.end_ms)
+            # 編集モードを開始
+            item = self.table.item(row, column)
+            if item:
+                self.table.editItem(item)
+            return  # 本文列では自動シークをしない
 
-        # いずれの場合も該当位置にシーク
+        # 開始時間・終了時間列の場合のみ該当位置にシーク
         self.seek_requested.emit(subtitle.start_ms)
     
     def highlight_current_subtitle(self, time_ms: int):
@@ -522,3 +584,13 @@ class SubtitleTableView(QWidget):
         
         # テーブル更新
         self.refresh_table()
+
+    def move_to_next_subtitle(self):
+        """次の字幕に移動してテキスト編集を開始"""
+        current_row = self.table.currentRow()
+        if current_row >= 0 and current_row < len(self.subtitles) - 1:
+            next_row = current_row + 1
+            # 次の行の本文列を選択
+            self.table.setCurrentCell(next_row, 3)
+            # 編集モードを開始
+            self.table.editItem(self.table.item(next_row, 3))
