@@ -769,6 +769,51 @@ class TestComprehensiveAnalysis(unittest.TestCase):
             # 元の関数に戻す
             app.core.benchmark.get_memory_usage = original_get_memory
 
+    def test_unique_filename_generation(self):
+        """ベンチマーク結果ファイル名の重複防止をテスト."""
+        import tempfile
+        import time
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = BenchmarkManager(temp_dir)
+
+            # 同じ秒に複数のベンチマーク結果を保存
+            base_timestamp = "2025-01-01T12:00:00.000000"
+
+            results = []
+            for i in range(3):
+                result = BenchmarkResult(
+                    platform="Linux",
+                    cpu_info="Test CPU",
+                    processing_time={"test": 1.0},
+                    accuracy_score={"test": 0.9},
+                    memory_usage=100.0,
+                    thread_config={},
+                    ocr_settings={},
+                    timestamp=base_timestamp,  # 同じタイムスタンプ
+                    errors={}
+                )
+                results.append(result)
+
+            # ファイル保存
+            saved_paths = []
+            for result in results:
+                path = manager.save_result(result)
+                saved_paths.append(path)
+
+            # 全てのファイルパスが異なることを確認
+            self.assertEqual(len(saved_paths), len(set(saved_paths)))
+
+            # 全てのファイルが存在することを確認
+            for path in saved_paths:
+                self.assertTrue(path.exists())
+
+            # ファイル名の形式を確認（マイクロ秒とUUIDが含まれているか）
+            for path in saved_paths:
+                filename = path.name
+                self.assertTrue("_000000_" in filename)  # マイクロ秒
+                self.assertTrue(filename.count("_") >= 4)  # UUID部分を含む
+
 
 if __name__ == '__main__':
     unittest.main()

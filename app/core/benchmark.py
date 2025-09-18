@@ -18,6 +18,7 @@ except ImportError:
     PSUTIL_AVAILABLE = False
 import statistics
 import time
+import uuid
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
@@ -878,9 +879,10 @@ class BenchmarkManager:
 
     def save_result(self, result: BenchmarkResult) -> Path:
         """ベンチマーク結果を保存."""
-        # ファイル名生成（タイムスタンプ + プラットフォーム）
+        # ファイル名生成（タイムスタンプ + マイクロ秒 + UUID）
         timestamp = datetime.fromisoformat(result.timestamp)
-        filename = f"benchmark_{result.platform}_{timestamp.strftime('%Y%m%d_%H%M%S')}.json"
+        unique_id = str(uuid.uuid4())[:8]  # UUID の最初の8文字
+        filename = f"benchmark_{result.platform}_{timestamp.strftime('%Y%m%d_%H%M%S_%f')}_{unique_id}.json"
 
         filepath = self.storage_dir / filename
 
