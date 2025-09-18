@@ -6,6 +6,9 @@ __pycache__/
 # C extensions
 *.so
 
+# Translation model files (too large for Git)
+app/models/translation/
+
 # Distribution / packaging
 .Python
 build/
