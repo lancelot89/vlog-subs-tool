@@ -28,6 +28,13 @@ from app.core.format.srt import SRTFormatter, SRTFormatSettings, MultiLanguageSR
 from app.core.csv import SubtitleCSVExporter
 from app.core.qc.rules import QCChecker
 from app.core.extractor.ocr import SimplePaddleOCREngine
+from app.core.translate import (
+    TranslationProviderRouter,
+    TranslationProviderType,
+    LocalTranslateProvider,
+    LocalTranslateSettings,
+    LocalTranslateError
+)
 
 
 def setup_japanese_support(app):
@@ -1124,28 +1131,30 @@ class MainWindow(QMainWindow):
             # 字幕データを準備
             multilang_subtitles = {}
 
-            for lang_code in selected_languages:
-                if lang_code == 'ja':
-                    # 日本語の場合は元の字幕データを使用
-                    multilang_subtitles[lang_code] = self.current_project.subtitles
-                else:
-                    # 他の言語の場合は翻訳処理が必要
-                    # 現在は翻訳機能が未実装のため、日本語をコピー
-                    # TODO: 実際の翻訳機能を実装後に更新
-                    translated_subtitles = []
-                    for subtitle in self.current_project.subtitles:
-                        # 仮の翻訳処理（翻訳プロバイダー統合後に更新）
-                        translated_text = f"[{lang_code.upper()}] {subtitle.text}"
-                        translated_subtitle = SubtitleItem(
-                            index=subtitle.index,
-                            start_ms=subtitle.start_ms,
-                            end_ms=subtitle.end_ms,
-                            text=translated_text,
-                            confidence=subtitle.confidence,
-                            bbox=subtitle.bbox
-                        )
-                        translated_subtitles.append(translated_subtitle)
-                    multilang_subtitles[lang_code] = translated_subtitles
+            # 日本語は常に含める
+            multilang_subtitles['ja'] = self.current_project.subtitles
+
+            # 他の言語を翻訳
+            other_languages = [lang for lang in selected_languages if lang != 'ja']
+
+            if other_languages:
+                try:
+                    # 翻訳プロバイダーの初期化
+                    translation_results = self._translate_to_languages(
+                        self.current_project.subtitles,
+                        other_languages
+                    )
+                    multilang_subtitles.update(translation_results)
+                except Exception as translation_error:
+                    # 翻訳エラーが発生した場合の処理
+                    QMessageBox.warning(
+                        self,
+                        "翻訳エラー",
+                        f"翻訳処理でエラーが発生しました：\n{str(translation_error)}\n\n"
+                        "日本語のみ出力します。"
+                    )
+                    # 日本語のみに制限
+                    selected_languages = ['ja']
 
             # SRTファイルを保存
             results = srt_manager.save_multilang_srt(multilang_subtitles)
@@ -1183,6 +1192,98 @@ class MainWindow(QMainWindow):
 
         except Exception as e:
             QMessageBox.critical(self, "エラー", f"多言語SRTエクスポートでエラーが発生しました：\n{str(e)}")
+
+    def _translate_to_languages(self, subtitles: List[SubtitleItem], target_languages: List[str]) -> Dict[str, List[SubtitleItem]]:
+        """字幕を複数言語に翻訳"""
+        translation_results = {}
+
+        try:
+            # ローカル翻訳プロバイダーの初期化
+            models_dir = Path.cwd() / "app" / "models" / "translation"
+            models_dir.mkdir(parents=True, exist_ok=True)
+
+            settings = LocalTranslateSettings(
+                models_dir=str(models_dir),
+                max_batch_size=16,
+                beam_size=1,
+                length_penalty=0.2,
+                repetition_penalty=1.5,
+                max_decoding_length=50
+            )
+
+            router = TranslationProviderRouter()
+            router.register_provider(TranslationProviderType.LOCAL, settings)
+
+            # 字幕テキストを抽出
+            subtitle_texts = [subtitle.text for subtitle in subtitles]
+
+            # 各言語に翻訳
+            for target_lang in target_languages:
+                try:
+                    self.status_label.setText(f"翻訳中: 日本語 → {target_lang}...")
+
+                    # 翻訳実行
+                    translation_result = router.translate_batch(
+                        subtitle_texts,
+                        target_language=target_lang,
+                        source_language='ja',  # 日本語から翻訳
+                        provider_type=TranslationProviderType.LOCAL
+                    )
+
+                    if translation_result.success:
+                        # 翻訳された字幕アイテムを作成
+                        translated_subtitles = []
+                        for i, (original_subtitle, translated_text) in enumerate(zip(subtitles, translation_result.translated_texts)):
+                            translated_subtitle = SubtitleItem(
+                                index=original_subtitle.index,
+                                start_ms=original_subtitle.start_ms,
+                                end_ms=original_subtitle.end_ms,
+                                text=translated_text,
+                                bbox=original_subtitle.bbox
+                            )
+                            translated_subtitles.append(translated_subtitle)
+
+                        translation_results[target_lang] = translated_subtitles
+                        logging.info(f"翻訳完了: {target_lang} ({len(translated_subtitles)}件)")
+
+                    else:
+                        # 翻訳失敗の場合は元のテキストにプレフィックス付きで使用
+                        logging.warning(f"翻訳失敗: {target_lang} - {translation_result.error_message}")
+                        fallback_subtitles = []
+                        for subtitle in subtitles:
+                            fallback_text = f"[{target_lang.upper()}] {subtitle.text}"
+                            fallback_subtitle = SubtitleItem(
+                                index=subtitle.index,
+                                start_ms=subtitle.start_ms,
+                                end_ms=subtitle.end_ms,
+                                text=fallback_text,
+                                bbox=subtitle.bbox
+                            )
+                            fallback_subtitles.append(fallback_subtitle)
+                        translation_results[target_lang] = fallback_subtitles
+
+                except Exception as lang_error:
+                    logging.error(f"言語 {target_lang} の翻訳でエラー: {lang_error}")
+                    # エラー時のフォールバック
+                    fallback_subtitles = []
+                    for subtitle in subtitles:
+                        fallback_text = f"[ERROR:{target_lang.upper()}] {subtitle.text}"
+                        fallback_subtitle = SubtitleItem(
+                            index=subtitle.index,
+                            start_ms=subtitle.start_ms,
+                            end_ms=subtitle.end_ms,
+                            text=fallback_text,
+                            bbox=subtitle.bbox
+                        )
+                        fallback_subtitles.append(fallback_subtitle)
+                    translation_results[target_lang] = fallback_subtitles
+
+            self.status_label.setText("翻訳処理完了")
+            return translation_results
+
+        except Exception as e:
+            logging.error(f"翻訳処理でエラー: {e}")
+            raise Exception(f"翻訳プロバイダーの初期化に失敗しました: {str(e)}")
 
     def _get_srt_format_settings(self) -> SRTFormatSettings:
         """SRT出力設定を取得"""
