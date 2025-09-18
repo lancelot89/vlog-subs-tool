@@ -80,6 +80,7 @@ jobs:
       tag_name: ${{ needs.validate-release.outputs.version }}
 
   create-changelog:
+    needs: validate-release
     runs-on: ubuntu-latest
     outputs:
       changelog: ${{ steps.changelog.outputs.changelog }}

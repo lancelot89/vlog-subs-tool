@@ -10,6 +10,12 @@ on:
         description: 'Tag name for manual release'
         required: false
         default: 'manual-build'
+  workflow_call:  # 他のワークフローから呼び出し可能
+    inputs:
+      tag_name:
+        description: 'Tag name for release'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -199,10 +205,10 @@ jobs:
           vlog-subs-tool-linux/vlog-subs-tool-linux.tar.gz
           vlog-subs-tool-windows/vlog-subs-tool-windows.zip
           vlog-subs-tool-macos/vlog-subs-tool-macos.zip
-        tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
-        name: VLog字幕ツール ${{ github.event.inputs.tag_name || github.ref_name }}
+        tag_name: ${{ inputs.tag_name || github.event.inputs.tag_name || github.ref_name }}
+        name: VLog字幕ツール ${{ inputs.tag_name || github.event.inputs.tag_name || github.ref_name }}
         body: |
-          ## 🎬 VLog字幕ツール ${{ github.event.inputs.tag_name || github.ref_name }}
+          ## 🎬 VLog字幕ツール ${{ inputs.tag_name || github.event.inputs.tag_name || github.ref_name }}
 
           ### 📦 ダウンロード
 
