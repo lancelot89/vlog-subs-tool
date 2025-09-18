@@ -4,13 +4,14 @@
 VLOGでよく見られる白い縁取りのある字幕画像を作成
 """
 
-import numpy as np
-import cv2
+import os
 from pathlib import Path
 from typing import List, Tuple
-from PIL import Image, ImageDraw, ImageFont
+
+import cv2
+import numpy as np
 import requests
-import os
+from PIL import Image, ImageDraw, ImageFont
 
 
 def get_japanese_font():
@@ -38,8 +39,9 @@ def get_japanese_font():
         return None
 
 
-def create_subtitle_image_pil(text: str, width: int = 1280, height: int = 720,
-                             font_size: int = 48) -> np.ndarray:
+def create_subtitle_image_pil(
+    text: str, width: int = 1280, height: int = 720, font_size: int = 48
+) -> np.ndarray:
     """
     PILを使用して日本語対応の字幕画像を作成
 
@@ -53,7 +55,7 @@ def create_subtitle_image_pil(text: str, width: int = 1280, height: int = 720,
         np.ndarray: 生成された画像（OpenCV形式）
     """
     # PIL画像を作成（RGB）
-    img = Image.new('RGB', (width, height), color=(0, 0, 0))
+    img = Image.new("RGB", (width, height), color=(0, 0, 0))
     draw = ImageDraw.Draw(img)
 
     # フォントを取得
@@ -91,8 +93,13 @@ def create_subtitle_image_pil(text: str, width: int = 1280, height: int = 720,
     return img_bgr
 
 
-def create_subtitle_image(text: str, width: int = 1280, height: int = 720,
-                         font_scale: float = 2.0, thickness: int = 3) -> np.ndarray:
+def create_subtitle_image(
+    text: str,
+    width: int = 1280,
+    height: int = 720,
+    font_scale: float = 2.0,
+    thickness: int = 3,
+) -> np.ndarray:
     """
     字幕画像を作成（日本語対応）
 
@@ -107,7 +114,9 @@ def create_subtitle_image(text: str, width: int = 1280, height: int = 720,
         np.ndarray: 生成された画像
     """
     # 日本語が含まれている場合はPILを使用
-    has_japanese = any('\u3040' <= char <= '\u30ff' or '\u4e00' <= char <= '\u9faf' for char in text)
+    has_japanese = any(
+        "\u3040" <= char <= "\u30ff" or "\u4e00" <= char <= "\u9faf" for char in text
+    )
 
     if has_japanese:
         return create_subtitle_image_pil(text, width, height)
@@ -116,8 +125,13 @@ def create_subtitle_image(text: str, width: int = 1280, height: int = 720,
         return create_subtitle_image_opencv(text, width, height, font_scale, thickness)
 
 
-def create_subtitle_image_opencv(text: str, width: int = 1280, height: int = 720,
-                                font_scale: float = 2.0, thickness: int = 3) -> np.ndarray:
+def create_subtitle_image_opencv(
+    text: str,
+    width: int = 1280,
+    height: int = 720,
+    font_scale: float = 2.0,
+    thickness: int = 3,
+) -> np.ndarray:
     """
     OpenCVを使用した字幕画像作成（英語用）
     """

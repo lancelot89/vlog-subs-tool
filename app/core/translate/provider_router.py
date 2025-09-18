@@ -4,15 +4,20 @@
 """
 
 import logging
-from enum import Enum
-from typing import List, Dict, Optional, Callable, Any, Union
 from dataclasses import dataclass
+from enum import Enum
+from typing import Any, Callable, Dict, List, Optional, Union
 
-from .provider_local import LocalTranslateProvider, LocalTranslateSettings, LocalTranslateError
+from .provider_local import (
+    LocalTranslateError,
+    LocalTranslateProvider,
+    LocalTranslateSettings,
+)
 
 
 class TranslationProviderType(Enum):
     """翻訳プロバイダータイプ"""
+
     LOCAL = "local"
     MOCK = "mock"  # テスト用
 
@@ -20,6 +25,7 @@ class TranslationProviderType(Enum):
 @dataclass
 class TranslationResult:
     """翻訳結果"""
+
     translated_texts: List[str]
     source_language: str
     target_language: str
@@ -32,7 +38,12 @@ class TranslationResult:
 class TranslationError(Exception):
     """翻訳関連エラー"""
 
-    def __init__(self, message: str, provider: TranslationProviderType, original_error: Optional[Exception] = None):
+    def __init__(
+        self,
+        message: str,
+        provider: TranslationProviderType,
+        original_error: Optional[Exception] = None,
+    ):
         super().__init__(message)
         self.provider = provider
         self.original_error = original_error
@@ -52,7 +63,7 @@ class MockTranslateProvider:
         texts: List[str],
         target_language: str,
         source_language: str = "ja",
-        progress_callback: Optional[Callable[[str, int], None]] = None
+        progress_callback: Optional[Callable[[str, int], None]] = None,
     ) -> List[str]:
         """モック翻訳（テスト用）"""
         if progress_callback:
@@ -82,10 +93,10 @@ class MockTranslateProvider:
 
     def get_supported_languages(self) -> Dict[str, str]:
         return {
-            'ja': '日本語',
-            'en': 'English',
-            'zh-cn': '中文（简体）',
-            'ar': 'العربية',
+            "ja": "日本語",
+            "en": "English",
+            "zh-cn": "中文（简体）",
+            "ar": "العربية",
         }
 
     def is_language_supported(self, lang_code: str) -> bool:
@@ -160,7 +171,7 @@ class TranslationProviderRouter:
         target_language: str,
         source_language: Optional[str] = None,
         provider_type: Optional[TranslationProviderType] = None,
-        progress_callback: Optional[Callable[[str, int], None]] = None
+        progress_callback: Optional[Callable[[str, int], None]] = None,
     ) -> TranslationResult:
         """バッチ翻訳実行"""
         if not texts:
@@ -169,7 +180,7 @@ class TranslationProviderRouter:
                 source_language=source_language or "unknown",
                 target_language=target_language,
                 provider_used=TranslationProviderType.MOCK,
-                success=True
+                success=True,
             )
 
         # 使用するプロバイダーを決定
@@ -206,7 +217,7 @@ class TranslationProviderRouter:
                     texts=texts,
                     target_language=target_language,
                     source_language=source_language,
-                    progress_callback=progress_callback
+                    progress_callback=progress_callback,
                 )
 
                 # 成功
@@ -217,9 +228,9 @@ class TranslationProviderRouter:
                     provider_used=provider,
                     success=True,
                     metadata={
-                        'provider_settings': self.provider_settings.get(provider),
-                        'text_count': len(texts)
-                    }
+                        "provider_settings": self.provider_settings.get(provider),
+                        "text_count": len(texts),
+                    },
                 )
 
             except Exception as e:
@@ -240,10 +251,12 @@ class TranslationProviderRouter:
             target_language=target_language,
             provider_used=TranslationProviderType.MOCK,  # ダミー値
             success=False,
-            error_message=error_message
+            error_message=error_message,
         )
 
-    def get_supported_languages(self, provider_type: Optional[TranslationProviderType] = None) -> Dict[str, str]:
+    def get_supported_languages(
+        self, provider_type: Optional[TranslationProviderType] = None
+    ) -> Dict[str, str]:
         """サポートされている言語一覧を取得"""
         if provider_type is not None and provider_type in self.providers:
             return self.providers[provider_type].get_supported_languages()
@@ -269,7 +282,9 @@ class TranslationProviderRouter:
 
         return {lang: name for lang, name in all_languages.items() if lang in common_languages}
 
-    def get_provider_error_guidance(self, provider_type: TranslationProviderType, error: Exception) -> str:
+    def get_provider_error_guidance(
+        self, provider_type: TranslationProviderType, error: Exception
+    ) -> str:
         """プロバイダー固有のエラーガイダンスを取得"""
         if provider_type not in self.providers:
             return f"プロバイダー {provider_type.value} は利用できません"
@@ -277,7 +292,7 @@ class TranslationProviderRouter:
         provider = self.providers[provider_type]
 
         # プロバイダー固有のエラーガイダンスがある場合は使用
-        if hasattr(provider, 'get_error_guidance'):
+        if hasattr(provider, "get_error_guidance"):
             return provider.get_error_guidance(error)
 
         return f"翻訳エラー ({provider_type.value}): {str(error)}"

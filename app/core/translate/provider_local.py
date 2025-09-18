@@ -5,15 +5,16 @@
 import logging
 import os
 import threading
-from pathlib import Path
-from typing import List, Dict, Optional, Callable, Tuple
-from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable, Dict, List, Optional, Tuple
 
 try:
     import ctranslate2
-    import transformers
     import sentencepiece as spm
+    import transformers
+
     CTRANSLATE2_AVAILABLE = True
 except ImportError:
     CTRANSLATE2_AVAILABLE = False
@@ -21,17 +22,19 @@ except ImportError:
 
 try:
     import opencc
+
     OPENCC_AVAILABLE = True
 except ImportError:
     OPENCC_AVAILABLE = False
     # OpenCCは中国語変換でのみ使用され、現在は無効化されているため警告を出力しない
 
-from .language_detector import LanguageDetector, LanguageDetectionError
+from .language_detector import LanguageDetectionError, LanguageDetector
 
 
 @dataclass
 class LocalTranslateSettings:
     """ローカル翻訳設定"""
+
     models_dir: str
     max_batch_size: int = 16
     beam_size: int = 1  # より厳格に
@@ -40,7 +43,7 @@ class LocalTranslateSettings:
     coverage_penalty: float = 0.0
     repetition_penalty: float = 1.5  # より強い繰り返し抑制
     no_repeat_ngram_size: int = 3  # 3-gramの繰り返しを防ぐ
-    max_decoding_length: int = 50   # さらに短く制限
+    max_decoding_length: int = 50  # さらに短く制限
     min_decoding_length: int = 1
     use_vmap: bool = True
     inter_threads: int = 1
@@ -50,7 +53,12 @@ class LocalTranslateSettings:
 class LocalTranslateError(Exception):
     """ローカル翻訳関連エラー"""
 
-    def __init__(self, message: str, error_code: str = "", original_error: Optional[Exception] = None):
+    def __init__(
+        self,
+        message: str,
+        error_code: str = "",
+        original_error: Optional[Exception] = None,
+    ):
         super().__init__(message)
         self.error_code = error_code
         self.original_error = original_error
@@ -61,14 +69,14 @@ class ModelManager:
 
     # サポートされている言語ペア（英語ピボット構成）
     SUPPORTED_PAIRS = {
-        ('ja', 'en'): 'Helsinki-NLP/opus-mt-ja-en',
-        ('en', 'ja'): 'Helsinki-NLP/opus-mt-jap-en',  # 実際に存在するモデル
-        ('zh', 'en'): 'Helsinki-NLP/opus-mt-zh-en',
-        ('en', 'zh'): 'Helsinki-NLP/opus-mt-en-zh',
-        ('ar', 'en'): 'Helsinki-NLP/opus-mt-ar-en',
-        ('en', 'ar'): 'Helsinki-NLP/opus-mt-en-ar',
-        ('ko', 'en'): 'Helsinki-NLP/opus-mt-ko-en',
-        ('en', 'ko'): 'Helsinki-NLP/opus-mt-en-ko',
+        ("ja", "en"): "Helsinki-NLP/opus-mt-ja-en",
+        ("en", "ja"): "Helsinki-NLP/opus-mt-jap-en",  # 実際に存在するモデル
+        ("zh", "en"): "Helsinki-NLP/opus-mt-zh-en",
+        ("en", "zh"): "Helsinki-NLP/opus-mt-en-zh",
+        ("ar", "en"): "Helsinki-NLP/opus-mt-ar-en",
+        ("en", "ar"): "Helsinki-NLP/opus-mt-en-ar",
+        ("ko", "en"): "Helsinki-NLP/opus-mt-ko-en",
+        ("en", "ko"): "Helsinki-NLP/opus-mt-en-ko",
     }
 
     def __init__(self, models_dir: str):
@@ -87,7 +95,9 @@ class ModelManager:
         model_path = self.get_model_path(src_lang, tgt_lang)
         return model_path.exists() and (model_path / "config.json").exists()
 
-    def download_and_convert_model(self, src_lang: str, tgt_lang: str, progress_callback: Optional[Callable] = None) -> bool:
+    def download_and_convert_model(
+        self, src_lang: str, tgt_lang: str, progress_callback: Optional[Callable] = None
+    ) -> bool:
         """
         Hugging FaceモデルをダウンロードしてCTranslate2形式に変換
         """
@@ -96,7 +106,10 @@ class ModelManager:
 
         lang_pair = (src_lang, tgt_lang)
         if lang_pair not in self.SUPPORTED_PAIRS:
-            raise LocalTranslateError(f"未対応の言語ペア: {src_lang} -> {tgt_lang}", "UNSUPPORTED_LANGUAGE_PAIR")
+            raise LocalTranslateError(
+                f"未対応の言語ペア: {src_lang} -> {tgt_lang}",
+                "UNSUPPORTED_LANGUAGE_PAIR",
+            )
 
         model_id = self.SUPPORTED_PAIRS[lang_pair]
         model_path = self.get_model_path(src_lang, tgt_lang)
@@ -130,9 +143,15 @@ class ModelManager:
 
         except Exception as e:
             logging.error(f"モデル変換エラー: {e}")
-            raise LocalTranslateError(f"モデルのダウンロード・変換に失敗: {str(e)}", "MODEL_CONVERSION_FAILED", e)
+            raise LocalTranslateError(
+                f"モデルのダウンロード・変換に失敗: {str(e)}",
+                "MODEL_CONVERSION_FAILED",
+                e,
+            )
 
-    def load_model(self, src_lang: str, tgt_lang: str, settings: LocalTranslateSettings) -> Tuple[Optional[object], Optional[object]]:
+    def load_model(
+        self, src_lang: str, tgt_lang: str, settings: LocalTranslateSettings
+    ) -> Tuple[Optional[object], Optional[object]]:
         """モデルをロード"""
         lang_pair = (src_lang, tgt_lang)
 
@@ -156,7 +175,7 @@ class ModelManager:
                     str(model_path),
                     device="cpu",
                     inter_threads=settings.inter_threads,
-                    intra_threads=settings.intra_threads
+                    intra_threads=settings.intra_threads,
                 )
 
                 # トークナイザーをロード
@@ -180,13 +199,16 @@ class ModelManager:
             return [direct_pair]
 
         # 英語ピボット翻訳
-        if src_lang != 'en' and tgt_lang != 'en':
-            pivot_route = [(src_lang, 'en'), ('en', tgt_lang)]
+        if src_lang != "en" and tgt_lang != "en":
+            pivot_route = [(src_lang, "en"), ("en", tgt_lang)]
             # 両方のペアがサポートされているかチェック
             if all(pair in self.SUPPORTED_PAIRS for pair in pivot_route):
                 return pivot_route
 
-        raise LocalTranslateError(f"翻訳ルートが見つかりません: {src_lang} -> {tgt_lang}", "NO_TRANSLATION_ROUTE")
+        raise LocalTranslateError(
+            f"翻訳ルートが見つかりません: {src_lang} -> {tgt_lang}",
+            "NO_TRANSLATION_ROUTE",
+        )
 
 
 class LocalTranslateProvider:
@@ -202,7 +224,9 @@ class LocalTranslateProvider:
     def initialize(self) -> bool:
         """初期化"""
         if not CTRANSLATE2_AVAILABLE:
-            raise LocalTranslateError("CTranslate2パッケージがインストールされていません", "PACKAGE_MISSING")
+            raise LocalTranslateError(
+                "CTranslate2パッケージがインストールされていません", "PACKAGE_MISSING"
+            )
 
         try:
             # 言語検出器を初期化
@@ -211,8 +235,8 @@ class LocalTranslateProvider:
             # OpenCCコンバーターを初期化（中国語用）
             if OPENCC_AVAILABLE:
                 self.opencc_converter = {
-                    'zh-cn-to-zh-tw': opencc.OpenCC('s2t'),  # 簡体字 -> 繁体字
-                    'zh-tw-to-zh-cn': opencc.OpenCC('t2s'),  # 繁体字 -> 簡体字
+                    "zh-cn-to-zh-tw": opencc.OpenCC("s2t"),  # 簡体字 -> 繁体字
+                    "zh-tw-to-zh-cn": opencc.OpenCC("t2s"),  # 繁体字 -> 簡体字
                 }
 
             self.is_initialized = True
@@ -225,9 +249,9 @@ class LocalTranslateProvider:
     def _preprocess_text(self, text: str, src_lang: str) -> str:
         """テキストの前処理"""
         # 改行を空白に変換
-        text = text.replace('\n', ' ').replace('\r', ' ')
+        text = text.replace("\n", " ").replace("\r", " ")
         # 連続する空白を単一空白に変換
-        text = ' '.join(text.split())
+        text = " ".join(text.split())
         return text.strip()
 
     def _postprocess_text(self, text: str, tgt_lang: str) -> str:
@@ -235,20 +259,26 @@ class LocalTranslateProvider:
         text = text.strip()
 
         # アラビア語の場合、右から左への文字制御を追加
-        if tgt_lang == 'ar':
+        if tgt_lang == "ar":
             # RLM (Right-to-Left Mark) を文頭に追加
-            text = '\u200F' + text
+            text = "\u200f" + text
 
         # 中国語の場合、OpenCCで変換
-        if tgt_lang.startswith('zh-') and OPENCC_AVAILABLE and self.opencc_converter:
-            if tgt_lang == 'zh-tw' and 'zh-cn-to-zh-tw' in self.opencc_converter:
-                text = self.opencc_converter['zh-cn-to-zh-tw'].convert(text)
-            elif tgt_lang == 'zh-cn' and 'zh-tw-to-zh-cn' in self.opencc_converter:
-                text = self.opencc_converter['zh-tw-to-zh-cn'].convert(text)
+        if tgt_lang.startswith("zh-") and OPENCC_AVAILABLE and self.opencc_converter:
+            if tgt_lang == "zh-tw" and "zh-cn-to-zh-tw" in self.opencc_converter:
+                text = self.opencc_converter["zh-cn-to-zh-tw"].convert(text)
+            elif tgt_lang == "zh-cn" and "zh-tw-to-zh-cn" in self.opencc_converter:
+                text = self.opencc_converter["zh-tw-to-zh-cn"].convert(text)
 
         return text
 
-    def _translate_single_step(self, texts: List[str], src_lang: str, tgt_lang: str, progress_callback: Optional[Callable] = None) -> List[str]:
+    def _translate_single_step(
+        self,
+        texts: List[str],
+        src_lang: str,
+        tgt_lang: str,
+        progress_callback: Optional[Callable] = None,
+    ) -> List[str]:
         """単一ステップの翻訳実行"""
         if not texts:
             return []
@@ -264,11 +294,14 @@ class LocalTranslateProvider:
         total_batches = (len(processed_texts) + batch_size - 1) // batch_size
 
         for i in range(0, len(processed_texts), batch_size):
-            batch_texts = processed_texts[i:i + batch_size]
+            batch_texts = processed_texts[i : i + batch_size]
             batch_num = i // batch_size + 1
 
             if progress_callback:
-                progress_callback(f"翻訳中 ({src_lang}->{tgt_lang}): {batch_num}/{total_batches}", int(batch_num * 50 / total_batches))
+                progress_callback(
+                    f"翻訳中 ({src_lang}->{tgt_lang}): {batch_num}/{total_batches}",
+                    int(batch_num * 50 / total_batches),
+                )
 
             # トークン化（CTranslate2形式に合わせる）
             source_tokens = []
@@ -289,7 +322,7 @@ class LocalTranslateProvider:
                 repetition_penalty=self.settings.repetition_penalty,
                 no_repeat_ngram_size=self.settings.no_repeat_ngram_size,
                 max_decoding_length=self.settings.max_decoding_length,
-                min_decoding_length=self.settings.min_decoding_length
+                min_decoding_length=self.settings.min_decoding_length,
             )
 
             # デトークン化
@@ -307,7 +340,7 @@ class LocalTranslateProvider:
         texts: List[str],
         target_language: str,
         source_language: Optional[str] = None,
-        progress_callback: Optional[Callable[[str, int], None]] = None
+        progress_callback: Optional[Callable[[str, int], None]] = None,
     ) -> List[str]:
         """バッチ翻訳実行"""
         if not self.is_initialized:
@@ -323,21 +356,30 @@ class LocalTranslateProvider:
                     progress_callback("言語検出中...", 5)
 
                 # 複数のテキストから言語を検出（最初の数個を使用）
-                sample_texts = texts[:min(5, len(texts))]
-                sample_text = ' '.join(sample_texts)
+                sample_texts = texts[: min(5, len(texts))]
+                sample_text = " ".join(sample_texts)
 
                 detection_result = self.language_detector.detect_language(sample_text)
                 if detection_result is None:
-                    raise LocalTranslateError("ソース言語を検出できませんでした", "LANGUAGE_DETECTION_FAILED")
+                    raise LocalTranslateError(
+                        "ソース言語を検出できませんでした", "LANGUAGE_DETECTION_FAILED"
+                    )
 
                 source_language = detection_result.language
-                logging.info(f"検出された言語: {source_language} (信頼度: {detection_result.confidence:.2f})")
+                logging.info(
+                    f"検出された言語: {source_language} (信頼度: {detection_result.confidence:.2f})"
+                )
 
             # 翻訳ルートを決定
-            translation_route = self.model_manager.get_translation_route(source_language, target_language)
+            translation_route = self.model_manager.get_translation_route(
+                source_language, target_language
+            )
 
             if progress_callback:
-                progress_callback(f"翻訳ルート: {' -> '.join([pair[0] for pair in translation_route] + [translation_route[-1][1]])}", 10)
+                progress_callback(
+                    f"翻訳ルート: {' -> '.join([pair[0] for pair in translation_route] + [translation_route[-1][1]])}",
+                    10,
+                )
 
             # 翻訳実行
             current_texts = texts
@@ -349,14 +391,16 @@ class LocalTranslateProvider:
 
                 def step_progress_callback(message: str, progress: int):
                     if progress_callback:
-                        final_progress = step_progress_start + (progress * (step_progress_end - step_progress_start) // 100)
-                        progress_callback(f"ステップ {step_idx + 1}/{len(translation_route)}: {message}", final_progress)
+                        final_progress = step_progress_start + (
+                            progress * (step_progress_end - step_progress_start) // 100
+                        )
+                        progress_callback(
+                            f"ステップ {step_idx + 1}/{len(translation_route)}: {message}",
+                            final_progress,
+                        )
 
                 current_texts = self._translate_single_step(
-                    current_texts,
-                    src_lang,
-                    tgt_lang,
-                    step_progress_callback
+                    current_texts, src_lang, tgt_lang, step_progress_callback
                 )
 
                 current_progress = step_progress_end
@@ -364,24 +408,28 @@ class LocalTranslateProvider:
             if progress_callback:
                 progress_callback("翻訳完了", 100)
 
-            logging.info(f"ローカル翻訳完了: {len(texts)}件 ({source_language} -> {target_language})")
+            logging.info(
+                f"ローカル翻訳完了: {len(texts)}件 ({source_language} -> {target_language})"
+            )
             return current_texts
 
         except LocalTranslateError:
             raise
         except Exception as e:
             logging.error(f"翻訳中にエラー: {e}")
-            raise LocalTranslateError(f"翻訳中にエラーが発生しました: {str(e)}", "TRANSLATION_FAILED", e)
+            raise LocalTranslateError(
+                f"翻訳中にエラーが発生しました: {str(e)}", "TRANSLATION_FAILED", e
+            )
 
     def get_supported_languages(self) -> Dict[str, str]:
         """サポートされている言語一覧を取得"""
         languages = {
-            'ja': '日本語',
-            'en': 'English',
-            'zh-cn': '中文（简体）',
-            'zh-tw': '中文（繁體）',
-            'ar': 'العربية',
-            'ko': '한국어',
+            "ja": "日本語",
+            "en": "English",
+            "zh-cn": "中文（简体）",
+            "zh-tw": "中文（繁體）",
+            "ar": "العربية",
+            "ko": "한국어",
         }
         return languages
 

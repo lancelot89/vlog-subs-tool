@@ -2,12 +2,15 @@
 Test cross-platform OCR compatibility between Windows and Linux.
 Ensures that SimplePaddleOCREngine works identically across platforms.
 """
-import pytest
-import numpy as np
-import cv2
-import platform
+
 import os
-from unittest.mock import patch, MagicMock
+import platform
+from unittest.mock import MagicMock, patch
+
+import cv2
+import numpy as np
+import pytest
+
 from app.core.extractor.ocr import SimplePaddleOCREngine
 
 
@@ -24,8 +27,8 @@ class TestCrossPlatformOCR:
         engine = SimplePaddleOCREngine()
 
         # Mock platform.system() for Windows
-        with patch('platform.system', return_value='Windows'):
-            with patch('app.core.extractor.ocr.PaddleOCR') as mock_paddle:
+        with patch("platform.system", return_value="Windows"):
+            with patch("app.core.extractor.ocr.PaddleOCR") as mock_paddle:
                 mock_paddle.return_value = MagicMock()
 
                 # Attempt initialization (will fail due to missing models, but env vars should be set)
@@ -44,11 +47,11 @@ class TestCrossPlatformOCR:
         engine = SimplePaddleOCREngine()
 
         # Mock the models directory resolution
-        with patch.object(engine, '_resolve_models_root') as mock_resolve:
+        with patch.object(engine, "_resolve_models_root") as mock_resolve:
             mock_resolve.return_value = "/fake/path"
 
             # Mock Path.exists() to return True
-            with patch('pathlib.Path.exists', return_value=True):
+            with patch("pathlib.Path.exists", return_value=True):
                 # Mock PaddleOCR with different failure scenarios
                 call_attempts = []
 
@@ -58,7 +61,7 @@ class TestCrossPlatformOCR:
                         raise Exception("Parameter not supported")
                     return MagicMock()  # Third attempt succeeds
 
-                with patch('app.core.extractor.ocr.PaddleOCR', side_effect=mock_paddle_ocr_init):
+                with patch("app.core.extractor.ocr.PaddleOCR", side_effect=mock_paddle_ocr_init):
                     result = engine.initialize()
 
                     # Should have tried all three configurations
@@ -66,28 +69,31 @@ class TestCrossPlatformOCR:
                     assert result == True
 
                     # Check that different parameter sets were tried
-                    assert 'text_detection_model_dir' in call_attempts[0]  # latest
-                    assert 'det_model_dir' in call_attempts[1]  # legacy
-                    assert 'det_model_dir' in call_attempts[2]  # minimal
+                    assert "text_detection_model_dir" in call_attempts[0]  # latest
+                    assert "det_model_dir" in call_attempts[1]  # legacy
+                    assert "det_model_dir" in call_attempts[2]  # minimal
 
     def test_path_resolution_cross_platform(self):
         """Test that model path resolution works on different platforms."""
         engine = SimplePaddleOCREngine()
 
         # Test Windows-specific path resolution
-        with patch('platform.system', return_value='Windows'):
-            with patch('sys.frozen', True, create=True):
-                with patch('sys.executable', 'C:\\app\\myapp.exe'):
-                    with patch('pathlib.Path.exists') as mock_exists:
+        with patch("platform.system", return_value="Windows"):
+            with patch("sys.frozen", True, create=True):
+                with patch("sys.executable", "C:\\app\\myapp.exe"):
+                    with patch("pathlib.Path.exists") as mock_exists:
                         # Mock that frozen app directory exists
                         def exists_side_effect(self):
-                            return str(self).endswith('PP-OCRv5_server_det') or str(self).endswith('PP-OCRv5_server_rec')
+                            return str(self).endswith("PP-OCRv5_server_det") or str(self).endswith(
+                                "PP-OCRv5_server_rec"
+                            )
+
                         mock_exists.side_effect = exists_side_effect
 
                         try:
                             result = engine._resolve_models_root()
                             # Should find the frozen application path
-                            assert 'myapp.exe' not in str(result)  # Should be parent directory
+                            assert "myapp.exe" not in str(result)  # Should be parent directory
                         except FileNotFoundError:
                             # Expected if mocking doesn't fully work
                             pass
@@ -99,12 +105,12 @@ class TestCrossPlatformOCR:
         # Create test images with different characteristics
         test_images = [
             np.ones((100, 200, 3), dtype=np.uint8) * 128,  # Normal RGB
-            np.ones((100, 200), dtype=np.uint8) * 128,     # Grayscale
+            np.ones((100, 200), dtype=np.uint8) * 128,  # Grayscale
             np.ones((100, 200, 3), dtype=np.float32) * 0.5,  # Float32
             np.ones((5000, 5000, 3), dtype=np.uint8) * 128,  # Large image
         ]
 
-        with patch.object(engine, '_ocr') as mock_ocr:
+        with patch.object(engine, "_ocr") as mock_ocr:
             mock_ocr.ocr.return_value = [[]]  # Empty result
 
             for i, img in enumerate(test_images):
@@ -122,9 +128,15 @@ class TestCrossPlatformOCR:
         # Test different result formats
         test_cases = [
             # Traditional list format
-            [[[[0, 0], [100, 0], [100, 30], [0, 30]], ('Hello', 0.95)]],
+            [[[[0, 0], [100, 0], [100, 30], [0, 30]], ("Hello", 0.95)]],
             # Dictionary format (newer versions)
-            [{'rec_texts': ['Hello'], 'rec_scores': [0.95], 'rec_polys': [[[0, 0], [100, 0], [100, 30], [0, 30]]]}],
+            [
+                {
+                    "rec_texts": ["Hello"],
+                    "rec_scores": [0.95],
+                    "rec_polys": [[[0, 0], [100, 0], [100, 30], [0, 30]]],
+                }
+            ],
             # Empty result
             [[]],
             # None result
@@ -141,12 +153,14 @@ class TestCrossPlatformOCR:
 
                 if test_result[0] and test_result[0] is not None:
                     if isinstance(test_result[0], dict):
-                        expected_count = len(test_result[0].get('rec_texts', []))
+                        expected_count = len(test_result[0].get("rec_texts", []))
                     else:
                         expected_count = len(test_result[0]) if test_result[0] else 0
 
                     if expected_count > 0:
-                        assert len(results) <= expected_count, f"Test case {i} result count mismatch"
+                        assert (
+                            len(results) <= expected_count
+                        ), f"Test case {i} result count mismatch"
 
             except Exception as e:
                 pytest.fail(f"OCR result parsing test case {i} failed: {e}")
@@ -155,7 +169,7 @@ class TestCrossPlatformOCR:
         """Test memory safety features work on all platforms."""
         engine = SimplePaddleOCREngine()
 
-        with patch.object(engine, '_ocr') as mock_ocr:
+        with patch.object(engine, "_ocr") as mock_ocr:
             mock_ocr.ocr.return_value = [[]]
 
             # Test memory safety with different scenarios
@@ -186,7 +200,7 @@ class TestCrossPlatformOCR:
                 log_messages.append(record.getMessage())
 
         handler = TestHandler()
-        logger = logging.getLogger('app.core.extractor.ocr')
+        logger = logging.getLogger("app.core.extractor.ocr")
         logger.addHandler(handler)
         logger.setLevel(logging.DEBUG)
 
@@ -194,15 +208,15 @@ class TestCrossPlatformOCR:
             engine = SimplePaddleOCREngine()
 
             # Test that platform-specific messages are logged
-            with patch('platform.system', return_value='Windows'):
-                with patch.object(engine, '_resolve_models_root') as mock_resolve:
+            with patch("platform.system", return_value="Windows"):
+                with patch.object(engine, "_resolve_models_root") as mock_resolve:
                     mock_resolve.side_effect = FileNotFoundError("Test error")
 
                     result = engine.initialize()
                     assert result == False
 
                     # Check that Windows-specific logging occurred
-                    platform_logs = [msg for msg in log_messages if 'Windows' in msg]
+                    platform_logs = [msg for msg in log_messages if "Windows" in msg]
                     assert len(platform_logs) > 0, "Should have Windows-specific log messages"
 
         finally:

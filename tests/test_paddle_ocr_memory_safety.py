@@ -2,9 +2,11 @@
 Test PaddleOCR memory safety and large image handling.
 Tests the fixes for malloc() and std::bad_array_new_length errors.
 """
-import pytest
-import numpy as np
+
 import cv2
+import numpy as np
+import pytest
+
 from app.core.extractor.ocr import SimplePaddleOCREngine
 
 

@@ -5,16 +5,17 @@
 
 import json
 import logging
-from pathlib import Path
-from typing import Dict, Any, Optional, List
-from dataclasses import dataclass, asdict
-import platform
 import os
+import platform
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
 class ExtractionSettings:
     """抽出設定"""
+
     fps_sample: float = 3.0
     resolution: str = "オリジナル"
     roi_mode: str = "bottom"  # "auto", "bottom", "manual"
@@ -26,6 +27,7 @@ class ExtractionSettings:
 @dataclass
 class FormattingSettings:
     """整形設定"""
+
     max_chars: int = 42
     max_lines: int = 2
     min_duration: float = 1.2
@@ -39,6 +41,7 @@ class FormattingSettings:
 @dataclass
 class OutputSettings:
     """出力設定"""
+
     output_folder: str = ""
     filename_pattern: str = "{basename}.{lang}.srt"
     encoding: str = "UTF-8"
@@ -52,6 +55,7 @@ class OutputSettings:
 @dataclass
 class UISettings:
     """UI設定"""
+
     theme: str = "システム"
     font_size: int = 9
     auto_save: bool = False
@@ -62,6 +66,7 @@ class UISettings:
 @dataclass
 class AppSettings:
     """アプリケーション設定"""
+
     extraction: ExtractionSettings
     formatting: FormattingSettings
     output: OutputSettings
@@ -109,7 +114,7 @@ class SettingsManager:
         # プラットフォーム別の設定フォルダ
         if platform.system() == "Windows":
             # Windows: %APPDATA%
-            config_dir = Path(os.environ.get('APPDATA', Path.home() / "AppData" / "Roaming"))
+            config_dir = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
         elif platform.system() == "Darwin":  # macOS
             # macOS: ~/Library/Application Support
             config_dir = Path.home() / "Library" / "Application Support"
@@ -130,11 +135,11 @@ class SettingsManager:
         try:
             if self._settings_path.exists():
                 self.logger.info(f"設定ファイル読み込み: {self._settings_path}")
-                with open(self._settings_path, 'r', encoding='utf-8') as f:
+                with open(self._settings_path, "r", encoding="utf-8") as f:
                     settings_dict = json.load(f)
 
                 # バージョン確認
-                file_version = settings_dict.get('version', '1.0.0')
+                file_version = settings_dict.get("version", "1.0.0")
                 if file_version != "1.0.0":
                     self.logger.warning(f"設定ファイルのバージョンが異なります: {file_version}")
 
@@ -162,7 +167,7 @@ class SettingsManager:
             self._create_backup()
 
             self.logger.info(f"設定ファイル保存: {self._settings_path}")
-            with open(self._settings_path, 'w', encoding='utf-8') as f:
+            with open(self._settings_path, "w", encoding="utf-8") as f:
                 json.dump(settings_dict, f, indent=2, ensure_ascii=False)
 
             self.logger.info("設定保存完了")
@@ -178,7 +183,7 @@ class SettingsManager:
             extraction=ExtractionSettings(),
             formatting=FormattingSettings(),
             output=OutputSettings(),
-            ui=UISettings()
+            ui=UISettings(),
         )
 
     def _settings_to_dict(self, settings: AppSettings) -> Dict[str, Any]:
@@ -188,7 +193,7 @@ class SettingsManager:
             "extraction": asdict(settings.extraction),
             "formatting": asdict(settings.formatting),
             "output": asdict(settings.output),
-            "ui": asdict(settings.ui)
+            "ui": asdict(settings.ui),
         }
 
     def _dict_to_settings(self, settings_dict: Dict[str, Any]) -> AppSettings:
@@ -198,36 +203,44 @@ class SettingsManager:
             default_settings = self._create_default_settings()
 
             # 各セクションを更新
-            if 'extraction' in settings_dict:
-                extraction_dict = settings_dict['extraction']
-                default_settings.extraction = ExtractionSettings(**{
-                    k: v for k, v in extraction_dict.items()
-                    if k in ExtractionSettings.__dataclass_fields__
-                })
+            if "extraction" in settings_dict:
+                extraction_dict = settings_dict["extraction"]
+                default_settings.extraction = ExtractionSettings(
+                    **{
+                        k: v
+                        for k, v in extraction_dict.items()
+                        if k in ExtractionSettings.__dataclass_fields__
+                    }
+                )
 
-            if 'formatting' in settings_dict:
-                formatting_dict = settings_dict['formatting']
-                default_settings.formatting = FormattingSettings(**{
-                    k: v for k, v in formatting_dict.items()
-                    if k in FormattingSettings.__dataclass_fields__
-                })
+            if "formatting" in settings_dict:
+                formatting_dict = settings_dict["formatting"]
+                default_settings.formatting = FormattingSettings(
+                    **{
+                        k: v
+                        for k, v in formatting_dict.items()
+                        if k in FormattingSettings.__dataclass_fields__
+                    }
+                )
 
-            if 'output' in settings_dict:
-                output_dict = settings_dict['output']
-                default_settings.output = OutputSettings(**{
-                    k: v for k, v in output_dict.items()
-                    if k in OutputSettings.__dataclass_fields__
-                })
+            if "output" in settings_dict:
+                output_dict = settings_dict["output"]
+                default_settings.output = OutputSettings(
+                    **{
+                        k: v
+                        for k, v in output_dict.items()
+                        if k in OutputSettings.__dataclass_fields__
+                    }
+                )
 
-            if 'ui' in settings_dict:
-                ui_dict = settings_dict['ui']
-                default_settings.ui = UISettings(**{
-                    k: v for k, v in ui_dict.items()
-                    if k in UISettings.__dataclass_fields__
-                })
+            if "ui" in settings_dict:
+                ui_dict = settings_dict["ui"]
+                default_settings.ui = UISettings(
+                    **{k: v for k, v in ui_dict.items() if k in UISettings.__dataclass_fields__}
+                )
 
-            if 'version' in settings_dict:
-                default_settings.version = settings_dict['version']
+            if "version" in settings_dict:
+                default_settings.version = settings_dict["version"]
 
             return default_settings
 
@@ -238,9 +251,10 @@ class SettingsManager:
     def _create_backup(self):
         """設定ファイルのバックアップを作成"""
         if self._settings_path.exists():
-            backup_path = self._settings_path.with_suffix('.json.backup')
+            backup_path = self._settings_path.with_suffix(".json.backup")
             try:
                 import shutil
+
                 shutil.copy2(self._settings_path, backup_path)
                 self.logger.debug(f"バックアップ作成: {backup_path}")
             except Exception as e:
@@ -263,9 +277,9 @@ class SettingsManager:
         recent_files_path = self.get_recent_files_path()
         try:
             if recent_files_path.exists():
-                with open(recent_files_path, 'r', encoding='utf-8') as f:
+                with open(recent_files_path, "r", encoding="utf-8") as f:
                     recent_files = json.load(f)
-                return recent_files.get('files', [])
+                return recent_files.get("files", [])
         except Exception as e:
             self.logger.error(f"最近使用したファイル読み込みエラー: {e}")
 
@@ -276,10 +290,10 @@ class SettingsManager:
         recent_files_path = self.get_recent_files_path()
         try:
             recent_data = {
-                'files': files,
-                'last_updated': str(Path(__file__).stat().st_mtime)
+                "files": files,
+                "last_updated": str(Path(__file__).stat().st_mtime),
             }
-            with open(recent_files_path, 'w', encoding='utf-8') as f:
+            with open(recent_files_path, "w", encoding="utf-8") as f:
                 json.dump(recent_data, f, indent=2, ensure_ascii=False)
         except Exception as e:
             self.logger.error(f"最近使用したファイル保存エラー: {e}")

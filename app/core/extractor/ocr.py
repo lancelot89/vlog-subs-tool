@@ -23,24 +23,35 @@ repository.
 
 from __future__ import annotations
 
+import logging
+import multiprocessing
+import os
+import pickle
+import platform
+import queue
+import re
+import signal
+import subprocess
+import sys
+import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, Iterator, List, Mapping, Optional, Sequence, Tuple, Union
-import logging
-import os
-import platform
-import sys
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+)
 
 import cv2  # type: ignore
 import numpy as np
-import signal
-import threading
-import time
-import multiprocessing
-import pickle
-import queue
-import subprocess
-import re
 
 from app.core.cpu_profiler import get_adaptive_thread_config
 
@@ -280,7 +291,9 @@ class SimplePaddleOCREngine:
                 # Apple Silicon additional tweaks
                 os.environ.setdefault("PADDLE_CPU_ONLY", "1")
                 os.environ.setdefault("BLAS", "Accelerate")  # Prefer Apple Accelerate framework
-                os.environ.setdefault("FLAGS_use_mkldnn", "false")  # Disable MKLDNN on Apple Silicon
+                os.environ.setdefault(
+                    "FLAGS_use_mkldnn", "false"
+                )  # Disable MKLDNN on Apple Silicon
                 os.environ.setdefault("FLAGS_allocator_strategy", "auto_growth")
                 logger.debug("Applied Apple Silicon specific PaddleOCR environment tweaks")
 
@@ -321,22 +334,30 @@ class SimplePaddleOCREngine:
             # Get CPU profile for intelligent configuration selection
             try:
                 from app.core.cpu_profiler import CPUProfiler
+
                 profiler = CPUProfiler()
                 cpu_profile = profiler.detect_cpu_profile()
 
                 # Determine if we can use aggressive optimization based on CPU profile
-                vendor = cpu_profile.get('vendor', 'Unknown')
-                generation = cpu_profile.get('generation')
-                architecture = cpu_profile.get('architecture', 'Unknown')
+                vendor = cpu_profile.get("vendor", "Unknown")
+                generation = cpu_profile.get("generation")
+                architecture = cpu_profile.get("architecture", "Unknown")
 
                 use_aggressive = (
-                    (vendor == "Intel" and generation and generation >= 8) or  # 8th gen以降（Coffee Lake+）
-                    (vendor == "AMD" and generation and generation >= 2) or  # Zen2+
-                    (vendor == "Apple")
+                    (
+                        vendor == "Intel" and generation and generation >= 8
+                    )  # 8th gen以降（Coffee Lake+）
+                    or (vendor == "AMD" and generation and generation >= 2)  # Zen2+
+                    or (vendor == "Apple")
                 )
 
-                logger.debug("CPU Profile: %s %s gen %s, using aggressive: %s",
-                           vendor, architecture, generation, use_aggressive)
+                logger.debug(
+                    "CPU Profile: %s %s gen %s, using aggressive: %s",
+                    vendor,
+                    architecture,
+                    generation,
+                    use_aggressive,
+                )
 
             except Exception as e:
                 logger.warning("Failed to get CPU profile for configuration selection: %s", e)
@@ -346,16 +367,20 @@ class SimplePaddleOCREngine:
                 # Windows環境では段階的に性能向上設定を試行
                 config_candidates = [
                     # Phase 1: 積極的性能最適化 (新しいCPU向け)
-                    {
-                        "text_detection_model_dir": str(det_dir.resolve()),
-                        "text_recognition_model_dir": str(rec_dir.resolve()),
-                        "lang": lang,
-                        "use_textline_orientation": True,  # 角度検出有効化
-                        "use_gpu": False,
-                        "use_space_char": True,
-                        "drop_score": 0.5,
-                        "enable_mkldnn": True,  # MKL-DNN有効化
-                    } if use_aggressive else None,
+                    (
+                        {
+                            "text_detection_model_dir": str(det_dir.resolve()),
+                            "text_recognition_model_dir": str(rec_dir.resolve()),
+                            "lang": lang,
+                            "use_textline_orientation": True,  # 角度検出有効化
+                            "use_gpu": False,
+                            "use_space_char": True,
+                            "drop_score": 0.5,
+                            "enable_mkldnn": True,  # MKL-DNN有効化
+                        }
+                        if use_aggressive
+                        else None
+                    ),
                     # Phase 2: 中程度の最適化
                     {
                         "text_detection_model_dir": str(det_dir.resolve()),
@@ -424,11 +449,20 @@ class SimplePaddleOCREngine:
                 try:
                     # Windows環境での段階的試行をログ出力
                     if is_windows:
-                        phase_names = ["Aggressive Performance", "Moderate Optimization", "Safe Configuration", "Legacy Fallback"]
+                        phase_names = [
+                            "Aggressive Performance",
+                            "Moderate Optimization",
+                            "Safe Configuration",
+                            "Legacy Fallback",
+                        ]
                         phase_name = phase_names[min(i, len(phase_names) - 1)]
                         logger.info("Trying Windows %s configuration...", phase_name)
 
-                    logger.debug("Initialising PaddleOCR on %s with kwargs=%s", platform.system(), kwargs)
+                    logger.debug(
+                        "Initialising PaddleOCR on %s with kwargs=%s",
+                        platform.system(),
+                        kwargs,
+                    )
                     self._ocr = PaddleOCR(**kwargs)  # type: ignore[misc]
                     if self._ocr is None:
                         raise RuntimeError("PaddleOCR returned None instance")
@@ -445,11 +479,19 @@ class SimplePaddleOCREngine:
                     if is_windows:
                         logger.warning("Windows optimization phase %d failed: %s", i + 1, exc)
                     else:
-                        logger.warning("PaddleOCR initialisation failed (%s): %s", platform.system(), exc)
+                        logger.warning(
+                            "PaddleOCR initialisation failed (%s): %s",
+                            platform.system(),
+                            exc,
+                        )
                     self._ocr = None
                     continue
 
-            logger.error("All PaddleOCR configurations failed on %s: %s", platform.system(), "; ".join(errors))
+            logger.error(
+                "All PaddleOCR configurations failed on %s: %s",
+                platform.system(),
+                "; ".join(errors),
+            )
             return False
 
         except FileNotFoundError as exc:
@@ -462,7 +504,9 @@ class SimplePaddleOCREngine:
             return False
 
     # ----------------------- inference helpers -----------------------
-    def extract_text(self, image_input: Union[np.ndarray, Mapping[str, Any], Sequence[Any], Any]) -> List[OCRResult]:
+    def extract_text(
+        self, image_input: Union[np.ndarray, Mapping[str, Any], Sequence[Any], Any]
+    ) -> List[OCRResult]:
         """Run OCR on the provided image or iterable of images.
 
         ``image_input`` may be a single ``numpy.ndarray``, a dataclass/dict that
@@ -626,8 +670,13 @@ class SimplePaddleOCREngine:
                     return None
 
             # 最大辺長制限の適用
-            if self.max_side_length > 0 and (height > self.max_side_length or width > self.max_side_length):
-                scale = min(self.max_side_length / float(height), self.max_side_length / float(width))
+            if self.max_side_length > 0 and (
+                height > self.max_side_length or width > self.max_side_length
+            ):
+                scale = min(
+                    self.max_side_length / float(height),
+                    self.max_side_length / float(width),
+                )
                 new_w = max(10, int(width * scale))  # 最小サイズを保証
                 new_h = max(10, int(height * scale))
                 try:
@@ -646,7 +695,9 @@ class SimplePaddleOCREngine:
 
             final_height, final_width = processed.shape[:2]
             if final_height <= 0 or final_width <= 0:
-                logger.warning(f"Final processed image has invalid size: {final_width}x{final_height}")
+                logger.warning(
+                    f"Final processed image has invalid size: {final_width}x{final_height}"
+                )
                 return None
 
             if processed.ndim != 3 or processed.shape[2] != 3:
@@ -691,7 +742,9 @@ class SimplePaddleOCREngine:
                 logger.warning("Image data is not contiguous")
                 return []
 
-            logger.debug(f"Sending image to OCR: shape={processed.shape}, dtype={processed.dtype}, contiguous={processed.flags.c_contiguous}")
+            logger.debug(
+                f"Sending image to OCR: shape={processed.shape}, dtype={processed.dtype}, contiguous={processed.flags.c_contiguous}"
+            )
 
             # PaddleOCRの実行（Apple Siliconでのフリーズ対策でタイムアウト付き）
             raw_results = self._run_ocr_with_timeout(processed, timeout_seconds=30)
@@ -699,7 +752,10 @@ class SimplePaddleOCREngine:
         except IndexError as exc:
             # Windows環境でのvector<bool> subscriptエラーの特別処理
             if "vector" in str(exc) and "subscript" in str(exc):
-                logger.warning("Windows-specific PaddleX vector error detected, skipping image: %s", exc)
+                logger.warning(
+                    "Windows-specific PaddleX vector error detected, skipping image: %s",
+                    exc,
+                )
                 return []
             else:
                 logger.error("PaddleOCR IndexError on %s: %s", platform.system(), exc)
@@ -713,6 +769,7 @@ class SimplePaddleOCREngine:
         except Exception as exc:  # pragma: no cover - unexpected runtime issue
             logger.error("PaddleOCR inference failed on %s: %s", platform.system(), exc)
             import traceback
+
             logger.error("Full traceback: %s", traceback.format_exc())
             return []
 
@@ -730,13 +787,17 @@ class SimplePaddleOCREngine:
             return self._run_ocr_in_process(image, timeout_seconds)
         except TimeoutError:
             # タイムアウトエラーは伝播させてフォールバックでの再フリーズを防ぐ
-            logger.error("Process-based OCR timed out on Apple Silicon, aborting to prevent re-freeze")
+            logger.error(
+                "Process-based OCR timed out on Apple Silicon, aborting to prevent re-freeze"
+            )
             raise
         except Exception as e:
             logger.error("Process-based OCR failed on Apple Silicon: %s", e)
             # プロセス作成などの技術的な失敗の場合のみフォールバック
             # ただし、直接実行も同様にフリーズする可能性があるため空の結果を返す
-            logger.warning("Process creation failed, returning empty OCR result to avoid potential freeze")
+            logger.warning(
+                "Process creation failed, returning empty OCR result to avoid potential freeze"
+            )
             return []
 
     def _run_ocr_in_process(self, image: np.ndarray, timeout_seconds: int) -> Any:
@@ -744,11 +805,11 @@ class SimplePaddleOCREngine:
         # プロセス間でPaddleOCRエンジンを共有できないため、
         # 設定情報を渡して子プロセス内でエンジンを再初期化
         engine_config = {
-            'models_root': str(self.models_root) if self.models_root else None,
-            'language': self.language,
-            'confidence_threshold': self.confidence_threshold,
-            'max_image_pixels': self.max_image_pixels,
-            'max_side_length': self.max_side_length,
+            "models_root": str(self.models_root) if self.models_root else None,
+            "language": self.language,
+            "confidence_threshold": self.confidence_threshold,
+            "max_image_pixels": self.max_image_pixels,
+            "max_side_length": self.max_side_length,
         }
 
         # マルチプロセシング用のキューで結果を受け取る
@@ -758,14 +819,17 @@ class SimplePaddleOCREngine:
         process = multiprocessing.Process(
             target=_ocr_worker_process,
             args=(engine_config, image, result_queue),
-            daemon=True
+            daemon=True,
         )
 
         process.start()
         process.join(timeout=timeout_seconds)
 
         if process.is_alive():
-            logger.error("OCR process timed out on Apple Silicon after %d seconds", timeout_seconds)
+            logger.error(
+                "OCR process timed out on Apple Silicon after %d seconds",
+                timeout_seconds,
+            )
             # プロセスを強制終了（スレッドと違い確実に終了可能）
             process.terminate()
             process.join(timeout=5)  # 終了を待機
@@ -776,22 +840,24 @@ class SimplePaddleOCREngine:
 
             # プロセス終了後はエンジンを無効化して次回再初期化
             self._ocr = None
-            raise TimeoutError(f"OCR process timed out after {timeout_seconds} seconds on Apple Silicon")
+            raise TimeoutError(
+                f"OCR process timed out after {timeout_seconds} seconds on Apple Silicon"
+            )
 
         # プロセスが正常終了した場合は結果を取得
         # Queue.empty()は信頼性がないため、get_nowait()でレースコンディションを回避
         try:
             result_data = result_queue.get_nowait()
-            if isinstance(result_data, dict) and 'error' in result_data:
-                raise Exception(result_data['error'])
+            if isinstance(result_data, dict) and "error" in result_data:
+                raise Exception(result_data["error"])
             return result_data
         except queue.Empty:
             # キューが空の場合
             # プロセス終了後も結果転送が完了していない可能性があるため短時間待機して再試行
             try:
                 result_data = result_queue.get(timeout=2.0)
-                if isinstance(result_data, dict) and 'error' in result_data:
-                    raise Exception(result_data['error'])
+                if isinstance(result_data, dict) and "error" in result_data:
+                    raise Exception(result_data["error"])
                 return result_data
             except queue.Empty:
                 raise RuntimeError("OCR process completed but no result was returned")
@@ -865,12 +931,17 @@ class SimplePaddleOCREngine:
 # Process worker function for Apple Silicon OCR -------------------------------
 # ---------------------------------------------------------------------------
 
-def _ocr_worker_process(engine_config: Dict[str, Any], image: np.ndarray, result_queue: multiprocessing.Queue) -> None:
+
+def _ocr_worker_process(
+    engine_config: Dict[str, Any],
+    image: np.ndarray,
+    result_queue: multiprocessing.Queue,
+) -> None:
     """子プロセスでOCRを実行（Apple Silicon用）"""
     try:
         # 子プロセス内でPaddleOCRエンジンを初期化
         if not PADDLEOCR_AVAILABLE:
-            result_queue.put({'error': 'PaddleOCR not available in worker process'})
+            result_queue.put({"error": "PaddleOCR not available in worker process"})
             return
 
         # Apple Silicon最適化の環境変数を設定
@@ -886,16 +957,18 @@ def _ocr_worker_process(engine_config: Dict[str, Any], image: np.ndarray, result
 
         # 一時的なエンジンインスタンスを作成
         temp_engine = SimplePaddleOCREngine(
-            language=engine_config['language'],
-            confidence_threshold=engine_config['confidence_threshold'],
-            models_root=Path(engine_config['models_root']) if engine_config['models_root'] else None,
-            max_image_pixels=engine_config['max_image_pixels'],
-            max_side_length=engine_config['max_side_length'],
+            language=engine_config["language"],
+            confidence_threshold=engine_config["confidence_threshold"],
+            models_root=(
+                Path(engine_config["models_root"]) if engine_config["models_root"] else None
+            ),
+            max_image_pixels=engine_config["max_image_pixels"],
+            max_side_length=engine_config["max_side_length"],
         )
 
         # エンジンを初期化
         if not temp_engine.initialize():
-            result_queue.put({'error': 'Failed to initialize PaddleOCR in worker process'})
+            result_queue.put({"error": "Failed to initialize PaddleOCR in worker process"})
             return
 
         # OCR実行
@@ -903,7 +976,7 @@ def _ocr_worker_process(engine_config: Dict[str, Any], image: np.ndarray, result
         result_queue.put(ocr_result)
 
     except Exception as e:
-        result_queue.put({'error': str(e)})
+        result_queue.put({"error": str(e)})
 
 
 __all__ = [

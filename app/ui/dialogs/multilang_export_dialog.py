@@ -2,14 +2,25 @@
 多言語SRTエクスポートダイアログの実装
 """
 
-from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QCheckBox,
-    QPushButton, QGroupBox, QScrollArea, QWidget, QLineEdit,
-    QFileDialog, QFormLayout, QMessageBox
-)
-from PySide6.QtCore import Qt, Signal
 from pathlib import Path
 from typing import Dict, List, Optional, Set
+
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QDialog,
+    QFileDialog,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
+)
 
 
 class MultiLanguageExportDialog(QDialog):
@@ -17,20 +28,20 @@ class MultiLanguageExportDialog(QDialog):
 
     # 対応言語の定義（翻訳プロバイダーで実際にサポートされる言語）
     SUPPORTED_LANGUAGES = {
-        'ja': '日本語',
-        'en': 'English',
-        'zh-cn': '中文（简体）',
-        'zh-tw': '中文（繁體）',
-        'ar': 'العربية',
-        'ko': '한국어',
-        'es': 'Español',
-        'fr': 'Français',
-        'de': 'Deutsch',
-        'it': 'Italiano',
-        'pt': 'Português',
-        'ru': 'Русский',
-        'th': 'ไทย',
-        'vi': 'Tiếng Việt'
+        "ja": "日本語",
+        "en": "English",
+        "zh-cn": "中文（简体）",
+        "zh-tw": "中文（繁體）",
+        "ar": "العربية",
+        "ko": "한국어",
+        "es": "Español",
+        "fr": "Français",
+        "de": "Deutsch",
+        "it": "Italiano",
+        "pt": "Português",
+        "ru": "Русский",
+        "th": "ไทย",
+        "vi": "Tiếng Việt",
     }
 
     # エクスポート実行のシグナル（選択された言語リストと出力先パスを送信）
@@ -127,8 +138,7 @@ class MultiLanguageExportDialog(QDialog):
 
         # ファイル名パターンの説明
         pattern_label = QLabel(
-            "ファイル名形式: {ベース名}.{言語コード}.srt\n"
-            "例: video.ja.srt, video.en.srt"
+            "ファイル名形式: {ベース名}.{言語コード}.srt\n" "例: video.ja.srt, video.en.srt"
         )
         pattern_label.setStyleSheet("QLabel { color: #666; font-size: 10pt; }")
         form_layout.addRow("", pattern_label)
@@ -157,11 +167,12 @@ class MultiLanguageExportDialog(QDialog):
         # 設定画面からデフォルト言語を取得を試行
         try:
             from app.ui.views.settings_view import SettingsView
+
             settings_view = SettingsView()
             default_languages = settings_view.get_default_languages()
         except Exception:
             # フォールバック: デフォルト言語を設定
-            default_languages = ['ja', 'en']
+            default_languages = ["ja", "en"]
 
         # デフォルト言語を選択
         for lang_code in default_languages:
@@ -181,9 +192,7 @@ class MultiLanguageExportDialog(QDialog):
     def browse_output_directory(self):
         """出力先ディレクトリの選択"""
         directory = QFileDialog.getExistingDirectory(
-            self,
-            "出力先ディレクトリを選択",
-            str(self.default_output_dir)
+            self, "出力先ディレクトリを選択", str(self.default_output_dir)
         )
 
         if directory:
@@ -207,11 +216,7 @@ class MultiLanguageExportDialog(QDialog):
 
         # 選択チェック
         if not selected_languages:
-            QMessageBox.warning(
-                self,
-                "警告",
-                "少なくとも1つの言語を選択してください。"
-            )
+            QMessageBox.warning(self, "警告", "少なくとも1つの言語を選択してください。")
             return
 
         # 出力先チェック
@@ -221,7 +226,7 @@ class MultiLanguageExportDialog(QDialog):
                 self,
                 "確認",
                 f"出力先ディレクトリが存在しません。作成しますか？\n{output_dir}",
-                QMessageBox.Yes | QMessageBox.No
+                QMessageBox.Yes | QMessageBox.No,
             )
 
             if reply == QMessageBox.Yes:
@@ -229,9 +234,7 @@ class MultiLanguageExportDialog(QDialog):
                     output_dir.mkdir(parents=True, exist_ok=True)
                 except Exception as e:
                     QMessageBox.critical(
-                        self,
-                        "エラー",
-                        f"ディレクトリの作成に失敗しました：\n{str(e)}"
+                        self, "エラー", f"ディレクトリの作成に失敗しました：\n{str(e)}"
                     )
                     return
             else:
@@ -245,12 +248,7 @@ class MultiLanguageExportDialog(QDialog):
             f"出力先: {output_dir}"
         )
 
-        reply = QMessageBox.question(
-            self,
-            "確認",
-            message,
-            QMessageBox.Yes | QMessageBox.No
-        )
+        reply = QMessageBox.question(self, "確認", message, QMessageBox.Yes | QMessageBox.No)
 
         if reply == QMessageBox.Yes:
             # エクスポート実行のシグナルを送信
@@ -258,7 +256,9 @@ class MultiLanguageExportDialog(QDialog):
             self.accept()
 
     @staticmethod
-    def get_export_settings(default_output_dir: Optional[Path] = None, parent=None) -> Optional[tuple]:
+    def get_export_settings(
+        default_output_dir: Optional[Path] = None, parent=None
+    ) -> Optional[tuple]:
         """
         静的メソッド：エクスポート設定を取得
 

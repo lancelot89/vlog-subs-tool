@@ -36,7 +36,7 @@ def test_srt_multiline_output():
     print("=" * 50)
 
     # 期待される改行文字の確認
-    lines = srt_output.split('\n')
+    lines = srt_output.split("\n")
     multiline_found = False
 
     for i, line in enumerate(lines):
@@ -82,6 +82,7 @@ def test_srt_parsing():
 天気ですね"""
 
     from app.core.format.srt import SRTParser
+
     parser = SRTParser()
 
     # SRTを解析

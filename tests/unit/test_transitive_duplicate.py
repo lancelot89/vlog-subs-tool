@@ -5,8 +5,8 @@ PRコメント対応 - assert文使用版
 """
 
 import sys
-from pathlib import Path
 from dataclasses import dataclass
+from pathlib import Path
 from typing import List, Optional, Tuple
 
 # プロジェクトルートをPythonパスに追加
@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 @dataclass
 class MockSubtitleItem:
     """SubtitleItem のモック"""
+
     index: int
     start_ms: int
     end_ms: int
@@ -64,7 +65,9 @@ class MockTextSimilarityCalculator:
         return previous_row[-1]
 
 
-def merge_time_constrained_duplicates_with_transitive(subtitles: List[MockSubtitleItem]) -> List[MockSubtitleItem]:
+def merge_time_constrained_duplicates_with_transitive(
+    subtitles: List[MockSubtitleItem],
+) -> List[MockSubtitleItem]:
     """修正版: 連鎖的重複対応の時間制約付き統合"""
     if not subtitles:
         return []
@@ -88,10 +91,7 @@ def merge_time_constrained_duplicates_with_transitive(subtitles: List[MockSubtit
             # 連鎖的重複対応: 既存グループのいずれかとの類似度をチェック
             is_similar_to_group = False
             for group_member in current_group:
-                similarity = calc.calculate_similarity(
-                    group_member.text,
-                    subtitles_copy[j].text
-                )
+                similarity = calc.calculate_similarity(group_member.text, subtitles_copy[j].text)
                 if similarity > 0.90:
                     is_similar_to_group = True
                     break
@@ -114,7 +114,9 @@ def merge_time_constrained_duplicates_with_transitive(subtitles: List[MockSubtit
     return merged
 
 
-def merge_time_constrained_duplicates_old_behavior(subtitles: List[MockSubtitleItem]) -> List[MockSubtitleItem]:
+def merge_time_constrained_duplicates_old_behavior(
+    subtitles: List[MockSubtitleItem],
+) -> List[MockSubtitleItem]:
     """旧版: 最初の字幕とのみ比較（連鎖的重複バグあり）"""
     if not subtitles:
         return []
@@ -136,10 +138,7 @@ def merge_time_constrained_duplicates_old_behavior(subtitles: List[MockSubtitleI
                 break
 
             # 旧実装: 最初の字幕とのみ比較
-            similarity = calc.calculate_similarity(
-                subtitles_copy[i].text,
-                subtitles_copy[j].text
-            )
+            similarity = calc.calculate_similarity(subtitles_copy[i].text, subtitles_copy[j].text)
 
             if similarity > 0.90:
                 current_group.append(subtitles_copy[j])
@@ -172,7 +171,7 @@ def merge_duplicate_group(group: List[MockSubtitleItem]) -> MockSubtitleItem:
         start_ms=min_start_ms,
         end_ms=max_end_ms,
         text=base_subtitle.text,
-        bbox=base_subtitle.bbox
+        bbox=base_subtitle.bbox,
     )
 
 
@@ -183,13 +182,17 @@ def test_transitive_duplicate_chain():
     # 連鎖的重複のケース: A≈B (91%+), B≈C (91%+), but A-C (82% < 90%)
     subtitles = [
         MockSubtitleItem(index=1, start_ms=1000, end_ms=2000, text="abcdefghijk"),  # A (11文字)
-        MockSubtitleItem(index=2, start_ms=3000, end_ms=4000, text="abcdefghijX"),  # B (1文字違い: k→X)
-        MockSubtitleItem(index=3, start_ms=5000, end_ms=6000, text="abcdefghiYX"),  # C (A-C: 2文字違い: j→Y, k→X)
+        MockSubtitleItem(
+            index=2, start_ms=3000, end_ms=4000, text="abcdefghijX"
+        ),  # B (1文字違い: k→X)
+        MockSubtitleItem(
+            index=3, start_ms=5000, end_ms=6000, text="abcdefghiYX"
+        ),  # C (A-C: 2文字違い: j→Y, k→X)
     ]
 
     print("テストケース:")
     for sub in subtitles:
-        print(f"  {sub.index}: \"{sub.text}\"")
+        print(f'  {sub.index}: "{sub.text}"')
 
     # 類似度を確認
     calc = MockTextSimilarityCalculator()
@@ -216,7 +219,9 @@ def test_transitive_duplicate_chain():
     print(f"新実装結果: {len(new_result)}字幕")
 
     # 修正が効果的だったかをassert
-    assert len(new_result) < len(old_result), f"新実装で統合されていません: 旧{len(old_result)} vs 新{len(new_result)}"
+    assert len(new_result) < len(
+        old_result
+    ), f"新実装で統合されていません: 旧{len(old_result)} vs 新{len(new_result)}"
     assert len(new_result) == 1, f"連鎖的重複が1つに統合されませんでした: {len(new_result)}"
     print("✅ 修正成功: 連鎖的重複が正しく統合されました")
     return True
@@ -239,7 +244,9 @@ def test_normal_case_unchanged():
     print(f"新実装結果: {len(new_result)}字幕")
 
     # 通常ケースに影響がないことをassert
-    assert len(old_result) == len(new_result), f"通常ケースに予期しない影響: 旧{len(old_result)} vs 新{len(new_result)}"
+    assert len(old_result) == len(
+        new_result
+    ), f"通常ケースに予期しない影響: 旧{len(old_result)} vs 新{len(new_result)}"
     assert len(new_result) == 2, f"期待される統合結果と異なります: {len(new_result)}"
     print("✅ 通常ケースへの影響なし")
     return True

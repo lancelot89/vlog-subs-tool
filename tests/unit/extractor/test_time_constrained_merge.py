@@ -20,15 +20,30 @@ def test_time_constrained_duplicate_merge():
 
     # 近接する類似字幕（統合対象）
     subtitles = [
-        SubtitleItem(index=1, start_ms=16000, end_ms=17200, text="汗だくで帰宅しました、シャワー浴びてきた"),
-        SubtitleItem(index=2, start_ms=18000, end_ms=19200, text="汗だくで帰宅しました、シヤワー浴びてきた"),  # OCR誤認識版
-        SubtitleItem(index=3, start_ms=20000, end_ms=21200, text="汗だくで帰宅しました、シャワー浴びてきた"),
+        SubtitleItem(
+            index=1,
+            start_ms=16000,
+            end_ms=17200,
+            text="汗だくで帰宅しました、シャワー浴びてきた",
+        ),
+        SubtitleItem(
+            index=2,
+            start_ms=18000,
+            end_ms=19200,
+            text="汗だくで帰宅しました、シヤワー浴びてきた",
+        ),  # OCR誤認識版
+        SubtitleItem(
+            index=3,
+            start_ms=20000,
+            end_ms=21200,
+            text="汗だくで帰宅しました、シャワー浴びてきた",
+        ),
     ]
 
     settings = {
-        'similarity_threshold': 0.90,
-        'min_duration_sec': 1.2,
-        'max_gap_sec': 0.5
+        "similarity_threshold": 0.90,
+        "min_duration_sec": 1.2,
+        "max_gap_sec": 0.5,
     }
 
     processor = ExtractionProcessor(settings)
@@ -60,13 +75,15 @@ def test_distant_duplicates_not_merged():
     subtitles = [
         SubtitleItem(index=1, start_ms=1000, end_ms=2000, text="ありがとうございます"),
         SubtitleItem(index=2, start_ms=10000, end_ms=11000, text="普通の字幕"),
-        SubtitleItem(index=3, start_ms=600000, end_ms=601000, text="ありがとうございます"),  # 10分後
+        SubtitleItem(
+            index=3, start_ms=600000, end_ms=601000, text="ありがとうございます"
+        ),  # 10分後
     ]
 
     settings = {
-        'similarity_threshold': 0.90,
-        'min_duration_sec': 1.2,
-        'max_gap_sec': 0.5
+        "similarity_threshold": 0.90,
+        "min_duration_sec": 1.2,
+        "max_gap_sec": 0.5,
     }
 
     processor = ExtractionProcessor(settings)
@@ -98,22 +115,19 @@ def test_mixed_scenario():
         # グループ1: 近接する類似字幕（統合対象）
         SubtitleItem(index=1, start_ms=1000, end_ms=2000, text="こんにちは"),
         SubtitleItem(index=2, start_ms=3000, end_ms=4000, text="こんにちは"),
-
         # グループ2: 普通の字幕
         SubtitleItem(index=3, start_ms=10000, end_ms=11000, text="普通の内容"),
-
         # グループ3: 遠く離れた同じテキスト（統合対象外）
         SubtitleItem(index=4, start_ms=60000, end_ms=61000, text="こんにちは"),  # 1分後
-
         # グループ4: 別の近接類似グループ（統合対象）
         SubtitleItem(index=5, start_ms=70000, end_ms=71000, text="さようなら"),
         SubtitleItem(index=6, start_ms=72000, end_ms=73000, text="さようなら"),
     ]
 
     settings = {
-        'similarity_threshold': 0.90,
-        'min_duration_sec': 1.2,
-        'max_gap_sec': 0.5
+        "similarity_threshold": 0.90,
+        "min_duration_sec": 1.2,
+        "max_gap_sec": 0.5,
     }
 
     processor = ExtractionProcessor(settings)

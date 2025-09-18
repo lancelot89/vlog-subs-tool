@@ -1,0 +1,195 @@
+name: Build Test (No Release)
+
+on:
+  workflow_dispatch:  # 手動実行のみ
+    inputs:
+      test_platform:
+        description: 'Platform to test build'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+        - all
+        - linux
+        - windows
+        - macos
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-test-linux:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.test_platform == 'all' || github.event.inputs.test_platform == 'linux'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          qt6-base-dev \
+          libgl1-mesa-dev \
+          libxcb-xinerama0 \
+          libegl1-mesa-dev \
+          libxkbcommon-x11-0 \
+          libxcb-icccm4 \
+          libxcb-image0 \
+          libxcb-keysyms1 \
+          libxcb-render-util0 \
+          libxcb-xkb1 \
+          libfontconfig1 \
+          libfreetype6
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: Build Linux binary (Test)
+      run: |
+        export GITHUB_ACTIONS=true
+        chmod +x scripts/build_binary.sh
+        ./scripts/build_binary.sh linux
+
+    - name: Check build output
+      run: |
+        echo "=== Linux Build Analysis ==="
+        if [ -d "dist/linux" ]; then
+          echo "Build successful!"
+          du -sh dist/linux/*
+          ls -la dist/linux/vlog-subs-tool/
+        else
+          echo "Build failed - no output directory"
+          exit 1
+        fi
+
+    - name: Upload Linux build for testing
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-build-linux
+        path: dist/linux/
+        retention-days: 7
+
+  build-test-windows:
+    runs-on: windows-latest
+    if: github.event.inputs.test_platform == 'all' || github.event.inputs.test_platform == 'windows'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: Build Windows binary (Test)
+      shell: bash
+      run: |
+        export GITHUB_ACTIONS=true
+        chmod +x scripts/build_binary.sh
+        ./scripts/build_binary.sh windows
+
+    - name: Check build output
+      shell: pwsh
+      run: |
+        Write-Host "=== Windows Build Analysis ==="
+        if (Test-Path "dist/windows") {
+          Write-Host "Build successful!"
+          Get-ChildItem -Path "dist/windows" -Recurse | Measure-Object -Property Length -Sum | ForEach-Object { "Total Size: {0:N2} MB" -f ($_.Sum / 1MB) }
+          Get-ChildItem -Path "dist/windows/vlog-subs-tool" -Force
+        } else {
+          Write-Host "Build failed - no output directory"
+          exit 1
+        }
+
+    - name: Upload Windows build for testing
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-build-windows
+        path: dist/windows/
+        retention-days: 7
+
+  build-test-macos:
+    runs-on: macos-latest
+    if: github.event.inputs.test_platform == 'all' || github.event.inputs.test_platform == 'macos'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: Build macOS binary (Test)
+      run: |
+        export GITHUB_ACTIONS=true
+        chmod +x scripts/build_binary.sh
+        ./scripts/build_binary.sh macos
+
+    - name: Check build output
+      run: |
+        echo "=== macOS Build Analysis ==="
+        if [ -d "dist/macos" ]; then
+          echo "Build successful!"
+          du -sh dist/macos/*
+          ls -la "dist/macos/"
+          if [ -d "dist/macos/VLog字幕ツール.app" ]; then
+            echo "App bundle created successfully"
+            ls -la "dist/macos/VLog字幕ツール.app/Contents/"
+          else
+            echo "Warning: App bundle not found"
+          fi
+        else
+          echo "Build failed - no output directory"
+          exit 1
+        fi
+
+    - name: Upload macOS build for testing
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-build-macos
+        path: dist/macos/
+        retention-days: 7
+
+  build-summary:
+    needs: [build-test-linux, build-test-windows, build-test-macos]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+    - name: Build Summary
+      run: |
+        echo "=== Build Test Summary ==="
+        echo "Linux: ${{ needs.build-test-linux.result }}"
+        echo "Windows: ${{ needs.build-test-windows.result }}"
+        echo "macOS: ${{ needs.build-test-macos.result }}"
+
+        if [ "${{ needs.build-test-linux.result }}" = "success" ] && \
+           [ "${{ needs.build-test-windows.result }}" = "success" ] && \
+           [ "${{ needs.build-test-macos.result }}" = "success" ]; then
+          echo "✅ All builds successful - Ready for release!"
+        else
+          echo "❌ Some builds failed - Check logs before release"
+        fi

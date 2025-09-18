@@ -4,8 +4,8 @@
 """
 
 import sys
-from pathlib import Path
 from dataclasses import dataclass
+from pathlib import Path
 from typing import List, Optional, Tuple
 
 # プロジェクトルートをPythonパスに追加
@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 @dataclass
 class MockSubtitleItem:
     """SubtitleItem のモック"""
+
     index: int
     start_ms: int
     end_ms: int
@@ -42,9 +43,7 @@ class MockTextSimilarityCalculator:
             return 1.0
 
         # OCR誤認識パターンの補正
-        corrections = {
-            'シヤ': 'シャ', 'ロ': '口', '口': 'ロ'
-        }
+        corrections = {"シヤ": "シャ", "ロ": "口", "口": "ロ"}
 
         for wrong, correct in corrections.items():
             norm_text1 = norm_text1.replace(wrong, correct)
@@ -66,7 +65,9 @@ class MockTextSimilarityCalculator:
         return common_chars / max_len
 
 
-def merge_time_constrained_duplicates(subtitles: List[MockSubtitleItem]) -> List[MockSubtitleItem]:
+def merge_time_constrained_duplicates(
+    subtitles: List[MockSubtitleItem],
+) -> List[MockSubtitleItem]:
     """時間制約付きの重複統合ロジック"""
     if not subtitles:
         return []
@@ -90,10 +91,7 @@ def merge_time_constrained_duplicates(subtitles: List[MockSubtitleItem]) -> List
                 break
 
             # テキスト類似度チェック
-            similarity = calc.calculate_similarity(
-                subtitles_copy[i].text,
-                subtitles_copy[j].text
-            )
+            similarity = calc.calculate_similarity(subtitles_copy[i].text, subtitles_copy[j].text)
 
             if similarity > 0.90:
                 current_group.append(subtitles_copy[j])
@@ -127,7 +125,7 @@ def merge_duplicate_group(group: List[MockSubtitleItem]) -> MockSubtitleItem:
         start_ms=min_start_ms,
         end_ms=max_end_ms,
         text=base_subtitle.text,
-        bbox=base_subtitle.bbox
+        bbox=base_subtitle.bbox,
     )
 
     return merged_subtitle
@@ -139,15 +137,60 @@ def test_real_duplicate_cases():
 
     # test_video.ja.srtの実際のデータ
     subtitles = [
-        MockSubtitleItem(index=1, start_ms=0, end_ms=1200, text="さて図書館行って、病院行って、 銀行にも行ってくるでは出発です"),
-        MockSubtitleItem(index=2, start_ms=2000, end_ms=11200, text="さて図書館行って、病院行って、銀行にも行ってくるでは出発です"),
-        MockSubtitleItem(index=3, start_ms=16000, end_ms=27200, text="汗だくで帰宅しました、シャワー浴びてきたのでスッキリ凍らせた水持って出かけたけど真夏の外出は危険だと思った"),
-        MockSubtitleItem(index=4, start_ms=22000, end_ms=25200, text="汗だくで帰宅しました、シヤワー浴びてきたのでスッキリ凍らせた水持って出かけたけど真夏の外出は危険だと思った"),
-        MockSubtitleItem(index=5, start_ms=30000, end_ms=39200, text="がん検診の検査結果は異常なしでしたこれからも年1ペ一スで受けたいです"),
-        MockSubtitleItem(index=6, start_ms=42000, end_ms=53200, text="お昼ごはんはカレー蕎麦とネギトロ巻きにします午後にはまた大量のネギトロが届くらしいので消化していかないと"),
-        MockSubtitleItem(index=7, start_ms=44000, end_ms=45200, text="お昼ごはんはカレー蕎麦とネギトロ巻きにします午後にはまた大量のネギト口が届くらしいので消化していかないと"),
-        MockSubtitleItem(index=8, start_ms=60000, end_ms=65200, text="なんかスパッと切れなくてボロボロになっていく"),
-        MockSubtitleItem(index=9, start_ms=70000, end_ms=71200, text="昨日作った力レーが微妙に残ってたので出汁で伸ばしていきます"),
+        MockSubtitleItem(
+            index=1,
+            start_ms=0,
+            end_ms=1200,
+            text="さて図書館行って、病院行って、 銀行にも行ってくるでは出発です",
+        ),
+        MockSubtitleItem(
+            index=2,
+            start_ms=2000,
+            end_ms=11200,
+            text="さて図書館行って、病院行って、銀行にも行ってくるでは出発です",
+        ),
+        MockSubtitleItem(
+            index=3,
+            start_ms=16000,
+            end_ms=27200,
+            text="汗だくで帰宅しました、シャワー浴びてきたのでスッキリ凍らせた水持って出かけたけど真夏の外出は危険だと思った",
+        ),
+        MockSubtitleItem(
+            index=4,
+            start_ms=22000,
+            end_ms=25200,
+            text="汗だくで帰宅しました、シヤワー浴びてきたのでスッキリ凍らせた水持って出かけたけど真夏の外出は危険だと思った",
+        ),
+        MockSubtitleItem(
+            index=5,
+            start_ms=30000,
+            end_ms=39200,
+            text="がん検診の検査結果は異常なしでしたこれからも年1ペ一スで受けたいです",
+        ),
+        MockSubtitleItem(
+            index=6,
+            start_ms=42000,
+            end_ms=53200,
+            text="お昼ごはんはカレー蕎麦とネギトロ巻きにします午後にはまた大量のネギトロが届くらしいので消化していかないと",
+        ),
+        MockSubtitleItem(
+            index=7,
+            start_ms=44000,
+            end_ms=45200,
+            text="お昼ごはんはカレー蕎麦とネギトロ巻きにします午後にはまた大量のネギト口が届くらしいので消化していかないと",
+        ),
+        MockSubtitleItem(
+            index=8,
+            start_ms=60000,
+            end_ms=65200,
+            text="なんかスパッと切れなくてボロボロになっていく",
+        ),
+        MockSubtitleItem(
+            index=9,
+            start_ms=70000,
+            end_ms=71200,
+            text="昨日作った力レーが微妙に残ってたので出汁で伸ばしていきます",
+        ),
     ]
 
     print(f"元の字幕数: {len(subtitles)}")
@@ -165,7 +208,9 @@ def test_real_duplicate_cases():
     # assert文で期待値の確認
     # 重複があった1+2, 3+4, 6+7の3組が統合されて6字幕になることを期待
     expected_count = 6
-    assert len(merged_subtitles) == expected_count, f"期待値 {expected_count} != 実際 {len(merged_subtitles)}"
+    assert (
+        len(merged_subtitles) == expected_count
+    ), f"期待値 {expected_count} != 実際 {len(merged_subtitles)}"
     print(f"\n✅ テスト成功: {expected_count}字幕に統合されました")
 
     # 重複統合の確認

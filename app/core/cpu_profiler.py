@@ -19,10 +19,10 @@ class ThreadConfig:
     def to_env_vars(self) -> Dict[str, str]:
         """Convert to environment variables."""
         env_vars = {
-            'OMP_NUM_THREADS': str(self.omp_threads),
-            'OPENBLAS_NUM_THREADS': str(self.openblas_threads),
-            'MKL_NUM_THREADS': str(self.omp_threads),
-            'VECLIB_MAXIMUM_THREADS': str(self.omp_threads),
+            "OMP_NUM_THREADS": str(self.omp_threads),
+            "OPENBLAS_NUM_THREADS": str(self.openblas_threads),
+            "MKL_NUM_THREADS": str(self.omp_threads),
+            "VECLIB_MAXIMUM_THREADS": str(self.omp_threads),
         }
         return env_vars
 
@@ -42,10 +42,7 @@ def get_adaptive_thread_config() -> ThreadConfig:
     # Simple heuristic: use half of available cores, minimum 1, maximum 4
     optimal_threads = max(1, min(4, cpu_count // 2))
 
-    return ThreadConfig(
-        omp_threads=optimal_threads,
-        openblas_threads=optimal_threads
-    )
+    return ThreadConfig(omp_threads=optimal_threads, openblas_threads=optimal_threads)
 
 
 class CPUProfiler:
@@ -57,26 +54,26 @@ class CPUProfiler:
 
     def detect_cpu_profile(self):
         """Return basic CPU information."""
-        cpu_name = platform.processor() or 'Unknown'
-        vendor = 'Unknown'
+        cpu_name = platform.processor() or "Unknown"
+        vendor = "Unknown"
         generation = None
 
         # Simple vendor detection from CPU name
-        if 'Intel' in cpu_name:
-            vendor = 'Intel'
-        elif 'AMD' in cpu_name:
-            vendor = 'AMD'
-        elif 'Apple' in cpu_name or self.platform == 'Darwin':
-            vendor = 'Apple'
+        if "Intel" in cpu_name:
+            vendor = "Intel"
+        elif "AMD" in cpu_name:
+            vendor = "AMD"
+        elif "Apple" in cpu_name or self.platform == "Darwin":
+            vendor = "Apple"
 
         return {
-            'cores_physical': self.cpu_count,
-            'cores_logical': self.cpu_count,
-            'platform_name': self.platform,
-            'vendor': vendor,
-            'generation': generation,  # 簡素化のため常にNone
-            'architecture': platform.machine(),
-            'name': cpu_name,
+            "cores_physical": self.cpu_count,
+            "cores_logical": self.cpu_count,
+            "platform_name": self.platform,
+            "vendor": vendor,
+            "generation": generation,  # 簡素化のため常にNone
+            "architecture": platform.machine(),
+            "name": cpu_name,
         }
 
     def get_optimal_thread_count(self) -> int:

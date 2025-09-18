@@ -10,12 +10,15 @@ from typing import List, Tuple
 @dataclass
 class MockOCRResult:
     """OCRResult のモック"""
+
     text: str
     confidence: float
     bbox: Tuple[int, int, int, int]  # x, y, w, h
 
 
-def group_by_vertical_position(sorted_results: List[MockOCRResult]) -> List[List[MockOCRResult]]:
+def group_by_vertical_position(
+    sorted_results: List[MockOCRResult],
+) -> List[List[MockOCRResult]]:
     """OCR結果を垂直位置でグループ化（テスト用実装）"""
     if not sorted_results:
         return []
@@ -65,12 +68,16 @@ def detect_multiline_text(ocr_results: List[MockOCRResult]) -> str:
         line2_texts = [result.text for result in line_groups[1]]
 
         # 各行内でX座標順にソート
-        line1_texts.sort(key=lambda text: next(
-            result.bbox[0] for result in line_groups[0] if result.text == text
-        ))
-        line2_texts.sort(key=lambda text: next(
-            result.bbox[0] for result in line_groups[1] if result.text == text
-        ))
+        line1_texts.sort(
+            key=lambda text: next(
+                result.bbox[0] for result in line_groups[0] if result.text == text
+            )
+        )
+        line2_texts.sort(
+            key=lambda text: next(
+                result.bbox[0] for result in line_groups[1] if result.text == text
+            )
+        )
 
         # 行を結合
         line1 = " ".join(line1_texts).strip()
@@ -92,7 +99,7 @@ def test_multiline_detection():
     # 下段: "皆さん" (Y座標: 80-100)
     ocr_results = [
         MockOCRResult(text="こんにちは", confidence=0.9, bbox=(100, 50, 120, 20)),  # 1行目
-        MockOCRResult(text="皆さん", confidence=0.85, bbox=(110, 80, 80, 20)),     # 2行目
+        MockOCRResult(text="皆さん", confidence=0.85, bbox=(110, 80, 80, 20)),  # 2行目
     ]
 
     # 2行字幕検出を実行
@@ -125,7 +132,7 @@ def test_single_line_fallback():
 
     # 単行として処理されることを確認
     expected = "こんにちは皆さん"
-    if detected_text == expected and '\n' not in detected_text:
+    if detected_text == expected and "\n" not in detected_text:
         print("✅ テスト成功: 単行字幕が正しく処理されました")
         return True
     else:
@@ -139,10 +146,10 @@ def test_horizontal_ordering():
 
     # 2行で、各行に複数の文字が水平に配置
     ocr_results = [
-        MockOCRResult(text="んにちは", confidence=0.9, bbox=(150, 50, 80, 20)),   # 1行目右
-        MockOCRResult(text="こ", confidence=0.85, bbox=(100, 50, 30, 20)),       # 1行目左
-        MockOCRResult(text="さん", confidence=0.8, bbox=(150, 80, 60, 20)),      # 2行目右
-        MockOCRResult(text="皆", confidence=0.85, bbox=(110, 80, 30, 20)),       # 2行目左
+        MockOCRResult(text="んにちは", confidence=0.9, bbox=(150, 50, 80, 20)),  # 1行目右
+        MockOCRResult(text="こ", confidence=0.85, bbox=(100, 50, 30, 20)),  # 1行目左
+        MockOCRResult(text="さん", confidence=0.8, bbox=(150, 80, 60, 20)),  # 2行目右
+        MockOCRResult(text="皆", confidence=0.85, bbox=(110, 80, 30, 20)),  # 2行目左
     ]
 
     detected_text = detect_multiline_text(ocr_results)
@@ -166,7 +173,9 @@ def test_same_line_grouping():
     # Y座標が近い複数のテキスト（同一行とみなされるべき）
     ocr_results = [
         MockOCRResult(text="こんに", confidence=0.9, bbox=(100, 50, 60, 20)),
-        MockOCRResult(text="ちは", confidence=0.85, bbox=(170, 52, 40, 18)),  # わずかにY座標がずれている
+        MockOCRResult(
+            text="ちは", confidence=0.85, bbox=(170, 52, 40, 18)
+        ),  # わずかにY座標がずれている
         MockOCRResult(text="皆さん", confidence=0.8, bbox=(110, 90, 80, 20)),  # 明らかに異なる行
     ]
 
