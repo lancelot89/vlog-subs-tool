@@ -224,7 +224,12 @@ class MainWindow(QMainWindow):
         
         # 編集メニュー
         edit_menu = menubar.addMenu("編集(&E)")
-        
+
+        qc_check_action = QAction("QCチェック(&Q)", self)
+        qc_check_action.setShortcut("Ctrl+Q")
+        qc_check_action.triggered.connect(self.run_qc_check)
+        edit_menu.addAction(qc_check_action)
+
         # 表示メニュー
         view_menu = menubar.addMenu("表示(&V)")
         
