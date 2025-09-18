@@ -325,14 +325,18 @@ class SimplePaddleOCREngine:
                 cpu_profile = profiler.detect_cpu_profile()
 
                 # Determine if we can use aggressive optimization based on CPU profile
+                vendor = cpu_profile.get('vendor', 'Unknown')
+                generation = cpu_profile.get('generation')
+                architecture = cpu_profile.get('architecture', 'Unknown')
+
                 use_aggressive = (
-                    (cpu_profile.vendor == "Intel" and cpu_profile.generation and cpu_profile.generation >= 8) or  # 8th gen以降（Coffee Lake+）
-                    (cpu_profile.vendor == "AMD" and cpu_profile.generation and cpu_profile.generation >= 2) or  # Zen2+
-                    (cpu_profile.vendor == "Apple")
+                    (vendor == "Intel" and generation and generation >= 8) or  # 8th gen以降（Coffee Lake+）
+                    (vendor == "AMD" and generation and generation >= 2) or  # Zen2+
+                    (vendor == "Apple")
                 )
 
                 logger.debug("CPU Profile: %s %s gen %s, using aggressive: %s",
-                           cpu_profile.vendor, cpu_profile.architecture, cpu_profile.generation, use_aggressive)
+                           vendor, architecture, generation, use_aggressive)
 
             except Exception as e:
                 logger.warning("Failed to get CPU profile for configuration selection: %s", e)

@@ -57,13 +57,26 @@ class CPUProfiler:
 
     def detect_cpu_profile(self):
         """Return basic CPU information."""
+        cpu_name = platform.processor() or 'Unknown'
+        vendor = 'Unknown'
+        generation = None
+
+        # Simple vendor detection from CPU name
+        if 'Intel' in cpu_name:
+            vendor = 'Intel'
+        elif 'AMD' in cpu_name:
+            vendor = 'AMD'
+        elif 'Apple' in cpu_name or self.platform == 'Darwin':
+            vendor = 'Apple'
+
         return {
             'cores_physical': self.cpu_count,
             'cores_logical': self.cpu_count,
             'platform_name': self.platform,
-            'vendor': 'Unknown',
+            'vendor': vendor,
+            'generation': generation,  # 簡素化のため常にNone
             'architecture': platform.machine(),
-            'name': platform.processor() or 'Unknown',
+            'name': cpu_name,
         }
 
     def get_optimal_thread_count(self) -> int:
