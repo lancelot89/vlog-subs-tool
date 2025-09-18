@@ -104,7 +104,7 @@ def _create_safe_paddleocr_kwargs(original: Mapping[str, Any]) -> Dict[str, Any]
         if key == "use_angle_cls":
             # PaddleOCR >= 3.0 renamed the flag to use_textline_orientation.
             safe["use_textline_orientation"] = bool(value)
-        elif key in {"show_log", "use_space_char", "use_gpu"}:
+        elif key in {"show_log", "use_space_char", "use_gpu", "max_text_length"}:
             # No longer accepted by the constructor – ignore silently.
             continue
         elif key == "drop_score":
@@ -351,7 +351,6 @@ class SimplePaddleOCREngine:
                         "use_space_char": True,
                         "drop_score": 0.5,
                         "enable_mkldnn": True,  # MKL-DNN有効化
-                        "max_text_length": 25,
                     } if use_aggressive else None,
                     # Phase 2: 中程度の最適化
                     {
@@ -363,7 +362,6 @@ class SimplePaddleOCREngine:
                         "use_space_char": True,
                         "drop_score": 0.5,
                         "enable_mkldnn": True,  # MKL-DNN有効化のみ
-                        "max_text_length": 25,
                     },
                     # Phase 3: 安全設定 (従来の設定)
                     {
@@ -375,7 +373,6 @@ class SimplePaddleOCREngine:
                         "use_space_char": True,
                         "drop_score": 0.5,
                         "enable_mkldnn": False,
-                        "max_text_length": 25,
                     },
                     # Phase 4: Legacy API fallback
                     {

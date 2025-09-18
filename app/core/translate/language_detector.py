@@ -12,7 +12,7 @@ try:
     LANGDETECT_AVAILABLE = True
 except ImportError:
     LANGDETECT_AVAILABLE = False
-    logging.warning("langdetectが利用できません。pip install langdetectでインストールしてください。")
+    # langdetectは自動言語検出機能でのみ使用され、現在は無効化されているため警告を出力しない
 
 
 @dataclass
