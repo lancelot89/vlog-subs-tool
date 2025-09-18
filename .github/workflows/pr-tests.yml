@@ -34,7 +34,7 @@ jobs:
 
     - name: Check import sorting with isort
       run: |
-        isort --check-only --diff app/ tests/
+        isort --check-only --diff --profile=black app/ tests/
 
     - name: Type checking with mypy
       run: |
@@ -93,9 +93,9 @@ jobs:
         try:
             import sys
             sys.path.insert(0, 'app')
-            from core.models import SubtitleEntry
-            from core.extractor.ocr import OCRProvider
-            from core.format.srt import SRTWriter
+            from core.models import SubtitleItem
+            from core.extractor.ocr import SimplePaddleOCREngine
+            from core.format.srt import SRTFormatter
             print('✅ Core modules import successfully')
         except Exception as e:
             print(f'❌ Import failed: {e}')
