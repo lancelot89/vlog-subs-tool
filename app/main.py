@@ -12,6 +12,41 @@ import traceback
 from datetime import datetime
 
 
+def is_console_available():
+    """
+    コンソールが利用可能かどうかを判定
+    """
+    try:
+        # PyInstallerのコンソール設定を確認
+        if getattr(sys, 'frozen', False):
+            # 標準入力がアクセス可能かテスト
+            if hasattr(sys.stdin, 'fileno'):
+                return True
+            # Windowsでコンソールが割り当てられているかチェック
+            if sys.platform == 'win32':
+                import msvcrt
+                try:
+                    msvcrt.kbhit()
+                    return True
+                except OSError:
+                    return False
+        # 非frozen環境では通常利用可能
+        return True
+    except:
+        return False
+
+
+def safe_input_prompt(message="Press Enter to continue..."):
+    """
+    安全なinputプロンプト（コンソールが利用可能な場合のみ）
+    """
+    if is_console_available():
+        try:
+            input(message)
+        except (EOFError, OSError):
+            pass  # コンソールエラーは無視
+
+
 def setup_logging():
     """
     デバッグ用ロギング設定
@@ -138,7 +173,7 @@ def main():
         if not test_imports(logger):
             logger.error("段階的インポートテストに失敗しました")
             if getattr(sys, 'frozen', False):
-                input("Press Enter to continue...")  # コンソール版で確認
+                safe_input_prompt("Press Enter to continue...")  # コンソール版で確認
             sys.exit(1)
 
         # メインアプリケーション起動
@@ -165,7 +200,7 @@ def main():
             show_source_error(e)
 
         if getattr(sys, 'frozen', False):
-            input("Press Enter to continue...")
+            safe_input_prompt("Press Enter to continue...")
         sys.exit(1)
 
     except ImportError as e:
@@ -177,7 +212,7 @@ def main():
             show_package_error(e)
 
         if getattr(sys, 'frozen', False):
-            input("Press Enter to continue...")
+            safe_input_prompt("Press Enter to continue...")
         sys.exit(1)
 
     except Exception as e:
@@ -195,7 +230,7 @@ def main():
         print("  https://github.com/lancelot89/vlog-subs-tool/issues")
 
         if getattr(sys, 'frozen', False):
-            input("Press Enter to continue...")
+            safe_input_prompt("Press Enter to continue...")
         sys.exit(1)
 
 def show_standalone_error(error):
