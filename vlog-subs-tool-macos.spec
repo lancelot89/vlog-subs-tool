@@ -174,12 +174,14 @@ a = Analysis(
         'app.core.qc',
         'psutil',  # CPU情報取得
     ],
-    # PaddleOCR最小限収集（サイズ削減）
+    # PaddleOCR収集（AVX/non-AVX CPU互換性確保）
     collect_data=[
         'paddleocr',
+        'paddle',  # AVX/non-AVX CPU互換性のため必須
     ],
     collect_submodules=[
         'paddleocr',
+        'paddle',  # paddle.fluid.core_avx/core_noavx両方をバンドル
     ],
 )
 
