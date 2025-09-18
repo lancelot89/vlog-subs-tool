@@ -4,22 +4,23 @@ VLog字幕ツール メインエントリーポイント
 PyInstaller バイナリとソースコード実行の両方に対応
 """
 
-import sys
-import os
-from pathlib import Path
 import logging
+import os
+import sys
 import traceback
 from datetime import datetime
+from pathlib import Path
 
 # TODO: v1リリース時にDEBUG_MODE関連の機能を削除
 DEBUG_MODE = True  # 開発版ではターミナルを表示（v1リリース時にFalseにする）
+
 
 def setup_logging():
     """
     デバッグ用ロギング設定
     """
     # ログファイルのパス設定
-    if getattr(sys, 'frozen', False):
+    if getattr(sys, "frozen", False):
         # PyInstallerでビルドされた場合、実行ファイルと同じディレクトリに
         log_dir = Path(sys.executable).parent
     else:
@@ -29,7 +30,7 @@ def setup_logging():
     log_file = log_dir / "vlog-subs-tool-debug.log"
 
     # ハンドラーリスト（開発版ではコンソール出力も含める）
-    handlers = [logging.FileHandler(log_file, encoding='utf-8')]
+    handlers = [logging.FileHandler(log_file, encoding="utf-8")]
 
     # TODO: v1リリース時に削除 - デバッグモードではコンソール出力も有効
     if DEBUG_MODE:
@@ -38,8 +39,8 @@ def setup_logging():
     # ロガー設定
     logging.basicConfig(
         level=logging.DEBUG,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=handlers
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=handlers,
     )
 
     logger = logging.getLogger(__name__)
@@ -49,18 +50,19 @@ def setup_logging():
     logger.info(f"Platform: {sys.platform}")
     logger.info(f"Executable: {sys.executable}")
     logger.info(f"Frozen: {getattr(sys, 'frozen', False)}")
-    if hasattr(sys, '_MEIPASS'):
+    if hasattr(sys, "_MEIPASS"):
         logger.info(f"_MEIPASS: {sys._MEIPASS}")
     logger.info(f"Log file: {log_file}")
 
     return logger
+
 
 def setup_paths():
     """
     実行環境に応じてパスを設定
     PyInstallerでビルドされたバイナリとソースコード実行の両方に対応
     """
-    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
         # PyInstallerでビルドされたバイナリの場合
         base_dir = Path(sys._MEIPASS)
         app_dir = base_dir
@@ -81,13 +83,19 @@ def setup_paths():
 
         return False  # 開発環境実行
 
+
 def test_imports(logger):
     """段階的インポートテスト"""
     logger.info("=== 段階的インポートテスト開始 ===")
 
     # Stage 1: 基本Pythonモジュール
     try:
-        import sys, os, pathlib, json, csv
+        import csv
+        import json
+        import os
+        import pathlib
+        import sys
+
         logger.info("✅ Stage 1: 基本Pythonモジュール - OK")
     except Exception as e:
         logger.error(f"❌ Stage 1: 基本Pythonモジュール - {e}")
@@ -96,7 +104,10 @@ def test_imports(logger):
     # Stage 2: PySide6基本インポート
     try:
         import PySide6
-        logger.info(f"✅ Stage 2: PySide6インポート - OK (version: {PySide6.__version__})")
+
+        logger.info(
+            f"✅ Stage 2: PySide6インポート - OK (version: {PySide6.__version__})"
+        )
     except Exception as e:
         logger.error(f"❌ Stage 2: PySide6インポート - {e}")
         return False
@@ -104,6 +115,7 @@ def test_imports(logger):
     # Stage 3: PySide6.QtWidgets
     try:
         from PySide6.QtWidgets import QApplication, QMainWindow
+
         logger.info("✅ Stage 3: PySide6.QtWidgets - OK")
     except Exception as e:
         logger.error(f"❌ Stage 3: PySide6.QtWidgets - {e}")
@@ -111,7 +123,10 @@ def test_imports(logger):
 
     # Stage 4: 重要ライブラリ
     try:
-        import cv2, numpy, PIL
+        import cv2
+        import numpy
+        import PIL
+
         logger.info("✅ Stage 4: OpenCV, NumPy, PIL - OK")
     except Exception as e:
         logger.error(f"❌ Stage 4: 重要ライブラリ - {e}")
@@ -119,7 +134,7 @@ def test_imports(logger):
 
     # Stage 5: アプリケーションモジュール
     try:
-        if getattr(sys, 'frozen', False):
+        if getattr(sys, "frozen", False):
             from ui.main_window import main as app_main
         else:
             try:
@@ -132,18 +147,20 @@ def test_imports(logger):
         logger.error(f"❌ Stage 5: アプリケーションモジュール - {e}")
         return False
 
+
 def main():
     """メインエントリーポイント（デバッグ機能統合版）"""
     # TODO: v1リリース時に削除 - Windows版でコンソールウィンドウを表示
-    if DEBUG_MODE and sys.platform == "win32" and getattr(sys, 'frozen', False):
+    if DEBUG_MODE and sys.platform == "win32" and getattr(sys, "frozen", False):
         try:
             import ctypes
+
             kernel32 = ctypes.windll.kernel32
             # コンソールウィンドウを割り当て
             kernel32.AllocConsole()
             # 標準出力をコンソールにリダイレクト
-            sys.stdout = open('CONOUT$', 'w', encoding='utf-8')
-            sys.stderr = open('CONOUT$', 'w', encoding='utf-8')
+            sys.stdout = open("CONOUT$", "w", encoding="utf-8")
+            sys.stderr = open("CONOUT$", "w", encoding="utf-8")
             print("=== VLog字幕ツール デバッグコンソール ===")
             print("v1リリース時にこのコンソールは無効化されます")
             print("=" * 50)
@@ -160,7 +177,7 @@ def main():
         # デバッグ: 段階的インポートテスト
         if not test_imports(logger):
             logger.error("段階的インポートテストに失敗しました")
-            if getattr(sys, 'frozen', False):
+            if getattr(sys, "frozen", False):
                 input("Press Enter to continue...")  # コンソール版で確認
             sys.exit(1)
 
@@ -187,7 +204,7 @@ def main():
         else:
             show_source_error(e)
 
-        if getattr(sys, 'frozen', False):
+        if getattr(sys, "frozen", False):
             input("Press Enter to continue...")
         sys.exit(1)
 
@@ -199,7 +216,7 @@ def main():
         else:
             show_package_error(e)
 
-        if getattr(sys, 'frozen', False):
+        if getattr(sys, "frozen", False):
             input("Press Enter to continue...")
         sys.exit(1)
 
@@ -217,9 +234,10 @@ def main():
         print("- 問題が続く場合は以下にご報告ください:")
         print("  https://github.com/lancelot89/vlog-subs-tool/issues")
 
-        if getattr(sys, 'frozen', False):
+        if getattr(sys, "frozen", False):
             input("Press Enter to continue...")
         sys.exit(1)
+
 
 def show_standalone_error(error):
     """スタンドアロンバイナリ実行時のエラー表示"""
@@ -235,6 +253,7 @@ def show_standalone_error(error):
     print("   https://github.com/lancelot89/vlog-subs-tool/issues")
     print()
     print(f"🐛 詳細エラー: {error}")
+
 
 def show_source_error(error):
     """ソースコード実行時の依存関係エラー表示"""
@@ -255,6 +274,7 @@ def show_source_error(error):
     print()
     print(f"🐛 元のエラー: {error}")
 
+
 def show_package_error(error):
     """パッケージインストールエラー表示"""
     print("❌ エラー: 必要なパッケージがインストールされていません")
@@ -272,6 +292,7 @@ def show_package_error(error):
     print("   python -m app.main")
     print()
     print(f"🐛 元のエラー: {error}")
+
 
 if __name__ == "__main__":
     main()

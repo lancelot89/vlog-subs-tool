@@ -3,12 +3,13 @@
 """
 
 import logging
-from typing import Optional, List, Dict
 from dataclasses import dataclass
+from typing import Dict, List, Optional
 
 try:
     import langdetect
     from langdetect import detect, detect_langs
+
     LANGDETECT_AVAILABLE = True
 except ImportError:
     LANGDETECT_AVAILABLE = False
@@ -18,6 +19,7 @@ except ImportError:
 @dataclass
 class LanguageDetectionResult:
     """言語検出結果"""
+
     language: str
     confidence: float
     alternatives: List[Dict[str, float]]
@@ -25,6 +27,7 @@ class LanguageDetectionResult:
 
 class LanguageDetectionError(Exception):
     """言語検出関連エラー"""
+
     pass
 
 
@@ -33,47 +36,51 @@ class LanguageDetector:
 
     # サポートされている言語コードのマッピング
     SUPPORTED_LANGUAGES = {
-        'ja': 'japanese',
-        'en': 'english',
-        'zh-cn': 'chinese_simplified',
-        'zh-tw': 'chinese_traditional',
-        'ar': 'arabic',
-        'ko': 'korean',
-        'es': 'spanish',
-        'fr': 'french',
-        'de': 'german',
-        'it': 'italian',
-        'pt': 'portuguese',
-        'ru': 'russian',
-        'th': 'thai',
-        'vi': 'vietnamese',
+        "ja": "japanese",
+        "en": "english",
+        "zh-cn": "chinese_simplified",
+        "zh-tw": "chinese_traditional",
+        "ar": "arabic",
+        "ko": "korean",
+        "es": "spanish",
+        "fr": "french",
+        "de": "german",
+        "it": "italian",
+        "pt": "portuguese",
+        "ru": "russian",
+        "th": "thai",
+        "vi": "vietnamese",
     }
 
     # langdetectの言語コードから内部言語コードへのマッピング
     LANGDETECT_TO_INTERNAL = {
-        'ja': 'ja',
-        'en': 'en',
-        'zh': 'zh-cn',  # デフォルトで簡体中国語
-        'ar': 'ar',
-        'ko': 'ko',
-        'es': 'es',
-        'fr': 'fr',
-        'de': 'de',
-        'it': 'it',
-        'pt': 'pt',
-        'ru': 'ru',
-        'th': 'th',
-        'vi': 'vi',
+        "ja": "ja",
+        "en": "en",
+        "zh": "zh-cn",  # デフォルトで簡体中国語
+        "ar": "ar",
+        "ko": "ko",
+        "es": "es",
+        "fr": "fr",
+        "de": "de",
+        "it": "it",
+        "pt": "pt",
+        "ru": "ru",
+        "th": "th",
+        "vi": "vi",
     }
 
     def __init__(self):
         if not LANGDETECT_AVAILABLE:
-            raise LanguageDetectionError("langdetectパッケージがインストールされていません")
+            raise LanguageDetectionError(
+                "langdetectパッケージがインストールされていません"
+            )
 
         # langdetectの設定
         langdetect.DetectorFactory.seed = 0  # 一貫した結果のため
 
-    def detect_language(self, text: str, min_confidence: float = 0.8) -> Optional[LanguageDetectionResult]:
+    def detect_language(
+        self, text: str, min_confidence: float = 0.8
+    ) -> Optional[LanguageDetectionResult]:
         """
         テキストの言語を検出
 
@@ -105,7 +112,9 @@ class LanguageDetector:
 
             # 信頼度チェック
             if top_lang.prob < min_confidence:
-                logging.info(f"言語検出の信頼度が低い: {internal_lang} ({top_lang.prob:.2f})")
+                logging.info(
+                    f"言語検出の信頼度が低い: {internal_lang} ({top_lang.prob:.2f})"
+                )
                 return None
 
             # 代替候補も内部言語コードに変換
@@ -113,22 +122,23 @@ class LanguageDetector:
             for lang_prob in lang_probs[1:]:
                 alt_internal = self.LANGDETECT_TO_INTERNAL.get(lang_prob.lang)
                 if alt_internal:
-                    alternatives.append({
-                        'language': alt_internal,
-                        'confidence': lang_prob.prob
-                    })
+                    alternatives.append(
+                        {"language": alt_internal, "confidence": lang_prob.prob}
+                    )
 
             return LanguageDetectionResult(
                 language=internal_lang,
                 confidence=top_lang.prob,
-                alternatives=alternatives
+                alternatives=alternatives,
             )
 
         except Exception as e:
             logging.error(f"言語検出中にエラー: {e}")
             raise LanguageDetectionError(f"言語検出に失敗しました: {str(e)}")
 
-    def detect_batch(self, texts: List[str], min_confidence: float = 0.8) -> List[Optional[LanguageDetectionResult]]:
+    def detect_batch(
+        self, texts: List[str], min_confidence: float = 0.8
+    ) -> List[Optional[LanguageDetectionResult]]:
         """
         複数のテキストの言語を一括検出
 
@@ -185,15 +195,15 @@ class LanguageDetector:
             'zh-cn' (簡体字) または 'zh-tw' (繁体字)
         """
         # 簡体字特有の文字
-        simplified_chars = set('这样会个电脑机种')
+        simplified_chars = set("这样会个电脑机种")
         # 繁体字特有の文字
-        traditional_chars = set('這樣會個電腦機種')
+        traditional_chars = set("這樣會個電腦機種")
 
         simplified_count = sum(1 for char in text if char in simplified_chars)
         traditional_count = sum(1 for char in text if char in traditional_chars)
 
         # 特徴的な文字の出現に基づいて判定
         if traditional_count > simplified_count:
-            return 'zh-tw'
+            return "zh-tw"
         else:
-            return 'zh-cn'
+            return "zh-cn"

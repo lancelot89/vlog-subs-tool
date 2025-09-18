@@ -9,10 +9,10 @@ import unittest
 from unittest.mock import patch
 
 from app.core.cpu_profiler import (
-    ThreadConfig,
     CPUProfiler,
+    ThreadConfig,
     get_adaptive_thread_config,
-    get_cpu_count
+    get_cpu_count,
 )
 
 
@@ -31,10 +31,10 @@ class TestThreadConfig(unittest.TestCase):
         env_vars = config.to_env_vars()
 
         expected = {
-            'OMP_NUM_THREADS': '4',
-            'OPENBLAS_NUM_THREADS': '4',
-            'MKL_NUM_THREADS': '4',
-            'VECLIB_MAXIMUM_THREADS': '4',
+            "OMP_NUM_THREADS": "4",
+            "OPENBLAS_NUM_THREADS": "4",
+            "MKL_NUM_THREADS": "4",
+            "VECLIB_MAXIMUM_THREADS": "4",
         }
 
         self.assertEqual(env_vars, expected)
@@ -49,7 +49,7 @@ class TestCPUDetection(unittest.TestCase):
         self.assertIsInstance(count, int)
         self.assertGreaterEqual(count, 1)
 
-    @patch('os.cpu_count')
+    @patch("os.cpu_count")
     def test_get_cpu_count_fallback(self, mock_cpu_count):
         """Test CPU count fallback when os.cpu_count() returns None."""
         mock_cpu_count.return_value = None
@@ -75,19 +75,19 @@ class TestCPUProfiler(unittest.TestCase):
     def test_profiler_initialization(self):
         """Test profiler initialization."""
         self.assertGreaterEqual(self.profiler.cpu_count, 1)
-        self.assertIn(self.profiler.platform, ['Windows', 'Darwin', 'Linux'])
+        self.assertIn(self.profiler.platform, ["Windows", "Darwin", "Linux"])
 
     def test_detect_cpu_profile(self):
         """Test CPU profile detection."""
         profile = self.profiler.detect_cpu_profile()
 
         self.assertIsInstance(profile, dict)
-        self.assertIn('cores_physical', profile)
-        self.assertIn('cores_logical', profile)
-        self.assertIn('platform_name', profile)
-        self.assertIn('vendor', profile)
-        self.assertIn('architecture', profile)
-        self.assertIn('name', profile)
+        self.assertIn("cores_physical", profile)
+        self.assertIn("cores_logical", profile)
+        self.assertIn("platform_name", profile)
+        self.assertIn("vendor", profile)
+        self.assertIn("architecture", profile)
+        self.assertIn("name", profile)
 
     def test_get_optimal_thread_count(self):
         """Test optimal thread count calculation."""
@@ -97,5 +97,5 @@ class TestCPUProfiler(unittest.TestCase):
         self.assertLessEqual(thread_count, 4)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

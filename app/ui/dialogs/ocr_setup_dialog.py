@@ -2,15 +2,24 @@
 OCR初回セットアップダイアログ
 """
 
-from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
-    QProgressBar, QTextEdit, QCheckBox, QMessageBox, QFrame
-)
-from PySide6.QtCore import Qt, QThread, Signal, QTimer
-from PySide6.QtGui import QFont, QPixmap, QPainter
 import logging
 from pathlib import Path
 from typing import Optional
+
+from PySide6.QtCore import Qt, QThread, QTimer, Signal
+from PySide6.QtGui import QFont, QPainter, QPixmap
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QTextEdit,
+    QVBoxLayout,
+)
 
 from app.core.extractor.ocr import SimplePaddleOCREngine
 
@@ -183,15 +192,11 @@ class OCRSetupDialog(QDialog):
         # SimplePaddleOCREngineで利用可能性をチェック
         ocr_engine = SimplePaddleOCREngine()
         if not ocr_engine.initialize():
-            QMessageBox.warning(
-                self,
-                "エラー",
-                "PaddleOCRエンジンが利用できません。"
-            )
+            QMessageBox.warning(self, "エラー", "PaddleOCRエンジンが利用できません。")
             return
 
         # 確認ダイアログ（初回のみ）
-        if not hasattr(self, '_setup_confirmed'):
+        if not hasattr(self, "_setup_confirmed"):
             reply = QMessageBox.question(
                 self,
                 "セットアップ確認",
@@ -201,7 +206,7 @@ class OCRSetupDialog(QDialog):
                 "- 3回まで自動リトライします\n\n"
                 "続行しますか？",
                 QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.Yes
+                QMessageBox.Yes,
             )
             if reply != QMessageBox.Yes:
                 return
@@ -238,7 +243,7 @@ class OCRSetupDialog(QDialog):
             "・OCR精度がPaddleOCRより劣る場合があります\n"
             "・後で設定画面からPaddleOCRを有効化できます",
             QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+            QMessageBox.No,
         )
 
         if reply == QMessageBox.Yes:
@@ -294,13 +299,16 @@ class OCRSetupDialog(QDialog):
         # 一般的な解決方法
         formatted_msg += "解決方法:\n"
         formatted_msg += "1. インターネット接続を確認してください\n"
-        formatted_msg += "2. ファイアウォールやアンチウイルスソフトの設定を確認してください\n"
+        formatted_msg += (
+            "2. ファイアウォールやアンチウイルスソフトの設定を確認してください\n"
+        )
         formatted_msg += "3. 企業ネットワークの場合、プロキシ設定を確認してください\n"
         formatted_msg += "4. 'セットアップ開始'ボタンで再試行してください\n"
         formatted_msg += "5. 問題が解決しない場合は、'スキップ（Tesseractを使用）'をお試しください\n\n"
 
         # システム情報
         import platform
+
         formatted_msg += f"システム情報:\n"
         formatted_msg += f"- OS: {platform.system()} {platform.release()}\n"
         formatted_msg += f"- Python: {platform.python_version()}\n"
@@ -323,6 +331,7 @@ class OCRSetupDialog(QDialog):
     def _get_timestamp(self):
         """タイムスタンプ取得"""
         from datetime import datetime
+
         return datetime.now().strftime("%H:%M:%S")
 
     def closeEvent(self, event):
@@ -333,7 +342,7 @@ class OCRSetupDialog(QDialog):
                 "確認",
                 "ダウンロード中です。中断しますか？",
                 QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No
+                QMessageBox.No,
             )
 
             if reply == QMessageBox.Yes:

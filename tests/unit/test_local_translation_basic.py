@@ -2,16 +2,16 @@
 ローカル翻訳機能の基本テスト（依存関係なし）
 """
 
-import unittest
-from unittest.mock import Mock, patch
-import tempfile
 import shutil
+import tempfile
+import unittest
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 from app.core.translate import (
     TranslationProviderRouter,
     TranslationProviderType,
-    TranslationResult
+    TranslationResult,
 )
 
 
@@ -27,7 +27,9 @@ class TestBasicTranslationProviderRouter(unittest.TestCase):
         result = self.router.register_provider(TranslationProviderType.MOCK, None)
 
         self.assertTrue(result)
-        self.assertIn(TranslationProviderType.MOCK, self.router.get_available_providers())
+        self.assertIn(
+            TranslationProviderType.MOCK, self.router.get_available_providers()
+        )
         self.assertEqual(self.router.default_provider, TranslationProviderType.MOCK)
 
     def test_mock_translation(self):
@@ -36,9 +38,7 @@ class TestBasicTranslationProviderRouter(unittest.TestCase):
 
         texts = ["こんにちは", "ありがとう"]
         result = self.router.translate_batch(
-            texts=texts,
-            target_language="en",
-            source_language="ja"
+            texts=texts, target_language="en", source_language="ja"
         )
 
         self.assertTrue(result.success)
@@ -52,9 +52,7 @@ class TestBasicTranslationProviderRouter(unittest.TestCase):
         self.router.register_provider(TranslationProviderType.MOCK, None)
 
         result = self.router.translate_batch(
-            texts=[],
-            target_language="en",
-            source_language="ja"
+            texts=[], target_language="en", source_language="ja"
         )
 
         self.assertTrue(result.success)
@@ -63,7 +61,9 @@ class TestBasicTranslationProviderRouter(unittest.TestCase):
     def test_provider_availability_check(self):
         """プロバイダー可用性チェックのテスト"""
         # 未登録プロバイダー
-        self.assertFalse(self.router.is_provider_available(TranslationProviderType.LOCAL))
+        self.assertFalse(
+            self.router.is_provider_available(TranslationProviderType.LOCAL)
+        )
 
         # プロバイダー登録後
         self.router.register_provider(TranslationProviderType.MOCK, None)
@@ -75,10 +75,10 @@ class TestBasicTranslationProviderRouter(unittest.TestCase):
 
         languages = self.router.get_supported_languages()
 
-        self.assertIn('ja', languages)
-        self.assertIn('en', languages)
-        self.assertIn('zh-cn', languages)
-        self.assertIn('ar', languages)
+        self.assertIn("ja", languages)
+        self.assertIn("en", languages)
+        self.assertIn("zh-cn", languages)
+        self.assertIn("ar", languages)
 
     def test_multi_language_translation_workflow(self):
         """多言語翻訳ワークフローテスト"""
@@ -89,18 +89,16 @@ class TestBasicTranslationProviderRouter(unittest.TestCase):
         subtitle_texts = [
             "おはようございます",
             "今日は良い天気ですね",
-            "ありがとうございました"
+            "ありがとうございました",
         ]
 
         # 複数言語への翻訳テスト
-        target_languages = ['en', 'zh-cn', 'ar']
+        target_languages = ["en", "zh-cn", "ar"]
 
         for lang in target_languages:
             with self.subTest(language=lang):
                 result = router.translate_batch(
-                    texts=subtitle_texts,
-                    target_language=lang,
-                    source_language="ja"
+                    texts=subtitle_texts, target_language=lang, source_language="ja"
                 )
 
                 self.assertTrue(result.success)
@@ -121,9 +119,7 @@ class TestBasicTranslationProviderRouter(unittest.TestCase):
 
         # 翻訳実行
         result = self.router.translate_batch(
-            texts=["テスト"],
-            target_language="en",
-            source_language="ja"
+            texts=["テスト"], target_language="en", source_language="ja"
         )
 
         self.assertTrue(result.success)
@@ -133,9 +129,7 @@ class TestBasicTranslationProviderRouter(unittest.TestCase):
         """プロバイダーなしでのエラーハンドリング"""
         # プロバイダーを登録しない状態で翻訳実行
         result = self.router.translate_batch(
-            texts=["テスト"],
-            target_language="en",
-            source_language="ja"
+            texts=["テスト"], target_language="en", source_language="ja"
         )
 
         self.assertFalse(result.success)
@@ -146,9 +140,7 @@ class TestBasicTranslationProviderRouter(unittest.TestCase):
         self.router.register_provider(TranslationProviderType.MOCK, None)
 
         result = self.router.translate_batch(
-            texts=["テスト"],
-            target_language="en",
-            source_language="ja"
+            texts=["テスト"], target_language="en", source_language="ja"
         )
 
         # 結果構造の確認
@@ -167,5 +159,5 @@ class TestBasicTranslationProviderRouter(unittest.TestCase):
             self.assertIsNotNone(result.error_message)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

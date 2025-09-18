@@ -5,9 +5,9 @@ Issue #112の対応
 """
 
 import sys
-from pathlib import Path
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Dict, Any
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 # プロジェクトルートをPythonパスに追加
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 @dataclass
 class MockSubtitleItem:
     """SubtitleItem のモック"""
+
     index: int
     start_ms: int
     end_ms: int
@@ -45,7 +46,9 @@ class MockTextSimilarityCalculator:
             return 1.0
 
         # 長さが大きく異なる場合は類似度を下げる
-        len_ratio = min(len(norm_text1), len(norm_text2)) / max(len(norm_text1), len(norm_text2))
+        len_ratio = min(len(norm_text1), len(norm_text2)) / max(
+            len(norm_text1), len(norm_text2)
+        )
         if len_ratio < 0.9:
             return 0.0
 
@@ -65,7 +68,9 @@ class MockTextSimilarityCalculator:
         return position_similarity if position_similarity >= 0.95 else 0.0
 
 
-def remove_duplicates_logic(subtitles: List[MockSubtitleItem]) -> List[MockSubtitleItem]:
+def remove_duplicates_logic(
+    subtitles: List[MockSubtitleItem],
+) -> List[MockSubtitleItem]:
     """重複字幕の統合ロジック（テスト用実装）"""
     if not subtitles:
         return []
@@ -121,7 +126,7 @@ def merge_duplicate_group(group: List[MockSubtitleItem]) -> MockSubtitleItem:
         start_ms=min_start_ms,
         end_ms=max_end_ms,
         text=base_subtitle.text,
-        bbox=base_subtitle.bbox
+        bbox=base_subtitle.bbox,
     )
 
     return merged_subtitle
@@ -133,12 +138,42 @@ def test_duplicate_merge_basic():
 
     # Issue #112のサンプルと同様の重複字幕
     subtitles = [
-        MockSubtitleItem(index=7, start_ms=16000, end_ms=17200, text="汗だくで帰宅しました、シャワー浴びてきたのでスッキリ凍らせた水持って出かけたけど真夏の外出は危険だと思った"),
-        MockSubtitleItem(index=8, start_ms=18000, end_ms=19200, text="汗だくで帰宅しました、シャワー浴びてきたのでスッキリ凍らせた水持って出かけたけど真夏の外出は危険だと思った"),
-        MockSubtitleItem(index=9, start_ms=20000, end_ms=21200, text="汗だくで帰宅しました、シャワー浴びてきたのでスッキリ凍らせた水持って出かけたけど真夏の外出は危険だと思った"),
-        MockSubtitleItem(index=10, start_ms=22000, end_ms=23200, text="汗だくで帰宅しました、シヤワー浴びてきたのでスッキリ凍らせた水持って出かけたけど真夏の外出は危険だと思った"),  # "シヤワー"に変更
-        MockSubtitleItem(index=11, start_ms=24000, end_ms=25200, text="汗だくで帰宅しました、シヤワー浴びてきたのでスッキリ凍らせた水持って出かけたけど真夏の外出は危険だと思った"),
-        MockSubtitleItem(index=12, start_ms=26000, end_ms=27200, text="汗だくで帰宅しました、シャワー浴びてきたのでスッキリ凍らせた水持って出かけたけど真夏の外出は危険だと思った"),
+        MockSubtitleItem(
+            index=7,
+            start_ms=16000,
+            end_ms=17200,
+            text="汗だくで帰宅しました、シャワー浴びてきたのでスッキリ凍らせた水持って出かけたけど真夏の外出は危険だと思った",
+        ),
+        MockSubtitleItem(
+            index=8,
+            start_ms=18000,
+            end_ms=19200,
+            text="汗だくで帰宅しました、シャワー浴びてきたのでスッキリ凍らせた水持って出かけたけど真夏の外出は危険だと思った",
+        ),
+        MockSubtitleItem(
+            index=9,
+            start_ms=20000,
+            end_ms=21200,
+            text="汗だくで帰宅しました、シャワー浴びてきたのでスッキリ凍らせた水持って出かけたけど真夏の外出は危険だと思った",
+        ),
+        MockSubtitleItem(
+            index=10,
+            start_ms=22000,
+            end_ms=23200,
+            text="汗だくで帰宅しました、シヤワー浴びてきたのでスッキリ凍らせた水持って出かけたけど真夏の外出は危険だと思った",
+        ),  # "シヤワー"に変更
+        MockSubtitleItem(
+            index=11,
+            start_ms=24000,
+            end_ms=25200,
+            text="汗だくで帰宅しました、シヤワー浴びてきたのでスッキリ凍らせた水持って出かけたけど真夏の外出は危険だと思った",
+        ),
+        MockSubtitleItem(
+            index=12,
+            start_ms=26000,
+            end_ms=27200,
+            text="汗だくで帰宅しました、シャワー浴びてきたのでスッキリ凍らせた水持って出かけたけど真夏の外出は危険だと思った",
+        ),
     ]
 
     # 重複除去処理を実行
@@ -163,13 +198,19 @@ def test_duplicate_merge_basic():
 
         if merged_subtitle.start_ms == 16000 and merged_subtitle.end_ms == 27200:
             print("✅ 時間範囲統合が正しく動作しました")
-            print(f"  統合後時間範囲: {merged_subtitle.start_ms}-{merged_subtitle.end_ms}ms")
+            print(
+                f"  統合後時間範囲: {merged_subtitle.start_ms}-{merged_subtitle.end_ms}ms"
+            )
             return True
         else:
-            print(f"❌ 時間範囲が正しくありません: {merged_subtitle.start_ms}-{merged_subtitle.end_ms}ms")
+            print(
+                f"❌ 時間範囲が正しくありません: {merged_subtitle.start_ms}-{merged_subtitle.end_ms}ms"
+            )
             return False
     else:
-        print(f"❌ テスト失敗: 期待値 {expected_groups} != 実際 {len(merged_subtitles)}")
+        print(
+            f"❌ テスト失敗: 期待値 {expected_groups} != 実際 {len(merged_subtitles)}"
+        )
         return False
 
 
@@ -198,12 +239,20 @@ def test_exact_duplicate():
                 same_text_subtitle = subtitle
                 break
 
-        if same_text_subtitle and same_text_subtitle.start_ms == 1000 and same_text_subtitle.end_ms == 5000:
+        if (
+            same_text_subtitle
+            and same_text_subtitle.start_ms == 1000
+            and same_text_subtitle.end_ms == 5000
+        ):
             print("✅ テスト成功: 完全同一テキストが正しく統合されました")
-            print(f"  統合後時間範囲: {same_text_subtitle.start_ms}-{same_text_subtitle.end_ms}ms")
+            print(
+                f"  統合後時間範囲: {same_text_subtitle.start_ms}-{same_text_subtitle.end_ms}ms"
+            )
             return True
         else:
-            print(f"❌ 時間範囲が不正: {same_text_subtitle.start_ms if same_text_subtitle else 'None'}")
+            print(
+                f"❌ 時間範囲が不正: {same_text_subtitle.start_ms if same_text_subtitle else 'None'}"
+            )
             return False
     else:
         print(f"❌ テスト失敗: 期待値 2 != 実際 {len(merged_subtitles)}")

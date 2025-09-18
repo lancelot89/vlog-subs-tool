@@ -5,11 +5,12 @@ PaddleOCRによる字幕抽出のテスト
 SimplePaddleOCREngineが実際に字幕画像からテキストを正しく抽出できることを確認
 """
 
-import sys
-import os
-import unittest
 import logging
+import os
+import sys
+import unittest
 from pathlib import Path
+
 import cv2
 import numpy as np
 
@@ -17,7 +18,7 @@ import numpy as np
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from app.core.extractor.ocr import SimplePaddleOCREngine, OCRResult
+from app.core.extractor.ocr import OCRResult, SimplePaddleOCREngine
 
 
 class TestPaddleOCRExtraction(unittest.TestCase):
@@ -44,7 +45,9 @@ class TestPaddleOCRExtraction(unittest.TestCase):
 
     def test_ocr_engine_initialization(self):
         """OCRエンジンの初期化テスト"""
-        self.assertTrue(self.engine_initialized, "PaddleOCRエンジンが正常に初期化されること")
+        self.assertTrue(
+            self.engine_initialized, "PaddleOCRエンジンが正常に初期化されること"
+        )
         self.assertIsNotNone(self.ocr_engine._ocr, "内部OCRオブジェクトが存在すること")
 
     def test_extract_english_subtitle(self):
@@ -69,7 +72,9 @@ class TestPaddleOCRExtraction(unittest.TestCase):
         self.assertIsInstance(best_result, OCRResult, "結果がOCRResult型であること")
         self.assertIn("Hello", best_result.text, "英語テキスト 'Hello' が含まれること")
 
-        self.logger.info(f"英語字幕抽出結果: {best_result.text} (信頼度: {best_result.confidence:.3f})")
+        self.logger.info(
+            f"英語字幕抽出結果: {best_result.text} (信頼度: {best_result.confidence:.3f})"
+        )
 
     def test_extract_japanese_hiragana_subtitle(self):
         """日本語ひらがな字幕の抽出テスト"""
@@ -90,9 +95,13 @@ class TestPaddleOCRExtraction(unittest.TestCase):
 
         # 日本語文字が含まれることを確認（完全一致は求めない）
         has_japanese = any(char in best_result.text for char in "こんにちは世界")
-        self.assertTrue(has_japanese, f"日本語文字が含まれること。実際の結果: {best_result.text}")
+        self.assertTrue(
+            has_japanese, f"日本語文字が含まれること。実際の結果: {best_result.text}"
+        )
 
-        self.logger.info(f"日本語ひらがな字幕抽出結果: {best_result.text} (信頼度: {best_result.confidence:.3f})")
+        self.logger.info(
+            f"日本語ひらがな字幕抽出結果: {best_result.text} (信頼度: {best_result.confidence:.3f})"
+        )
 
     def test_extract_japanese_mixed_subtitle(self):
         """日本語混合字幕の抽出テスト"""
@@ -112,9 +121,13 @@ class TestPaddleOCRExtraction(unittest.TestCase):
 
         # 日本語文字が含まれることを確認
         has_japanese = any(char in best_result.text for char in "今日良天気")
-        self.assertTrue(has_japanese, f"日本語文字が含まれること。実際の結果: {best_result.text}")
+        self.assertTrue(
+            has_japanese, f"日本語文字が含まれること。実際の結果: {best_result.text}"
+        )
 
-        self.logger.info(f"日本語混合字幕抽出結果: {best_result.text} (信頼度: {best_result.confidence:.3f})")
+        self.logger.info(
+            f"日本語混合字幕抽出結果: {best_result.text} (信頼度: {best_result.confidence:.3f})"
+        )
 
     def test_extract_alphanumeric_subtitle(self):
         """英数字混合字幕の抽出テスト"""
@@ -134,9 +147,14 @@ class TestPaddleOCRExtraction(unittest.TestCase):
 
         # VLOGまたは2024が含まれることを確認
         has_expected_text = "VLOG" in best_result.text or "2024" in best_result.text
-        self.assertTrue(has_expected_text, f"'VLOG'または'2024'が含まれること。実際の結果: {best_result.text}")
+        self.assertTrue(
+            has_expected_text,
+            f"'VLOG'または'2024'が含まれること。実際の結果: {best_result.text}",
+        )
 
-        self.logger.info(f"英数字混合字幕抽出結果: {best_result.text} (信頼度: {best_result.confidence:.3f})")
+        self.logger.info(
+            f"英数字混合字幕抽出結果: {best_result.text} (信頼度: {best_result.confidence:.3f})"
+        )
 
     def test_ocr_result_structure(self):
         """OCRResult構造体のテスト"""
@@ -152,9 +170,15 @@ class TestPaddleOCRExtraction(unittest.TestCase):
 
             # OCRResultの必須フィールドをチェック
             self.assertIsInstance(result.text, str, "textフィールドが文字列であること")
-            self.assertIsInstance(result.confidence, float, "confidenceフィールドが浮動小数点数であること")
-            self.assertIsInstance(result.bbox, tuple, "bboxフィールドがタプルであること")
-            self.assertEqual(len(result.bbox), 4, "bboxが4つの要素を持つこと (x, y, w, h)")
+            self.assertIsInstance(
+                result.confidence, float, "confidenceフィールドが浮動小数点数であること"
+            )
+            self.assertIsInstance(
+                result.bbox, tuple, "bboxフィールドがタプルであること"
+            )
+            self.assertEqual(
+                len(result.bbox), 4, "bboxが4つの要素を持つこと (x, y, w, h)"
+            )
 
             # 信頼度が0.0-1.0の範囲内であることを確認
             self.assertGreaterEqual(result.confidence, 0.0, "信頼度が0.0以上であること")
@@ -184,9 +208,13 @@ class TestPaddleOCRExtraction(unittest.TestCase):
             best_result = max(results, key=lambda x: x.confidence)
 
             # 何らかの日本語文字が検出されることを期待
-            self.assertGreater(len(best_result.text), 0, "何らかのテキストが検出されること")
+            self.assertGreater(
+                len(best_result.text), 0, "何らかのテキストが検出されること"
+            )
 
-            self.logger.info(f"リアルVLOGフレーム抽出結果: {best_result.text} (信頼度: {best_result.confidence:.3f})")
+            self.logger.info(
+                f"リアルVLOGフレーム抽出結果: {best_result.text} (信頼度: {best_result.confidence:.3f})"
+            )
         else:
             self.logger.warning("リアルVLOGフレームからテキストが検出されませんでした")
 
@@ -214,8 +242,11 @@ class TestPaddleOCRExtraction(unittest.TestCase):
 
         # 全ての結果が設定された閾値以上の信頼度を持つことを確認
         for result in results:
-            self.assertGreaterEqual(result.confidence, self.ocr_engine.confidence_threshold,
-                                  f"信頼度が閾値({self.ocr_engine.confidence_threshold})以上であること")
+            self.assertGreaterEqual(
+                result.confidence,
+                self.ocr_engine.confidence_threshold,
+                f"信頼度が閾値({self.ocr_engine.confidence_threshold})以上であること",
+            )
 
 
 def run_ocr_extraction_test():

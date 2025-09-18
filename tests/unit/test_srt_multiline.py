@@ -20,8 +20,12 @@ def test_srt_multiline_output():
     # テスト用字幕データ
     subtitles = [
         SubtitleItem(index=1, start_ms=0, end_ms=2000, text="単行字幕"),
-        SubtitleItem(index=2, start_ms=2500, end_ms=4500, text="こんにちは\n皆さん"),  # 2行字幕
-        SubtitleItem(index=3, start_ms=5000, end_ms=7000, text="今日は良い\n天気ですね"),  # 2行字幕
+        SubtitleItem(
+            index=2, start_ms=2500, end_ms=4500, text="こんにちは\n皆さん"
+        ),  # 2行字幕
+        SubtitleItem(
+            index=3, start_ms=5000, end_ms=7000, text="今日は良い\n天気ですね"
+        ),  # 2行字幕
     ]
 
     # SRTフォーマッタを作成
@@ -36,7 +40,7 @@ def test_srt_multiline_output():
     print("=" * 50)
 
     # 期待される改行文字の確認
-    lines = srt_output.split('\n')
+    lines = srt_output.split("\n")
     multiline_found = False
 
     for i, line in enumerate(lines):
@@ -82,6 +86,7 @@ def test_srt_parsing():
 天気ですね"""
 
     from app.core.format.srt import SRTParser
+
     parser = SRTParser()
 
     # SRTを解析
