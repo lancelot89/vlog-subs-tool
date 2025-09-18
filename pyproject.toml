@@ -11,7 +11,7 @@ authors = [
 ]
 license = {text = "MIT"}
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.12"
 keywords = ["subtitle", "ocr", "translation", "video", "srt", "gui", "desktop"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -19,10 +19,6 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Multimedia :: Video",
     "Topic :: Text Processing :: Linguistic",
@@ -33,22 +29,24 @@ classifiers = [
 ]
 
 dependencies = [
-    "PySide6>=6.5.0",
-    "opencv-python>=4.8.0",
+    "PySide6>=6.9.0",
+    "opencv-python>=4.12.0",
     "ffmpeg-python>=0.2.0",
-    "paddlepaddle>=2.5.0",
-    "paddleocr>=2.7.0",
+    "paddlepaddle>=3.2.0",
+    "paddleocr>=3.2.0",
     "pytesseract>=0.3.10",
     "google-cloud-translate>=3.12.0",
     "deepl>=1.12.0",
-    "pandas>=2.0.0",
-    "numpy>=1.24.0",
+    "pandas>=2.3.0",
+    "numpy>=2.2.0",
     "python-bidi>=0.4.2",
     "pysrt>=1.1.2",
     "PyYAML>=6.0",
     "Pillow>=10.0.0",
     "loguru>=0.7.0",
     "tqdm>=4.65.0",
+    # CPU profiling and performance optimization
+    "psutil>=6.1.0",
 ]
 
 [project.optional-dependencies]
@@ -63,9 +61,9 @@ dev = [
     "pre-commit>=3.0.0",
 ]
 build = [
-    "pyinstaller>=5.13.0",
-    "setuptools>=61.0",
-    "wheel>=0.38.0",
+    "pyinstaller>=6.15.0",
+    "setuptools>=75.0.0",
+    "wheel>=0.45.0",
 ]
 
 [project.urls]
@@ -87,7 +85,7 @@ exclude = ["tests*", "build*", "dist*"]
 
 [tool.black]
 line-length = 100
-target-version = ['py38', 'py39', 'py310', 'py311']
+target-version = ['py312']
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -116,7 +114,7 @@ ensure_newline_before_comments = true
 known_first_party = ["app"]
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
