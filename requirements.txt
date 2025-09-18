@@ -43,3 +43,6 @@ tqdm>=4.65.0
 
 # Network requests (for enhanced download functionality)
 requests>=2.31.0
+
+# System monitoring (for benchmarking)
+psutil>=5.9.0
