@@ -80,9 +80,7 @@ hidden_imports = [
     'app.core.translate',
     'app.core.translate.provider_google',
     'app.core.translate.provider_deepl',
-    'app.core.cpu_profiler',     # CPU最適化
-    'app.core.benchmark',        # ベンチマーク
-    'app.core.linux_optimizer',  # Linux最適化
+    'app.core.cpu_profiler',     # CPU基本検出
     'app.ui',
     'app.ui.main_window',
     'app.ui.views',
