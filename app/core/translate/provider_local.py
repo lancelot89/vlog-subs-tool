@@ -17,14 +17,14 @@ try:
     CTRANSLATE2_AVAILABLE = True
 except ImportError:
     CTRANSLATE2_AVAILABLE = False
-    logging.warning("CTranslate2パッケージが利用できません。pip install ctranslate2 transformersでインストールしてください。")
+    # CTranslate2はローカル翻訳機能でのみ使用され、現在は無効化されているため警告を出力しない
 
 try:
     import opencc
     OPENCC_AVAILABLE = True
 except ImportError:
     OPENCC_AVAILABLE = False
-    logging.warning("OpenCCが利用できません。pip install opencc-python-reimplementedでインストールしてください。")
+    # OpenCCは中国語変換でのみ使用され、現在は無効化されているため警告を出力しない
 
 from .language_detector import LanguageDetector, LanguageDetectionError
 
