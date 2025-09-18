@@ -6,7 +6,7 @@ DESIGN.mdの画面仕様に基づくGUIレイアウト
 import sys
 import logging
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 from PySide6.QtWidgets import (
     QMainWindow, QApplication, QWidget, QHBoxLayout, QVBoxLayout,
@@ -21,12 +21,20 @@ from .views.table_view import SubtitleTableView
 from .views.translate_view import TranslateView
 from .views.settings_view import SettingsView
 from .dialogs.ocr_setup_dialog import OCRSetupDialog
+from .dialogs.multilang_export_dialog import MultiLanguageExportDialog
 from .extraction_worker import ExtractionWorker
 from app.core.models import Project, SubtitleItem
-from app.core.format.srt import SRTFormatter, SRTFormatSettings
+from app.core.format.srt import SRTFormatter, SRTFormatSettings, MultiLanguageSRTManager
 from app.core.csv import SubtitleCSVExporter
 from app.core.qc.rules import QCChecker
 from app.core.extractor.ocr import SimplePaddleOCREngine
+from app.core.translate import (
+    TranslationProviderRouter,
+    TranslationProviderType,
+    LocalTranslateProvider,
+    LocalTranslateSettings,
+    LocalTranslateError
+)
 
 
 def setup_japanese_support(app):
@@ -308,7 +316,7 @@ class MainWindow(QMainWindow):
 
         # SRT出力
         self.export_srt_btn = QPushButton("SRT出力")
-        self.export_srt_btn.clicked.connect(self.export_japanese_srt)
+        self.export_srt_btn.clicked.connect(self.show_multilang_export_dialog)
         self.export_srt_btn.setEnabled(False)
         toolbar.addWidget(self.export_srt_btn)
     
@@ -1074,6 +1082,225 @@ class MainWindow(QMainWindow):
         """全言語のSRTファイルを出力（現在は日本語のみ）"""
         # 将来的に多言語対応する際のプレースホルダー
         self.export_japanese_srt()
+
+    def show_multilang_export_dialog(self):
+        """多言語SRTエクスポートダイアログを表示"""
+        if not self.current_project or not self.current_project.subtitles:
+            QMessageBox.information(self, "情報", "出力する字幕がありません。\n先に字幕を抽出してください。")
+            return
+
+        # デフォルトの出力先を決定
+        default_output_dir = None
+        if self.current_video_path:
+            default_output_dir = Path(self.current_video_path).parent
+        elif self.current_project and self.current_project.source_video:
+            default_output_dir = Path(self.current_project.source_video).parent
+        else:
+            default_output_dir = Path.cwd()
+
+        # ダイアログを表示
+        result = MultiLanguageExportDialog.get_export_settings(default_output_dir, self)
+
+        if result:
+            selected_languages, output_dir = result
+            self.export_multilang_srt(selected_languages, Path(output_dir))
+
+    def export_multilang_srt(self, selected_languages: list, output_dir: Path):
+        """複数言語のSRTファイルをエクスポート"""
+        try:
+            # ベースファイル名を決定
+            if self.current_video_path:
+                video_path = Path(self.current_video_path)
+                base_filename = video_path.stem
+            elif self.current_project and self.current_project.source_video:
+                video_path = Path(self.current_project.source_video)
+                base_filename = video_path.stem
+            else:
+                base_filename = "subtitles"
+
+            base_filepath = output_dir / base_filename
+
+            # MultiLanguageSRTManagerを作成
+            srt_manager = MultiLanguageSRTManager(base_filepath)
+
+            # 各言語のフォーマッタを設定
+            for lang_code in selected_languages:
+                settings = self._get_srt_format_settings()
+                srt_manager.add_language(lang_code, settings)
+
+            # 字幕データを準備
+            multilang_subtitles = {}
+
+            # 日本語は常に含める
+            multilang_subtitles['ja'] = self.current_project.subtitles
+
+            # 他の言語を翻訳
+            other_languages = [lang for lang in selected_languages if lang != 'ja']
+
+            if other_languages:
+                try:
+                    # 翻訳プロバイダーの初期化
+                    translation_results = self._translate_to_languages(
+                        self.current_project.subtitles,
+                        other_languages
+                    )
+                    multilang_subtitles.update(translation_results)
+                except Exception as translation_error:
+                    # 翻訳エラーが発生した場合の処理
+                    QMessageBox.warning(
+                        self,
+                        "翻訳エラー",
+                        f"翻訳処理でエラーが発生しました：\n{str(translation_error)}\n\n"
+                        "日本語のみ出力します。"
+                    )
+                    # 日本語のみに制限
+                    selected_languages = ['ja']
+
+            # SRTファイルを保存
+            results = srt_manager.save_multilang_srt(multilang_subtitles)
+
+            # 結果の表示
+            success_count = sum(1 for success in results.values() if success)
+            total_count = len(results)
+
+            if success_count == total_count:
+                # すべて成功
+                saved_files = srt_manager.get_saved_files()
+                file_list = "\n".join(f"- {f.name}" for f in saved_files)
+                QMessageBox.information(
+                    self,
+                    "エクスポート完了",
+                    f"{success_count}個の言語のSRTファイルを出力しました：\n\n{file_list}\n\n出力先: {output_dir}"
+                )
+                self.status_label.setText(f"多言語SRT出力完了: {success_count}ファイル")
+            else:
+                # 一部失敗
+                success_langs = [lang for lang, success in results.items() if success]
+                failed_langs = [lang for lang, success in results.items() if not success]
+
+                message = f"エクスポート結果:\n\n"
+                message += f"成功: {len(success_langs)}ファイル ({', '.join(success_langs)})\n"
+                message += f"失敗: {len(failed_langs)}ファイル ({', '.join(failed_langs)})\n\n"
+                message += f"出力先: {output_dir}"
+
+                if success_count > 0:
+                    QMessageBox.warning(self, "エクスポート部分完了", message)
+                else:
+                    QMessageBox.critical(self, "エクスポート失敗", message)
+
+                self.status_label.setText(f"多言語SRT出力: {success_count}/{total_count}成功")
+
+        except Exception as e:
+            QMessageBox.critical(self, "エラー", f"多言語SRTエクスポートでエラーが発生しました：\n{str(e)}")
+
+    def _translate_to_languages(self, subtitles: List[SubtitleItem], target_languages: List[str]) -> Dict[str, List[SubtitleItem]]:
+        """字幕を複数言語に翻訳"""
+        translation_results = {}
+
+        try:
+            # ローカル翻訳プロバイダーの初期化
+            models_dir = Path.cwd() / "app" / "models" / "translation"
+            models_dir.mkdir(parents=True, exist_ok=True)
+
+            settings = LocalTranslateSettings(
+                models_dir=str(models_dir),
+                max_batch_size=16,
+                beam_size=1,
+                length_penalty=0.2,
+                repetition_penalty=1.5,
+                max_decoding_length=50
+            )
+
+            router = TranslationProviderRouter()
+            router.register_provider(TranslationProviderType.LOCAL, settings)
+
+            # 字幕テキストを抽出
+            subtitle_texts = [subtitle.text for subtitle in subtitles]
+
+            # 各言語に翻訳
+            for target_lang in target_languages:
+                try:
+                    self.status_label.setText(f"翻訳中: 日本語 → {target_lang}...")
+
+                    # 翻訳実行
+                    translation_result = router.translate_batch(
+                        subtitle_texts,
+                        target_language=target_lang,
+                        source_language='ja',  # 日本語から翻訳
+                        provider_type=TranslationProviderType.LOCAL
+                    )
+
+                    if translation_result.success:
+                        # 翻訳された字幕アイテムを作成
+                        translated_subtitles = []
+                        for i, (original_subtitle, translated_text) in enumerate(zip(subtitles, translation_result.translated_texts)):
+                            translated_subtitle = SubtitleItem(
+                                index=original_subtitle.index,
+                                start_ms=original_subtitle.start_ms,
+                                end_ms=original_subtitle.end_ms,
+                                text=translated_text,
+                                bbox=original_subtitle.bbox
+                            )
+                            translated_subtitles.append(translated_subtitle)
+
+                        translation_results[target_lang] = translated_subtitles
+                        logging.info(f"翻訳完了: {target_lang} ({len(translated_subtitles)}件)")
+
+                    else:
+                        # 翻訳失敗の場合は元のテキストにプレフィックス付きで使用
+                        logging.warning(f"翻訳失敗: {target_lang} - {translation_result.error_message}")
+                        fallback_subtitles = []
+                        for subtitle in subtitles:
+                            fallback_text = f"[{target_lang.upper()}] {subtitle.text}"
+                            fallback_subtitle = SubtitleItem(
+                                index=subtitle.index,
+                                start_ms=subtitle.start_ms,
+                                end_ms=subtitle.end_ms,
+                                text=fallback_text,
+                                bbox=subtitle.bbox
+                            )
+                            fallback_subtitles.append(fallback_subtitle)
+                        translation_results[target_lang] = fallback_subtitles
+
+                except Exception as lang_error:
+                    logging.error(f"言語 {target_lang} の翻訳でエラー: {lang_error}")
+                    # エラー時のフォールバック
+                    fallback_subtitles = []
+                    for subtitle in subtitles:
+                        fallback_text = f"[ERROR:{target_lang.upper()}] {subtitle.text}"
+                        fallback_subtitle = SubtitleItem(
+                            index=subtitle.index,
+                            start_ms=subtitle.start_ms,
+                            end_ms=subtitle.end_ms,
+                            text=fallback_text,
+                            bbox=subtitle.bbox
+                        )
+                        fallback_subtitles.append(fallback_subtitle)
+                    translation_results[target_lang] = fallback_subtitles
+
+            self.status_label.setText("翻訳処理完了")
+            return translation_results
+
+        except Exception as e:
+            logging.error(f"翻訳処理でエラー: {e}")
+            raise Exception(f"翻訳プロバイダーの初期化に失敗しました: {str(e)}")
+
+    def _get_srt_format_settings(self) -> SRTFormatSettings:
+        """SRT出力設定を取得"""
+        # 設定画面からの設定取得を試行
+        try:
+            # 設定ビューの作成とデフォルト値の取得
+            settings_view = SettingsView()
+            return settings_view.get_srt_format_settings()
+        except Exception:
+            # フォールバック: デフォルト値を使用
+            return SRTFormatSettings(
+                encoding="utf-8",
+                with_bom=False,
+                line_ending="lf",
+                max_chars_per_line=42,
+                max_lines=2
+            )
     
     def export_original_csv(self):
         """元データのCSVをエクスポート"""
