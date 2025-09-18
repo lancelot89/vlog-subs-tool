@@ -27,7 +27,7 @@ hidden_imports = [
     'PySide6.QtMultimedia',
     'PySide6.QtMultimediaWidgets',
 
-    # PaddleOCR関連
+    # PaddleOCR関連（最新版対応）
     'paddleocr',
     'paddlepaddle',
     'paddle',
@@ -36,10 +36,19 @@ hidden_imports = [
     'paddlex',  # PaddleXモジュール
     'paddlex.utils',
     'paddlex.utils.version',
+    'paddlex.modules.base.predictor',
+    'paddlex.common',
 
     # OpenCV関連
     'cv2',
     'numpy',
+
+    # CPU性能最適化関連
+    'psutil',
+    'multiprocessing',
+    'threading',
+    'subprocess',
+    'platform',
 
     # その他の重要ライブラリ
     'PIL',
@@ -71,6 +80,9 @@ hidden_imports = [
     'app.core.translate',
     'app.core.translate.provider_google',
     'app.core.translate.provider_deepl',
+    'app.core.cpu_profiler',     # CPU最適化
+    'app.core.benchmark',        # ベンチマーク
+    'app.core.linux_optimizer',  # Linux最適化
     'app.ui',
     'app.ui.main_window',
     'app.ui.views',
@@ -179,6 +191,7 @@ a = Analysis(
         'app.core.format',
         'app.core.translate',
         'app.core.qc',
+        'psutil',  # CPU情報取得
     ],
     # Paddleデータファイルの明示的収集
     collect_data=[
@@ -196,9 +209,10 @@ a = Analysis(
 # PYZアーカイブ作成
 pyz = PYZ(a.pure, a.zipped_data, cipher=None)
 
-# TODO: v1リリース時にDEBUG_MODE判定を削除してconsole=Falseに固定
-# デバッグモード判定（main.pyのDEBUG_MODEと連動）
-DEBUG_MODE = True  # 開発版（v1リリース時にFalseにする）
+# デバッグモード判定（環境変数または設定ファイルから判定）
+# 本番ビルド時は console=False に設定
+import os
+DEBUG_MODE = os.environ.get('VLOG_SUBS_DEBUG', 'false').lower() == 'true'
 
 # 実行ファイル設定（--onedir形式でウイルス誤検知を回避）
 exe = EXE(
@@ -211,7 +225,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,  # UPX圧縮を無効化（誤検知回避）
-    console=DEBUG_MODE,  # デバッグ版ではコンソール表示、本番版では非表示
+    console=DEBUG_MODE,  # 環境変数 VLOG_SUBS_DEBUG=true でコンソール表示
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

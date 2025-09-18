@@ -8,7 +8,7 @@ set -e
 
 # 設定
 APP_NAME="VLog字幕ツール"
-VERSION="1.0.0"
+VERSION="1.2.0"  # Linux最適化、ベンチマーク、CPU profilerに対応
 DIST_DIR="dist"
 BUILD_DIR="build"
 
@@ -33,7 +33,7 @@ log_error() {
 # 環境確認
 check_environment() {
     log_info "環境確認中..."
-    
+
     # Python仮想環境確認（GitHub Actionsの場合はスキップ）
     if [[ "$VIRTUAL_ENV" == "" && "$GITHUB_ACTIONS" != "true" ]]; then
         log_error "仮想環境が有効化されていません"
@@ -41,14 +41,27 @@ check_environment() {
         log_info "source venv/bin/activate"
         exit 1
     fi
-    
+
+    # Python バージョン確認
+    python_version=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+    if [[ "$python_version" < "3.12" ]]; then
+        log_warn "Python 3.12以降を推奨します（現在: $python_version）"
+    fi
+
     # PyInstaller確認
     if ! command -v pyinstaller &> /dev/null; then
         log_warn "PyInstallerがインストールされていません。インストール中..."
-        pip install pyinstaller
+        pip install pyinstaller>=6.15.0
     fi
-    
-    log_info "環境確認完了"
+
+    # 重要な依存関係確認
+    log_info "重要な依存関係の確認中..."
+    python3 -c "import PySide6, paddleocr, cv2, numpy, pandas, psutil" 2>/dev/null || {
+        log_error "必要な依存関係が不足しています。requirements.txtまたはpyproject.tomlから再インストールしてください"
+        exit 1
+    }
+
+    log_info "環境確認完了 (Python $python_version)"
 }
 
 # クリーンアップ
@@ -88,8 +101,10 @@ build_windows() {
             --hidden-import "PySide6.QtWidgets" \
             --hidden-import "paddleocr" \
             --hidden-import "paddle" \
+            --hidden-import "paddlex" \
             --hidden-import "cv2" \
             --hidden-import "numpy" \
+            --hidden-import "psutil" \
             --exclude-module "tkinter" \
             --exclude-module "matplotlib" \
             --noupx \
@@ -132,8 +147,10 @@ build_macos() {
             --hidden-import "PySide6.QtWidgets" \
             --hidden-import "paddleocr" \
             --hidden-import "paddle" \
+            --hidden-import "paddlex" \
             --hidden-import "cv2" \
             --hidden-import "numpy" \
+            --hidden-import "psutil" \
             --exclude-module "tkinter" \
             --exclude-module "matplotlib" \
             --noupx \
@@ -169,8 +186,10 @@ build_linux() {
             --hidden-import "PySide6.QtWidgets" \
             --hidden-import "paddleocr" \
             --hidden-import "paddle" \
+            --hidden-import "paddlex" \
             --hidden-import "cv2" \
             --hidden-import "numpy" \
+            --hidden-import "psutil" \
             --exclude-module "tkinter" \
             --exclude-module "matplotlib" \
             --noupx \
@@ -218,17 +237,33 @@ check_file_sizes() {
         if [[ -f "$file" ]]; then
             size=$(du -h "$file" | cut -f1)
             echo "  $file: $size"
+        elif [[ -d "$file" ]]; then
+            size=$(du -sh "$file" | cut -f1)
+            echo "  $file/: $size (directory)"
         fi
     done
+
+    # 予想サイズ情報を表示
+    log_info "予想配布サイズ (PaddleOCRモデル込み):"
+    log_info "  Linux/Windows: ~300-400MB"
+    log_info "  macOS: ~350-450MB"
 }
 
 # メイン処理
 main() {
     local platform="${1:-linux}"
-    
+
     log_info "VLog字幕ツール バイナリビルド開始"
+    log_info "バージョン: $VERSION"
     log_info "プラットフォーム: $platform"
-    
+
+    # デバッグモードの確認
+    if [[ "${VLOG_SUBS_DEBUG:-false}" == "true" ]]; then
+        log_warn "デバッグモードでビルドします（コンソール表示有効）"
+    else
+        log_info "本番モードでビルドします（コンソール表示無効）"
+    fi
+
     check_environment
     cleanup
     
