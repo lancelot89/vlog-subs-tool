@@ -21,9 +21,10 @@ from .views.table_view import SubtitleTableView
 from .views.translate_view import TranslateView
 from .views.settings_view import SettingsView
 from .dialogs.ocr_setup_dialog import OCRSetupDialog
+from .dialogs.multilang_export_dialog import MultiLanguageExportDialog
 from .extraction_worker import ExtractionWorker
 from app.core.models import Project, SubtitleItem
-from app.core.format.srt import SRTFormatter, SRTFormatSettings
+from app.core.format.srt import SRTFormatter, SRTFormatSettings, MultiLanguageSRTManager
 from app.core.csv import SubtitleCSVExporter
 from app.core.qc.rules import QCChecker
 from app.core.extractor.ocr import SimplePaddleOCREngine
@@ -308,7 +309,7 @@ class MainWindow(QMainWindow):
 
         # SRT出力
         self.export_srt_btn = QPushButton("SRT出力")
-        self.export_srt_btn.clicked.connect(self.export_japanese_srt)
+        self.export_srt_btn.clicked.connect(self.show_multilang_export_dialog)
         self.export_srt_btn.setEnabled(False)
         toolbar.addWidget(self.export_srt_btn)
     
@@ -1074,6 +1075,131 @@ class MainWindow(QMainWindow):
         """全言語のSRTファイルを出力（現在は日本語のみ）"""
         # 将来的に多言語対応する際のプレースホルダー
         self.export_japanese_srt()
+
+    def show_multilang_export_dialog(self):
+        """多言語SRTエクスポートダイアログを表示"""
+        if not self.current_project or not self.current_project.subtitles:
+            QMessageBox.information(self, "情報", "出力する字幕がありません。\n先に字幕を抽出してください。")
+            return
+
+        # デフォルトの出力先を決定
+        default_output_dir = None
+        if self.current_video_path:
+            default_output_dir = Path(self.current_video_path).parent
+        elif self.current_project and self.current_project.source_video:
+            default_output_dir = Path(self.current_project.source_video).parent
+        else:
+            default_output_dir = Path.cwd()
+
+        # ダイアログを表示
+        result = MultiLanguageExportDialog.get_export_settings(default_output_dir, self)
+
+        if result:
+            selected_languages, output_dir = result
+            self.export_multilang_srt(selected_languages, Path(output_dir))
+
+    def export_multilang_srt(self, selected_languages: list, output_dir: Path):
+        """複数言語のSRTファイルをエクスポート"""
+        try:
+            # ベースファイル名を決定
+            if self.current_video_path:
+                video_path = Path(self.current_video_path)
+                base_filename = video_path.stem
+            elif self.current_project and self.current_project.source_video:
+                video_path = Path(self.current_project.source_video)
+                base_filename = video_path.stem
+            else:
+                base_filename = "subtitles"
+
+            base_filepath = output_dir / base_filename
+
+            # MultiLanguageSRTManagerを作成
+            srt_manager = MultiLanguageSRTManager(base_filepath)
+
+            # 各言語のフォーマッタを設定
+            for lang_code in selected_languages:
+                settings = self._get_srt_format_settings()
+                srt_manager.add_language(lang_code, settings)
+
+            # 字幕データを準備
+            multilang_subtitles = {}
+
+            for lang_code in selected_languages:
+                if lang_code == 'ja':
+                    # 日本語の場合は元の字幕データを使用
+                    multilang_subtitles[lang_code] = self.current_project.subtitles
+                else:
+                    # 他の言語の場合は翻訳処理が必要
+                    # 現在は翻訳機能が未実装のため、日本語をコピー
+                    # TODO: 実際の翻訳機能を実装後に更新
+                    translated_subtitles = []
+                    for subtitle in self.current_project.subtitles:
+                        # 仮の翻訳処理（翻訳プロバイダー統合後に更新）
+                        translated_text = f"[{lang_code.upper()}] {subtitle.text}"
+                        translated_subtitle = SubtitleItem(
+                            index=subtitle.index,
+                            start_ms=subtitle.start_ms,
+                            end_ms=subtitle.end_ms,
+                            text=translated_text,
+                            confidence=subtitle.confidence,
+                            bbox=subtitle.bbox
+                        )
+                        translated_subtitles.append(translated_subtitle)
+                    multilang_subtitles[lang_code] = translated_subtitles
+
+            # SRTファイルを保存
+            results = srt_manager.save_multilang_srt(multilang_subtitles)
+
+            # 結果の表示
+            success_count = sum(1 for success in results.values() if success)
+            total_count = len(results)
+
+            if success_count == total_count:
+                # すべて成功
+                saved_files = srt_manager.get_saved_files()
+                file_list = "\n".join(f"- {f.name}" for f in saved_files)
+                QMessageBox.information(
+                    self,
+                    "エクスポート完了",
+                    f"{success_count}個の言語のSRTファイルを出力しました：\n\n{file_list}\n\n出力先: {output_dir}"
+                )
+                self.status_label.setText(f"多言語SRT出力完了: {success_count}ファイル")
+            else:
+                # 一部失敗
+                success_langs = [lang for lang, success in results.items() if success]
+                failed_langs = [lang for lang, success in results.items() if not success]
+
+                message = f"エクスポート結果:\n\n"
+                message += f"成功: {len(success_langs)}ファイル ({', '.join(success_langs)})\n"
+                message += f"失敗: {len(failed_langs)}ファイル ({', '.join(failed_langs)})\n\n"
+                message += f"出力先: {output_dir}"
+
+                if success_count > 0:
+                    QMessageBox.warning(self, "エクスポート部分完了", message)
+                else:
+                    QMessageBox.critical(self, "エクスポート失敗", message)
+
+                self.status_label.setText(f"多言語SRT出力: {success_count}/{total_count}成功")
+
+        except Exception as e:
+            QMessageBox.critical(self, "エラー", f"多言語SRTエクスポートでエラーが発生しました：\n{str(e)}")
+
+    def _get_srt_format_settings(self) -> SRTFormatSettings:
+        """SRT出力設定を取得"""
+        # 設定画面からの設定取得を試行
+        try:
+            # 設定ビューの作成とデフォルト値の取得
+            settings_view = SettingsView()
+            return settings_view.get_srt_format_settings()
+        except Exception:
+            # フォールバック: デフォルト値を使用
+            return SRTFormatSettings(
+                encoding="utf-8",
+                with_bom=False,
+                line_ending="lf",
+                max_chars_per_line=42,
+                max_lines=2
+            )
     
     def export_original_csv(self):
         """元データのCSVをエクスポート"""

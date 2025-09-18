@@ -231,7 +231,29 @@ class SettingsView(QDialog):
         srt_layout.addWidget(self.srt_crlf_check)
         
         layout.addWidget(srt_group)
-        
+
+        # 多言語エクスポート設定
+        multilang_group = QGroupBox("多言語エクスポート設定")
+        multilang_layout = QFormLayout(multilang_group)
+
+        # デフォルト選択言語
+        self.default_languages_combo = QComboBox()
+        self.default_languages_combo.addItems([
+            "日本語のみ",
+            "日本語 + 英語",
+            "日本語 + 英語 + 中国語（簡体）",
+            "カスタム"
+        ])
+        self.default_languages_combo.setCurrentText("日本語 + 英語")
+        multilang_layout.addRow("デフォルト選択:", self.default_languages_combo)
+
+        # 自動翻訳設定（将来的な実装用）
+        self.auto_translate_check = QCheckBox("自動翻訳を有効化（実装予定）")
+        self.auto_translate_check.setEnabled(False)  # 現在は無効
+        multilang_layout.addWidget(self.auto_translate_check)
+
+        layout.addWidget(multilang_group)
+
         # 上書き動作
         overwrite_group = QGroupBox("上書き動作")
         overwrite_layout = QVBoxLayout(overwrite_group)
@@ -356,6 +378,8 @@ class SettingsView(QDialog):
         self.encoding_combo.setCurrentIndex(0)
         self.srt_bom_check.setChecked(False)
         self.srt_crlf_check.setChecked(False)
+        self.default_languages_combo.setCurrentText("日本語 + 英語")
+        self.auto_translate_check.setChecked(False)
         self.overwrite_ask_radio.setChecked(True)
         
         # UI設定
@@ -397,6 +421,8 @@ class SettingsView(QDialog):
             "encoding": self.encoding_combo.currentText(),
             "srt_bom": self.srt_bom_check.isChecked(),
             "srt_crlf": self.srt_crlf_check.isChecked(),
+            "default_languages": self.default_languages_combo.currentText(),
+            "auto_translate": self.auto_translate_check.isChecked(),
             "overwrite_mode": "ask" if self.overwrite_ask_radio.isChecked() else "auto",
             
             # UI設定
@@ -406,3 +432,48 @@ class SettingsView(QDialog):
             "auto_save_interval": self.auto_save_interval_spin.value(),
             "recent_files_count": self.recent_files_spin.value()
         }
+
+    def get_default_languages(self):
+        """デフォルト選択言語を取得"""
+        selection = self.default_languages_combo.currentText()
+        if selection == "日本語のみ":
+            return ['ja']
+        elif selection == "日本語 + 英語":
+            return ['ja', 'en']
+        elif selection == "日本語 + 英語 + 中国語（簡体）":
+            return ['ja', 'en', 'zh-cn']
+        else:  # カスタム
+            return ['ja']  # デフォルトは日本語
+
+    def get_default_output_directory(self):
+        """デフォルト出力ディレクトリを取得"""
+        output_dir = self.output_folder_edit.text().strip()
+        if output_dir:
+            return Path(output_dir)
+        return None
+
+    def get_srt_format_settings(self):
+        """SRT出力設定を取得"""
+        from app.core.format.srt import SRTFormatSettings
+        from pathlib import Path
+
+        encoding = "utf-8"
+        with_bom = False
+
+        if self.encoding_combo.currentText() == "UTF-8 BOM":
+            encoding = "utf-8"
+            with_bom = True
+        elif self.encoding_combo.currentText() == "Shift_JIS":
+            encoding = "shift_jis"
+        elif self.encoding_combo.currentText() == "CP932":
+            encoding = "cp932"
+        else:  # UTF-8
+            encoding = "utf-8"
+
+        return SRTFormatSettings(
+            encoding=encoding,
+            with_bom=with_bom or self.srt_bom_check.isChecked(),
+            line_ending="crlf" if self.srt_crlf_check.isChecked() else "lf",
+            max_chars_per_line=self.max_chars_spin.value(),
+            max_lines=self.max_lines_spin.value()
+        )
