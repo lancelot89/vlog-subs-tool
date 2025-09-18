@@ -46,9 +46,7 @@ class MockTextSimilarityCalculator:
             return 1.0
 
         # 長さが大きく異なる場合は類似度を下げる
-        len_ratio = min(len(norm_text1), len(norm_text2)) / max(
-            len(norm_text1), len(norm_text2)
-        )
+        len_ratio = min(len(norm_text1), len(norm_text2)) / max(len(norm_text1), len(norm_text2))
         if len_ratio < 0.9:
             return 0.0
 
@@ -198,9 +196,7 @@ def test_duplicate_merge_basic():
 
         if merged_subtitle.start_ms == 16000 and merged_subtitle.end_ms == 27200:
             print("✅ 時間範囲統合が正しく動作しました")
-            print(
-                f"  統合後時間範囲: {merged_subtitle.start_ms}-{merged_subtitle.end_ms}ms"
-            )
+            print(f"  統合後時間範囲: {merged_subtitle.start_ms}-{merged_subtitle.end_ms}ms")
             return True
         else:
             print(
@@ -208,9 +204,7 @@ def test_duplicate_merge_basic():
             )
             return False
     else:
-        print(
-            f"❌ テスト失敗: 期待値 {expected_groups} != 実際 {len(merged_subtitles)}"
-        )
+        print(f"❌ テスト失敗: 期待値 {expected_groups} != 実際 {len(merged_subtitles)}")
         return False
 
 
@@ -245,9 +239,7 @@ def test_exact_duplicate():
             and same_text_subtitle.end_ms == 5000
         ):
             print("✅ テスト成功: 完全同一テキストが正しく統合されました")
-            print(
-                f"  統合後時間範囲: {same_text_subtitle.start_ms}-{same_text_subtitle.end_ms}ms"
-            )
+            print(f"  統合後時間範囲: {same_text_subtitle.start_ms}-{same_text_subtitle.end_ms}ms")
             return True
         else:
             print(

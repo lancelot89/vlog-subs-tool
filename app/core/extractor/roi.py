@@ -89,9 +89,7 @@ class BottomROIDetector(ROIDetector):
         height = int(self.frame_height * self.bottom_ratio)
         y = self.frame_height - height
 
-        return ROIRegion(
-            x=0, y=y, width=self.frame_width, height=height, confidence=1.0
-        )
+        return ROIRegion(x=0, y=y, width=self.frame_width, height=height, confidence=1.0)
 
 
 class AutoROIDetector(ROIDetector):
@@ -141,9 +139,7 @@ class AutoROIDetector(ROIDetector):
             if self._is_subtitle_like_region(x, y, w, h, frame.shape):
                 confidence = self._calculate_text_confidence(gray[y : y + h, x : x + w])
 
-                text_regions.append(
-                    ROIRegion(x=x, y=y, width=w, height=h, confidence=confidence)
-                )
+                text_regions.append(ROIRegion(x=x, y=y, width=w, height=h, confidence=confidence))
 
         return text_regions
 
@@ -267,9 +263,7 @@ class ROIManager:
 
     def set_manual_roi(self, rect: Tuple[int, int, int, int]):
         """手動ROI矩形を設定"""
-        self.manual_detector = ManualROIDetector(
-            self.frame_width, self.frame_height, rect
-        )
+        self.manual_detector = ManualROIDetector(self.frame_width, self.frame_height, rect)
 
     def detect_roi(self, mode: ROIMode, frames: List[VideoFrame]) -> ROIRegion:
         """指定モードでROIを検出"""
@@ -284,9 +278,7 @@ class ROIManager:
 
         return detector.detect(frames)
 
-    def visualize_roi(
-        self, frame: np.ndarray, roi: ROIRegion, mode: ROIMode
-    ) -> np.ndarray:
+    def visualize_roi(self, frame: np.ndarray, roi: ROIRegion, mode: ROIMode) -> np.ndarray:
         """ROI可視化"""
         colors = {
             ROIMode.AUTO: (0, 255, 0),  # 緑

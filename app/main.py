@@ -105,9 +105,7 @@ def test_imports(logger):
     try:
         import PySide6
 
-        logger.info(
-            f"✅ Stage 2: PySide6インポート - OK (version: {PySide6.__version__})"
-        )
+        logger.info(f"✅ Stage 2: PySide6インポート - OK (version: {PySide6.__version__})")
     except Exception as e:
         logger.error(f"❌ Stage 2: PySide6インポート - {e}")
         return False

@@ -75,16 +75,12 @@ class MockTranslateProvider:
         for text in texts:
             if target_language == "en":
                 # 日本語 -> 英語のモック
-                mock_text = text.replace("こんにちは", "Hello").replace(
-                    "ありがとう", "Thank you"
-                )
+                mock_text = text.replace("こんにちは", "Hello").replace("ありがとう", "Thank you")
                 if mock_text == text:  # 変更がなかった場合
                     mock_text = f"[EN] {text}"
             elif target_language == "ja":
                 # 英語 -> 日本語のモック
-                mock_text = text.replace("Hello", "こんにちは").replace(
-                    "Thank you", "ありがとう"
-                )
+                mock_text = text.replace("Hello", "こんにちは").replace("Thank you", "ありがとう")
                 if mock_text == text:  # 変更がなかった場合
                     mock_text = f"[JA] {text}"
             else:
@@ -116,9 +112,7 @@ class TranslationProviderRouter:
         self.default_provider: Optional[TranslationProviderType] = None
         self.fallback_providers: List[TranslationProviderType] = []
 
-    def register_provider(
-        self, provider_type: TranslationProviderType, settings: Any
-    ) -> bool:
+    def register_provider(self, provider_type: TranslationProviderType, settings: Any) -> bool:
         """翻訳プロバイダーを登録"""
         try:
             provider = None
@@ -142,9 +136,7 @@ class TranslationProviderRouter:
                 logging.info(f"翻訳プロバイダー登録完了: {provider_type.value}")
                 return True
             else:
-                logging.warning(
-                    f"翻訳プロバイダーの初期化に失敗: {provider_type.value}"
-                )
+                logging.warning(f"翻訳プロバイダーの初期化に失敗: {provider_type.value}")
                 return False
 
         except Exception as e:
@@ -163,9 +155,7 @@ class TranslationProviderRouter:
         """フォールバックプロバイダーを設定"""
         valid_providers = [p for p in providers if p in self.providers]
         self.fallback_providers = valid_providers
-        logging.info(
-            f"フォールバック翻訳プロバイダー設定: {[p.value for p in valid_providers]}"
-        )
+        logging.info(f"フォールバック翻訳プロバイダー設定: {[p.value for p in valid_providers]}")
 
     def get_available_providers(self) -> List[TranslationProviderType]:
         """利用可能なプロバイダー一覧を取得"""
@@ -173,10 +163,7 @@ class TranslationProviderRouter:
 
     def is_provider_available(self, provider_type: TranslationProviderType) -> bool:
         """プロバイダーが利用可能かチェック"""
-        return (
-            provider_type in self.providers
-            and self.providers[provider_type].is_initialized
-        )
+        return provider_type in self.providers and self.providers[provider_type].is_initialized
 
     def translate_batch(
         self,
@@ -293,11 +280,7 @@ class TranslationProviderRouter:
         first_provider = next(iter(self.providers.values()))
         all_languages = first_provider.get_supported_languages()
 
-        return {
-            lang: name
-            for lang, name in all_languages.items()
-            if lang in common_languages
-        }
+        return {lang: name for lang, name in all_languages.items() if lang in common_languages}
 
     def get_provider_error_guidance(
         self, provider_type: TranslationProviderType, error: Exception

@@ -415,9 +415,7 @@ class SettingsView(QDialog):
             "roi_mode": "bottom" if self.roi_bottom_radio.isChecked() else "auto",
             "bottom_ratio": self.bottom_ratio_spin.value() / 100.0,
             "ocr_engine": (
-                "paddleocr"
-                if self.ocr_engine_combo.currentIndex() == 0
-                else "tesseract"
+                "paddleocr" if self.ocr_engine_combo.currentIndex() == 0 else "tesseract"
             ),
             "ocr_confidence": self.ocr_confidence_spin.value() / 100.0,
             # 整形設定

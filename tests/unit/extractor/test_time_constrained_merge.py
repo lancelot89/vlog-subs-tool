@@ -60,9 +60,7 @@ def test_time_constrained_duplicate_merge():
     assert len(merged_subtitles) == 1, f"期待値 1 != 実際 {len(merged_subtitles)}"
 
     merged_subtitle = merged_subtitles[0]
-    assert (
-        merged_subtitle.start_ms == 16000
-    ), f"開始時間が不正: {merged_subtitle.start_ms}"
+    assert merged_subtitle.start_ms == 16000, f"開始時間が不正: {merged_subtitle.start_ms}"
     assert merged_subtitle.end_ms == 21200, f"終了時間が不正: {merged_subtitle.end_ms}"
 
     print("✅ テスト成功: 近接する類似字幕が正しく統合されました")

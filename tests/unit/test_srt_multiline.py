@@ -20,12 +20,8 @@ def test_srt_multiline_output():
     # テスト用字幕データ
     subtitles = [
         SubtitleItem(index=1, start_ms=0, end_ms=2000, text="単行字幕"),
-        SubtitleItem(
-            index=2, start_ms=2500, end_ms=4500, text="こんにちは\n皆さん"
-        ),  # 2行字幕
-        SubtitleItem(
-            index=3, start_ms=5000, end_ms=7000, text="今日は良い\n天気ですね"
-        ),  # 2行字幕
+        SubtitleItem(index=2, start_ms=2500, end_ms=4500, text="こんにちは\n皆さん"),  # 2行字幕
+        SubtitleItem(index=3, start_ms=5000, end_ms=7000, text="今日は良い\n天気ですね"),  # 2行字幕
     ]
 
     # SRTフォーマッタを作成

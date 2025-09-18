@@ -58,9 +58,7 @@ class PlayerView(QWidget):
         # 動画表示エリア
         self.video_label = QLabel()
         self.video_label.setMinimumSize(400, 300)
-        self.video_label.setStyleSheet(
-            "border: 1px solid gray; background-color: black;"
-        )
+        self.video_label.setStyleSheet("border: 1px solid gray; background-color: black;")
         self.video_label.setAlignment(Qt.AlignCenter)
         self.video_label.setText(
             "動画をドラッグ&ドロップするか、\\n「動画を開く」ボタンから読み込んでください"
@@ -353,9 +351,7 @@ class PlayerView(QWidget):
         max_width = 0
 
         for line in lines:
-            (text_width, text_height), _ = cv2.getTextSize(
-                line, font, font_scale, thickness
-            )
+            (text_width, text_height), _ = cv2.getTextSize(line, font, font_scale, thickness)
             max_width = max(max_width, text_width)
 
         # 背景矩形
