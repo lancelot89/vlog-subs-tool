@@ -9,6 +9,18 @@ __pycache__/
 # Translation model files (too large for Git)
 app/models/translation/
 
+# Debug and development files
+*debug.log
+*debug.spec
+test_*.py
+!tests/
+vlog-subs-tool-debug.*
+
+# Build artifacts and temporary files
+=
+=*
+*.tmp
+
 # Distribution / packaging
 .Python
 build/
