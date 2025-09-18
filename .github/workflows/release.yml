@@ -1,0 +1,229 @@
+name: Automated Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Semantic versioning tags (v1.0.0, v1.0.1, etc.)
+
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        default: false
+        type: boolean
+      draft:
+        description: 'Create as draft'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  validate-release:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      is_prerelease: ${{ steps.version.outputs.is_prerelease }}
+      is_draft: ${{ steps.version.outputs.is_draft }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Determine release parameters
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+          IS_PRERELEASE="${{ github.event.inputs.prerelease }}"
+          IS_DRAFT="${{ github.event.inputs.draft }}"
+        else
+          VERSION="${{ github.ref_name }}"
+          # Pre-release if version contains alpha, beta, rc
+          if [[ $VERSION =~ (alpha|beta|rc) ]]; then
+            IS_PRERELEASE=true
+          else
+            IS_PRERELEASE=false
+          fi
+          IS_DRAFT=false
+        fi
+
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "is_prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
+        echo "is_draft=$IS_DRAFT" >> $GITHUB_OUTPUT
+
+        echo "Release Version: $VERSION"
+        echo "Pre-release: $IS_PRERELEASE"
+        echo "Draft: $IS_DRAFT"
+
+    - name: Validate version format
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        if [[ ! $VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
+          echo "❌ Invalid version format: $VERSION"
+          echo "Expected format: v1.0.0 or v1.0.0-beta1"
+          exit 1
+        fi
+        echo "✅ Version format is valid: $VERSION"
+
+  build-all-platforms:
+    needs: validate-release
+    uses: ./.github/workflows/build-binaries.yml
+    with:
+      tag_name: ${{ needs.validate-release.outputs.version }}
+
+  create-changelog:
+    runs-on: ubuntu-latest
+    outputs:
+      changelog: ${{ steps.changelog.outputs.changelog }}
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Full history for changelog
+
+    - name: Generate changelog
+      id: changelog
+      run: |
+        VERSION="${{ needs.validate-release.outputs.version }}"
+
+        # Get previous tag
+        PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
+
+        if [ -z "$PREVIOUS_TAG" ]; then
+          echo "First release - no previous tag found"
+          CHANGELOG="初回リリース"
+        else
+          echo "Generating changelog from $PREVIOUS_TAG to $VERSION"
+
+          # Generate commit-based changelog
+          CHANGELOG=$(git log --pretty=format:"- %s" $PREVIOUS_TAG..HEAD | grep -E "^- (feat|fix|docs|refactor|perf|test|chore):" | head -20)
+
+          if [ -z "$CHANGELOG" ]; then
+            CHANGELOG="- バグ修正と改善"
+          fi
+        fi
+
+        # Escape for GitHub output
+        CHANGELOG_ESCAPED=$(echo "$CHANGELOG" | sed ':a;N;$!ba;s/\n/%0A/g')
+        echo "changelog=$CHANGELOG_ESCAPED" >> $GITHUB_OUTPUT
+
+  publish-release:
+    needs: [validate-release, build-all-platforms, create-changelog]
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download all build artifacts
+      uses: actions/download-artifact@v4
+
+    - name: Create comprehensive release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ needs.validate-release.outputs.version }}
+        name: VLog字幕ツール ${{ needs.validate-release.outputs.version }}
+        draft: ${{ needs.validate-release.outputs.is_draft == 'true' }}
+        prerelease: ${{ needs.validate-release.outputs.is_prerelease == 'true' }}
+        files: |
+          vlog-subs-tool-linux/vlog-subs-tool-linux.tar.gz
+          vlog-subs-tool-windows/vlog-subs-tool-windows.zip
+          vlog-subs-tool-macos/vlog-subs-tool-macos.zip
+        body: |
+          ## 🎬 VLog字幕ツール ${{ needs.validate-release.outputs.version }}
+
+          ### 📦 ダウンロード
+
+          | プラットフォーム | ファイル | サイズ | 説明 |
+          |----------------|----------|--------|------|
+          | 🐧 Linux | `vlog-subs-tool-linux.tar.gz` | ~400MB | Ubuntu 20.04+ 対応 |
+          | 🪟 Windows | `vlog-subs-tool-windows.zip` | ~400MB | Windows 10/11 (64bit) |
+          | 🍎 macOS | `vlog-subs-tool-macos.zip` | ~400MB | macOS 10.15+ (Intel/Apple Silicon) |
+
+          ### 🚀 クイックスタート
+
+          #### Windows ユーザー
+          1. `vlog-subs-tool-windows.zip` をダウンロード
+          2. 適当なフォルダに展開
+          3. `vlog-subs-tool.exe` をダブルクリック
+          4. セキュリティ警告は「詳細情報」→「実行」で回避
+
+          #### macOS ユーザー
+          1. `vlog-subs-tool-macos.zip` をダウンロード
+          2. ZIPを展開して `VLog字幕ツール.app` を取得
+          3. 右クリック→「開く」で初回実行
+          4. セキュリティ警告で「開く」をクリック
+
+          #### Linux ユーザー
+          ```bash
+          # ダウンロード後
+          tar -xzf vlog-subs-tool-linux.tar.gz
+          chmod +x vlog-subs-tool/vlog-subs-tool
+          ./vlog-subs-tool/vlog-subs-tool
+          ```
+
+          ### 📝 変更内容
+          ${{ needs.create-changelog.outputs.changelog }}
+
+          ### 🔧 システム要件
+
+          - **Windows**: Windows 10/11 (64bit)
+          - **macOS**: macOS 10.15+ (Intel & Apple Silicon)
+          - **Linux**: Ubuntu 20.04+ または同等のディストリビューション
+          - **メモリ**: 4GB RAM以上推奨
+          - **ストレージ**: 1GB以上の空き容量
+
+          ### ⚠️ 重要な注意事項
+
+          - 実行ファイルは**フォルダごと**使用してください（単体での移動は動作しません）
+          - 初回起動時は OCR モデルの準備で時間がかかる場合があります
+          - ウイルス対策ソフトで誤検知される場合があります（安全です）
+          - オフライン環境でも完全動作します（OCR処理はローカルで実行）
+
+          ### 🆘 トラブルシューティング
+
+          #### 起動しない場合
+          1. フォルダ内のすべてのファイルが展開されているか確認
+          2. ウイルス対策ソフトの除外設定を確認
+          3. 管理者権限で実行を試行
+
+          #### パフォーマンス問題
+          - CPUが古い場合は設定で「スレッド数」を調整
+          - メモリ不足の場合は他のアプリケーションを終了
+
+          ### 📞 サポート
+
+          問題が発生した場合は [Issues](https://github.com/lancelot89/vlog-subs-tool/issues) までご報告ください。
+
+          ---
+
+          **開発・テスト環境**: Python 3.12, PySide6, PaddleOCR
+          **ビルド日時**: $(date -u '+%Y-%m-%d %H:%M UTC')
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify-completion:
+    needs: [publish-release, validate-release]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+    - name: Release completion summary
+      run: |
+        VERSION="${{ needs.validate-release.outputs.version }}"
+        STATUS="${{ needs.publish-release.result }}"
+
+        if [ "$STATUS" = "success" ]; then
+          echo "🎉 Release $VERSION published successfully!"
+          echo "📦 Binaries are available at: https://github.com/${{ github.repository }}/releases/tag/$VERSION"
+        else
+          echo "❌ Release $VERSION failed"
+          echo "Check the workflow logs for details"
+        fi

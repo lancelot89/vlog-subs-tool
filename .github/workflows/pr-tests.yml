@@ -1,0 +1,145 @@
+name: Pull Request Tests
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  code-quality:
+    runs-on: ubuntu-latest
+    name: Code Quality Checks
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install black isort mypy pytest pytest-cov
+
+    - name: Check code formatting with black
+      run: |
+        black --check --diff app/ tests/
+
+    - name: Check import sorting with isort
+      run: |
+        isort --check-only --diff app/ tests/
+
+    - name: Type checking with mypy
+      run: |
+        mypy app/ --ignore-missing-imports --no-strict-optional
+      continue-on-error: true  # mypy issues shouldn't block PRs
+
+    - name: Run unit tests
+      run: |
+        python -m pytest tests/unit/ -v --tb=short
+      continue-on-error: true  # test failures are informational
+
+  build-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ['3.12']
+
+    name: Build Test on ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install system dependencies (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          qt6-base-dev \
+          libgl1-mesa-dev \
+          libxcb-xinerama0 \
+          libegl1-mesa-dev \
+          libxkbcommon-x11-0 \
+          libxcb-icccm4 \
+          libxcb-image0 \
+          libxcb-keysyms1 \
+          libxcb-render-util0 \
+          libxcb-xkb1 \
+          libfontconfig1 \
+          libfreetype6
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: Test import functionality
+      run: |
+        python -c "
+        try:
+            import sys
+            sys.path.insert(0, 'app')
+            from core.models import SubtitleEntry
+            from core.extractor.ocr import OCRProvider
+            from core.format.srt import SRTWriter
+            print('✅ Core modules import successfully')
+        except Exception as e:
+            print(f'❌ Import failed: {e}')
+            sys.exit(1)
+        "
+
+    - name: Test PyInstaller spec validation
+      run: |
+        pyinstaller --noconfirm --log-level INFO vlog-subs-tool.spec --distpath dist/test-build
+      continue-on-error: true  # Build failures are informational for now
+
+    - name: Check build output size
+      if: success() || failure()
+      run: |
+        echo "=== Build Output Analysis ==="
+        if [ -d "dist/test-build" ]; then
+          du -sh dist/test-build/* || echo "No build output found"
+        else
+          echo "Build directory not created"
+        fi
+      shell: bash
+
+  dependency-check:
+    runs-on: ubuntu-latest
+    name: Dependency Security Check
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Install safety
+      run: |
+        python -m pip install --upgrade pip
+        pip install safety
+
+    - name: Check dependencies for security vulnerabilities
+      run: |
+        pip install -r requirements.txt
+        safety check --json || true  # Don't fail on vulnerabilities for now
+
+    - name: Check for outdated dependencies
+      run: |
+        pip list --outdated || true

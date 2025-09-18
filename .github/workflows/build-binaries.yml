@@ -1,10 +1,15 @@
-name: Build Binaries
+name: Build Release Binaries
 
 on:
   push:
     tags:
       - 'v*'  # v1.0.0 などのタグがプッシュされた時
   workflow_dispatch:  # 手動実行も可能
+    inputs:
+      tag_name:
+        description: 'Tag name for manual release'
+        required: false
+        default: 'manual-build'
 
 permissions:
   contents: write
@@ -182,7 +187,7 @@ jobs:
   create-release:
     needs: [build-linux, build-windows, build-macos]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     steps:
     - name: Download all artifacts
       uses: actions/download-artifact@v4
@@ -194,8 +199,10 @@ jobs:
           vlog-subs-tool-linux/vlog-subs-tool-linux.tar.gz
           vlog-subs-tool-windows/vlog-subs-tool-windows.zip
           vlog-subs-tool-macos/vlog-subs-tool-macos.zip
+        tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
+        name: VLog字幕ツール ${{ github.event.inputs.tag_name || github.ref_name }}
         body: |
-          ## 🎬 VLog字幕ツール ${{ github.ref_name }}
+          ## 🎬 VLog字幕ツール ${{ github.event.inputs.tag_name || github.ref_name }}
 
           ### 📦 ダウンロード
 
