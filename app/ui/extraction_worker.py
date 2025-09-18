@@ -374,9 +374,13 @@ class ExtractionWorker(QThread):
             # 設定を一時的に変更（より保守的に）
             conservative_settings = ProjectSettings(
                 fps_sample=min(1.0, self.settings.fps_sample / 2),  # FPS半減
-                ocr_confidence=max(0.8, self.settings.ocr_confidence),  # 信頼度向上
+                roi_mode=self.settings.roi_mode,  # ROI設定を維持
+                roi_rect=self.settings.roi_rect,
+                ocr_engine=self.settings.ocr_engine,  # OCRエンジン設定を維持
                 max_chars=self.settings.max_chars,
-                max_lines=min(1, self.settings.max_lines)  # 1行のみ
+                max_lines=min(1, self.settings.max_lines),  # 1行のみ
+                min_dur_sec=max(1.5, self.settings.min_dur_sec),  # 最小時間を延長
+                similarity_threshold=min(0.95, self.settings.similarity_threshold + 0.05)  # 類似度しきい値を厳格化
             )
 
             # 新しい検出器で部分抽出試行
