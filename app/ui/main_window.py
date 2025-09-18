@@ -1637,9 +1637,10 @@ class MainWindow(QMainWindow):
                             self.translate_view.set_translations(language, translated_subtitles)
 
             # プロジェクト情報を更新
+            from app.core.models import ProjectSettings
             self.current_project = Project(
-                name=project_data.metadata.name,
-                video_path=project_data.video_file_path,
+                source_video=project_data.video_file_path,
+                settings=ProjectSettings(),
                 subtitles=subtitle_items
             )
 

@@ -125,8 +125,8 @@ class TestProjectManager:
         subtitle_items = loaded_data.get_subtitle_items()
         assert len(subtitle_items) == 2
         assert subtitle_items[0].text == "こんにちは"
-        assert subtitle_items[0].start_time == 1000
-        assert subtitle_items[0].end_time == 3000
+        assert subtitle_items[0].start_ms == 1000
+        assert subtitle_items[0].end_ms == 3000
 
     def test_load_nonexistent_project(self, project_manager):
         """存在しないプロジェクトファイルの処理テスト"""
@@ -150,10 +150,10 @@ class TestProjectManager:
 
         new_subtitles = [
             SubtitleItem(
-                start_time=2000,
-                end_time=4000,
-                text="新しい字幕",
-                confidence=0.88
+                index=1,
+                start_ms=2000,
+                end_ms=4000,
+                text="新しい字幕"
             )
         ]
 
@@ -169,10 +169,10 @@ class TestProjectManager:
 
         new_translations = [
             SubtitleItem(
-                start_time=1000,
-                end_time=3000,
-                text="Bonjour",
-                confidence=0.9
+                index=1,
+                start_ms=1000,
+                end_ms=3000,
+                text="Bonjour"
             )
         ]
 
@@ -376,7 +376,7 @@ class TestProjectData:
         assert len(subtitle_items) == 2
         assert isinstance(subtitle_items[0], SubtitleItem)
         assert subtitle_items[0].text == "こんにちは"
-        assert subtitle_items[0].start_time == 1000
+        assert subtitle_items[0].start_ms == 1000
 
     def test_get_subtitle_items_with_invalid_data(self):
         """不正な字幕データでのSubtitleItem変換テスト"""

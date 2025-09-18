@@ -43,13 +43,13 @@ class ProjectData:
     def get_subtitle_items(self) -> List[SubtitleItem]:
         """字幕アイテムのリストを取得"""
         subtitle_items = []
-        for subtitle_data in self.subtitles:
+        for i, subtitle_data in enumerate(self.subtitles):
             try:
                 item = SubtitleItem(
-                    start_time=subtitle_data['start_time'],
-                    end_time=subtitle_data['end_time'],
-                    text=subtitle_data['text'],
-                    confidence=subtitle_data.get('confidence', 0.0)
+                    index=i + 1,
+                    start_ms=subtitle_data['start_time'],
+                    end_ms=subtitle_data['end_time'],
+                    text=subtitle_data['text']
                 )
                 subtitle_items.append(item)
             except (KeyError, TypeError) as e:
@@ -62,13 +62,13 @@ class ProjectData:
             return None
 
         translated_items = []
-        for trans_data in self.translations[language]:
+        for i, trans_data in enumerate(self.translations[language]):
             try:
                 item = SubtitleItem(
-                    start_time=trans_data['start_time'],
-                    end_time=trans_data['end_time'],
-                    text=trans_data['text'],
-                    confidence=trans_data.get('confidence', 0.0)
+                    index=i + 1,
+                    start_ms=trans_data['start_time'],
+                    end_ms=trans_data['end_time'],
+                    text=trans_data['text']
                 )
                 translated_items.append(item)
             except (KeyError, TypeError) as e:
@@ -202,10 +202,9 @@ class ProjectManager:
 
         self.current_project.subtitles = [
             {
-                'start_time': subtitle.start_time,
-                'end_time': subtitle.end_time,
-                'text': subtitle.text,
-                'confidence': subtitle.confidence
+                'start_time': subtitle.start_ms,
+                'end_time': subtitle.end_ms,
+                'text': subtitle.text
             }
             for subtitle in subtitles
         ]
@@ -219,10 +218,9 @@ class ProjectManager:
 
         self.current_project.translations[language] = [
             {
-                'start_time': subtitle.start_time,
-                'end_time': subtitle.end_time,
-                'text': subtitle.text,
-                'confidence': subtitle.confidence
+                'start_time': subtitle.start_ms,
+                'end_time': subtitle.end_ms,
+                'text': subtitle.text
             }
             for subtitle in subtitles
         ]
