@@ -557,7 +557,11 @@ class SettingsView(QDialog):
             "srt_crlf": self.srt_crlf_check.isChecked(),
             "default_languages": self.default_languages_combo.currentText(),
             "auto_translate": self.auto_translate_check.isChecked(),
-            "overwrite_mode": "ask" if self.overwrite_ask_radio.isChecked() else "auto",
+            "overwrite_mode": (
+                "ask" if self.overwrite_ask_radio.isChecked() else
+                "backup" if self.overwrite_backup_radio.isChecked() else
+                "auto"
+            ),
             
             # UI設定
             "theme": self.theme_combo.currentText(),
