@@ -299,8 +299,10 @@ class SRTFormatter:
                     })
                 return False
 
-            # ファイル保存処理
+            # ファイル保存処理（安全なバックアップ付き）
+            backup_path = None
             backup_created = False
+
             if filepath.exists():
                 # バックアップ作成
                 try:
@@ -323,12 +325,23 @@ class SRTFormatter:
                     with open(filepath, 'w', encoding=self.settings.encoding, newline='') as f:
                         f.write(srt_content)
 
+                # 保存成功時はバックアップを削除（オプション）
+                if backup_created and backup_path and backup_path.exists():
+                    try:
+                        backup_path.unlink()  # バックアップ削除
+                        self.logger.debug(f"バックアップ削除: {backup_path}")
+                    except Exception as e:
+                        self.logger.warning(f"バックアップ削除失敗: {e}")
+
                 # 保存成功ログ
                 file_size = filepath.stat().st_size
                 self.logger.info(f"SRTファイル保存成功: {filepath.name} ({len(subtitles)}件, {file_size:,}bytes)")
                 return True
 
             except UnicodeEncodeError as e:
+                # バックアップを復元
+                self._restore_backup_on_error(filepath, backup_path, backup_created)
+
                 if show_errors:
                     error_info = ErrorInfo(
                         message=f"文字エンコーディング（{self.settings.encoding}）での保存に失敗しました",
@@ -347,6 +360,9 @@ class SRTFormatter:
                 return False
 
             except OSError as e:
+                # バックアップを復元
+                self._restore_backup_on_error(filepath, backup_path, backup_created)
+
                 # ディスク容量不足などのシステムエラー
                 if show_errors:
                     error_info = create_file_operation_error(filepath, "SRTファイル保存", e)
@@ -356,6 +372,10 @@ class SRTFormatter:
                 return False
 
         except Exception as e:
+            # バックアップを復元（予期しないエラーの場合）
+            if 'backup_path' in locals() and 'backup_created' in locals():
+                self._restore_backup_on_error(filepath, backup_path, backup_created)
+
             # 予期しないエラー
             if show_errors:
                 error_info = ErrorInfo(
@@ -374,6 +394,22 @@ class SRTFormatter:
                     "subtitles_count": len(subtitles)
                 })
             return False
+
+    def _restore_backup_on_error(self, filepath: Path, backup_path: Optional[Path], backup_created: bool):
+        """エラー時のバックアップファイル復元"""
+        if backup_created and backup_path and backup_path.exists():
+            try:
+                # 破損した可能性のあるファイルを削除
+                if filepath.exists():
+                    filepath.unlink()
+
+                # バックアップから復元
+                backup_path.replace(filepath)
+                self.logger.info(f"バックアップから復元: {backup_path} -> {filepath}")
+            except Exception as e:
+                self.logger.error(f"バックアップ復元失敗: {e}")
+                # この場合、両方のファイルが失われる可能性があるため重要なログ
+                self.logger.error(f"重要: 元ファイルはバックアップ名で残っている可能性: {backup_path}")
 
 
 class SRTParser:
