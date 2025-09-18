@@ -1243,10 +1243,15 @@ class MainWindow(QMainWindow):
                 # すべて成功
                 saved_files = srt_manager.get_saved_files()
                 file_list = "\n".join(f"- {f.name}" for f in saved_files)
+                message = (
+                    f"{success_count}個の言語のSRTファイルを出力しました：\n\n"
+                    f"{file_list}\n\n"
+                    f"出力先: {output_dir}"
+                )
                 QMessageBox.information(
                     self,
                     "エクスポート完了",
-                    f"{success_count}個の言語のSRTファイルを出力しました：\n\n{file_list}\n\n出力先: {output_dir}"
+                    message
                 )
                 self.status_label.setText(f"多言語SRT出力完了: {success_count}ファイル")
             else:
@@ -1645,12 +1650,15 @@ class MainWindow(QMainWindow):
             self.status_label.setText(f"プロジェクト読み込み完了: {project_data.metadata.name}")
             self.setWindowTitle(f"VLog字幕ツール - {project_data.metadata.name}")
 
-            QMessageBox.information(
-                self,
-                "プロジェクト読み込み完了",
+            message = (
                 f"プロジェクト '{project_data.metadata.name}' を読み込みました。\n"
                 f"字幕数: {len(subtitle_items)}\n"
                 f"翻訳言語数: {len(project_data.translations)}"
+            )
+            QMessageBox.information(
+                self,
+                "プロジェクト読み込み完了",
+                message
             )
 
         except FileNotFoundError:
