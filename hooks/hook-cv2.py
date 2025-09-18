@@ -8,15 +8,15 @@ import cv2
 import os
 
 # OpenCVの全モジュールを収集
-datas, binaries, hiddenimports = collect_all('cv2')
+datas, binaries, hiddenimports = collect_all("cv2")
 
 # OpenCVの動的ライブラリを収集
-opencv_binaries = collect_dynamic_libs('cv2')
+opencv_binaries = collect_dynamic_libs("cv2")
 binaries += opencv_binaries
 
 # 追加の隠しインポート
 hiddenimports += [
-    'cv2.data',
-    'numpy.core._methods',
-    'numpy.lib.format',
+    "cv2.data",
+    "numpy.core._methods",
+    "numpy.lib.format",
 ]

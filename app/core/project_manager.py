@@ -5,18 +5,19 @@
 
 import json
 import logging
-from pathlib import Path
-from typing import Dict, Any, List, Optional
-from dataclasses import dataclass, asdict
-from datetime import datetime
 import uuid
+from dataclasses import asdict, dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-from app.core.models import SubtitleItem, Project, ProjectSettings
+from app.core.models import Project, ProjectSettings, SubtitleItem
 
 
 @dataclass
 class ProjectMetadata:
     """プロジェクトメタデータ"""
+
     id: str
     name: str
     created_at: str
@@ -33,6 +34,7 @@ class ProjectMetadata:
 @dataclass
 class ProjectData:
     """プロジェクトデータ"""
+
     metadata: ProjectMetadata
     video_file_path: str
     subtitles: List[Dict[str, Any]]
@@ -47,13 +49,15 @@ class ProjectData:
             try:
                 item = SubtitleItem(
                     index=i + 1,
-                    start_ms=subtitle_data['start_time'],
-                    end_ms=subtitle_data['end_time'],
-                    text=subtitle_data['text']
+                    start_ms=subtitle_data["start_time"],
+                    end_ms=subtitle_data["end_time"],
+                    text=subtitle_data["text"],
                 )
                 subtitle_items.append(item)
             except (KeyError, TypeError) as e:
-                logging.warning(f"字幕データの読み込みに失敗: {subtitle_data}, エラー: {e}")
+                logging.warning(
+                    f"字幕データの読み込みに失敗: {subtitle_data}, エラー: {e}"
+                )
         return subtitle_items
 
     def get_translated_subtitles(self, language: str) -> Optional[List[SubtitleItem]]:
@@ -66,13 +70,15 @@ class ProjectData:
             try:
                 item = SubtitleItem(
                     index=i + 1,
-                    start_ms=trans_data['start_time'],
-                    end_ms=trans_data['end_time'],
-                    text=trans_data['text']
+                    start_ms=trans_data["start_time"],
+                    end_ms=trans_data["end_time"],
+                    text=trans_data["text"],
                 )
                 translated_items.append(item)
             except (KeyError, TypeError) as e:
-                logging.warning(f"翻訳データの読み込みに失敗: {trans_data}, エラー: {e}")
+                logging.warning(
+                    f"翻訳データの読み込みに失敗: {trans_data}, エラー: {e}"
+                )
         return translated_items
 
 
@@ -93,7 +99,7 @@ class ProjectManager:
             name=name,
             created_at=now,
             modified_at=now,
-            description=f"VLog字幕プロジェクト: {name}"
+            description=f"VLog字幕プロジェクト: {name}",
         )
 
         project_data = ProjectData(
@@ -102,7 +108,7 @@ class ProjectManager:
             subtitles=[],
             translations={},
             qc_results=[],
-            settings={}
+            settings={},
         )
 
         self.current_project = project_data
@@ -114,21 +120,25 @@ class ProjectManager:
     def load_project(self, file_path: Path) -> ProjectData:
         """プロジェクトファイルを読み込み"""
         if not file_path.exists():
-            raise FileNotFoundError(f"プロジェクトファイルが見つかりません: {file_path}")
+            raise FileNotFoundError(
+                f"プロジェクトファイルが見つかりません: {file_path}"
+            )
 
-        if file_path.suffix.lower() != '.subproj':
+        if file_path.suffix.lower() != ".subproj":
             raise ValueError(f"サポートされていないファイル形式: {file_path.suffix}")
 
         self.logger.info(f"プロジェクト読み込み開始: {file_path}")
 
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 project_dict = json.load(f)
 
             # バージョン確認
-            file_version = project_dict.get('metadata', {}).get('version', '1.0.0')
+            file_version = project_dict.get("metadata", {}).get("version", "1.0.0")
             if file_version != "1.0.0":
-                self.logger.warning(f"プロジェクトファイルのバージョンが異なります: {file_version}")
+                self.logger.warning(
+                    f"プロジェクトファイルのバージョンが異なります: {file_version}"
+                )
 
             # プロジェクトデータに変換
             project_data = self._dict_to_project_data(project_dict)
@@ -155,7 +165,9 @@ class ProjectManager:
         except Exception as e:
             raise RuntimeError(f"プロジェクト読み込みエラー: {e}")
 
-    def save_project(self, project_data: ProjectData, file_path: Optional[Path] = None) -> bool:
+    def save_project(
+        self, project_data: ProjectData, file_path: Optional[Path] = None
+    ) -> bool:
         """プロジェクトを保存"""
         if file_path is None:
             if self.current_file_path is None:
@@ -178,7 +190,7 @@ class ProjectManager:
             # 親ディレクトリを作成
             file_path.parent.mkdir(parents=True, exist_ok=True)
 
-            with open(file_path, 'w', encoding='utf-8') as f:
+            with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(project_dict, f, indent=2, ensure_ascii=False)
 
             self.current_project = project_data
@@ -202,9 +214,9 @@ class ProjectManager:
 
         self.current_project.subtitles = [
             {
-                'start_time': subtitle.start_ms,
-                'end_time': subtitle.end_ms,
-                'text': subtitle.text
+                "start_time": subtitle.start_ms,
+                "end_time": subtitle.end_ms,
+                "text": subtitle.text,
             }
             for subtitle in subtitles
         ]
@@ -218,9 +230,9 @@ class ProjectManager:
 
         self.current_project.translations[language] = [
             {
-                'start_time': subtitle.start_ms,
-                'end_time': subtitle.end_ms,
-                'text': subtitle.text
+                "start_time": subtitle.start_ms,
+                "end_time": subtitle.end_ms,
+                "text": subtitle.text,
             }
             for subtitle in subtitles
         ]
@@ -271,24 +283,24 @@ class ProjectManager:
             "subtitles": project_data.subtitles,
             "translations": project_data.translations,
             "qc_results": project_data.qc_results,
-            "settings": project_data.settings
+            "settings": project_data.settings,
         }
 
     def _dict_to_project_data(self, project_dict: Dict[str, Any]) -> ProjectData:
         """辞書をプロジェクトデータに変換"""
         try:
             # メタデータの変換
-            metadata_dict = project_dict.get('metadata', {})
+            metadata_dict = project_dict.get("metadata", {})
             metadata = ProjectMetadata(**metadata_dict)
 
             # プロジェクトデータの作成
             project_data = ProjectData(
                 metadata=metadata,
-                video_file_path=project_dict.get('video_file_path', ''),
-                subtitles=project_dict.get('subtitles', []),
-                translations=project_dict.get('translations', {}),
-                qc_results=project_dict.get('qc_results', []),
-                settings=project_dict.get('settings', {})
+                video_file_path=project_dict.get("video_file_path", ""),
+                subtitles=project_dict.get("subtitles", []),
+                translations=project_dict.get("translations", {}),
+                qc_results=project_dict.get("qc_results", []),
+                settings=project_dict.get("settings", {}),
             )
 
             return project_data
@@ -300,9 +312,10 @@ class ProjectManager:
     def _create_backup(self, file_path: Path):
         """バックアップファイルを作成"""
         if file_path.exists():
-            backup_path = file_path.with_suffix(f'.subproj.backup')
+            backup_path = file_path.with_suffix(f".subproj.backup")
             try:
                 import shutil
+
                 shutil.copy2(file_path, backup_path)
                 self.logger.debug(f"バックアップ作成: {backup_path}")
             except Exception as e:
@@ -327,15 +340,15 @@ class ProjectManager:
         # 字幕データの確認
         for i, subtitle in enumerate(project_data.subtitles):
             try:
-                start_time = subtitle.get('start_time')
-                end_time = subtitle.get('end_time')
+                start_time = subtitle.get("start_time")
+                end_time = subtitle.get("end_time")
 
                 if start_time is None or end_time is None:
                     errors.append(f"字幕 {i + 1}: 時間情報が不正です")
                 elif start_time >= end_time:
                     errors.append(f"字幕 {i + 1}: 開始時間が終了時間以降です")
 
-                if not subtitle.get('text', '').strip():
+                if not subtitle.get("text", "").strip():
                     errors.append(f"字幕 {i + 1}: テキストが空です")
 
             except (KeyError, TypeError):
@@ -352,10 +365,10 @@ class ProjectManager:
             # 簡易形式での保存（最小限のデータのみ）
             legacy_data = {
                 "video_path": self.current_project.video_file_path,
-                "subtitles": self.current_project.subtitles
+                "subtitles": self.current_project.subtitles,
             }
 
-            with open(output_path, 'w', encoding='utf-8') as f:
+            with open(output_path, "w", encoding="utf-8") as f:
                 json.dump(legacy_data, f, indent=2, ensure_ascii=False)
 
             self.logger.info(f"レガシー形式でエクスポート完了: {output_path}")

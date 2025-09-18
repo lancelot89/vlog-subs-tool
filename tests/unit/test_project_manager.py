@@ -2,17 +2,16 @@
 プロジェクト管理機能のテスト
 """
 
-import pytest
 import json
 import tempfile
-from pathlib import Path
 from datetime import datetime
-from unittest.mock import patch, MagicMock
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
-from app.core.project_manager import (
-    ProjectManager, ProjectData, ProjectMetadata
-)
+import pytest
+
 from app.core.models import SubtitleItem
+from app.core.project_manager import ProjectData, ProjectManager, ProjectMetadata
 
 
 @pytest.fixture
@@ -29,38 +28,35 @@ def sample_project_data():
         name="テストプロジェクト",
         created_at="2024-01-01T00:00:00",
         modified_at="2024-01-01T00:00:00",
-        description="テスト用のプロジェクト"
+        description="テスト用のプロジェクト",
     )
 
     subtitles = [
         {
-            'start_time': 1000,
-            'end_time': 3000,
-            'text': 'こんにちは',
-            'confidence': 0.95
+            "start_time": 1000,
+            "end_time": 3000,
+            "text": "こんにちは",
+            "confidence": 0.95,
         },
-        {
-            'start_time': 4000,
-            'end_time': 6000,
-            'text': '世界',
-            'confidence': 0.92
-        }
+        {"start_time": 4000, "end_time": 6000, "text": "世界", "confidence": 0.92},
     ]
 
     return ProjectData(
         metadata=metadata,
         video_file_path="/test/video.mp4",
         subtitles=subtitles,
-        translations={"en": [
-            {
-                'start_time': 1000,
-                'end_time': 3000,
-                'text': 'Hello',
-                'confidence': 0.95
-            }
-        ]},
+        translations={
+            "en": [
+                {
+                    "start_time": 1000,
+                    "end_time": 3000,
+                    "text": "Hello",
+                    "confidence": 0.95,
+                }
+            ]
+        },
         qc_results=[],
-        settings={}
+        settings={},
     )
 
 
@@ -75,7 +71,9 @@ class TestProjectManager:
 
     def test_create_new_project(self, project_manager):
         """新しいプロジェクト作成のテスト"""
-        project_data = project_manager.create_new_project("新プロジェクト", "/path/to/video.mp4")
+        project_data = project_manager.create_new_project(
+            "新プロジェクト", "/path/to/video.mp4"
+        )
 
         assert project_data.metadata.name == "新プロジェクト"
         assert project_data.video_file_path == "/path/to/video.mp4"
@@ -96,13 +94,13 @@ class TestProjectManager:
         assert project_file.exists()
 
         # ファイル内容の確認
-        with open(project_file, 'r', encoding='utf-8') as f:
+        with open(project_file, "r", encoding="utf-8") as f:
             saved_data = json.load(f)
 
-        assert saved_data['metadata']['name'] == "テストプロジェクト"
-        assert saved_data['video_file_path'] == "/test/video.mp4"
-        assert len(saved_data['subtitles']) == 2
-        assert 'en' in saved_data['translations']
+        assert saved_data["metadata"]["name"] == "テストプロジェクト"
+        assert saved_data["video_file_path"] == "/test/video.mp4"
+        assert len(saved_data["subtitles"]) == 2
+        assert "en" in saved_data["translations"]
 
     def test_load_project(self, project_manager, sample_project_data, temp_project_dir):
         """プロジェクト読み込みのテスト"""
@@ -119,7 +117,7 @@ class TestProjectManager:
         assert loaded_data.metadata.name == "テストプロジェクト"
         assert loaded_data.video_file_path == "/test/video.mp4"
         assert len(loaded_data.subtitles) == 2
-        assert 'en' in loaded_data.translations
+        assert "en" in loaded_data.translations
 
         # SubtitleItem への変換確認
         subtitle_items = loaded_data.get_subtitle_items()
@@ -139,9 +137,11 @@ class TestProjectManager:
         invalid_file = temp_project_dir / "invalid.subproj"
 
         # 不正なJSONファイルを作成
-        invalid_file.write_text("invalid json content", encoding='utf-8')
+        invalid_file.write_text("invalid json content", encoding="utf-8")
 
-        with pytest.raises(ValueError, match="プロジェクトファイルの形式が正しくありません"):
+        with pytest.raises(
+            ValueError, match="プロジェクトファイルの形式が正しくありません"
+        ):
             project_manager.load_project(invalid_file)
 
     def test_update_subtitles(self, project_manager, sample_project_data):
@@ -149,38 +149,30 @@ class TestProjectManager:
         project_manager.current_project = sample_project_data
 
         new_subtitles = [
-            SubtitleItem(
-                index=1,
-                start_ms=2000,
-                end_ms=4000,
-                text="新しい字幕"
-            )
+            SubtitleItem(index=1, start_ms=2000, end_ms=4000, text="新しい字幕")
         ]
 
         project_manager.update_subtitles(new_subtitles)
 
         assert len(project_manager.current_project.subtitles) == 1
-        assert project_manager.current_project.subtitles[0]['text'] == "新しい字幕"
-        assert project_manager.current_project.subtitles[0]['start_time'] == 2000
+        assert project_manager.current_project.subtitles[0]["text"] == "新しい字幕"
+        assert project_manager.current_project.subtitles[0]["start_time"] == 2000
 
     def test_update_translations(self, project_manager, sample_project_data):
         """翻訳データ更新のテスト"""
         project_manager.current_project = sample_project_data
 
         new_translations = [
-            SubtitleItem(
-                index=1,
-                start_ms=1000,
-                end_ms=3000,
-                text="Bonjour"
-            )
+            SubtitleItem(index=1, start_ms=1000, end_ms=3000, text="Bonjour")
         ]
 
         project_manager.update_translations("fr", new_translations)
 
-        assert 'fr' in project_manager.current_project.translations
-        assert len(project_manager.current_project.translations['fr']) == 1
-        assert project_manager.current_project.translations['fr'][0]['text'] == "Bonjour"
+        assert "fr" in project_manager.current_project.translations
+        assert len(project_manager.current_project.translations["fr"]) == 1
+        assert (
+            project_manager.current_project.translations["fr"][0]["text"] == "Bonjour"
+        )
 
     def test_update_without_current_project(self, project_manager):
         """現在のプロジェクトがない場合の更新テスト"""
@@ -202,17 +194,19 @@ class TestProjectManager:
         invalid_data.video_file_path = ""  # 空の動画パス
         invalid_data.subtitles = [
             {
-                'start_time': 5000,
-                'end_time': 3000,  # 開始時間が終了時間より後
-                'text': '',  # 空のテキスト
-                'confidence': 0.9
+                "start_time": 5000,
+                "end_time": 3000,  # 開始時間が終了時間より後
+                "text": "",  # 空のテキスト
+                "confidence": 0.9,
             }
         ]
 
         errors = project_manager.validate_project_data(invalid_data)
         assert len(errors) >= 3  # 複数のエラーが検出される
 
-    def test_backup_creation(self, project_manager, sample_project_data, temp_project_dir):
+    def test_backup_creation(
+        self, project_manager, sample_project_data, temp_project_dir
+    ):
         """バックアップファイル作成のテスト"""
         temp_project_dir.mkdir(parents=True, exist_ok=True)
         project_file = temp_project_dir / "test.subproj"
@@ -225,15 +219,17 @@ class TestProjectManager:
         project_manager.save_project(sample_project_data, project_file)
 
         # バックアップファイルの存在確認
-        backup_file = project_file.with_suffix('.subproj.backup')
+        backup_file = project_file.with_suffix(".subproj.backup")
         assert backup_file.exists()
 
         # バックアップの内容確認
-        with open(backup_file, 'r', encoding='utf-8') as f:
+        with open(backup_file, "r", encoding="utf-8") as f:
             backup_data = json.load(f)
-        assert backup_data['metadata']['name'] == "テストプロジェクト"  # 古い名前
+        assert backup_data["metadata"]["name"] == "テストプロジェクト"  # 古い名前
 
-    def test_save_as_project(self, project_manager, sample_project_data, temp_project_dir):
+    def test_save_as_project(
+        self, project_manager, sample_project_data, temp_project_dir
+    ):
         """名前を付けて保存のテスト"""
         temp_project_dir.mkdir(parents=True, exist_ok=True)
         original_file = temp_project_dir / "original.subproj"
@@ -277,7 +273,9 @@ class TestProjectManager:
         # TODO: より詳細な変更検出の実装後にテストを追加
         assert project_manager.is_project_modified()
 
-    def test_export_legacy_format(self, project_manager, sample_project_data, temp_project_dir):
+    def test_export_legacy_format(
+        self, project_manager, sample_project_data, temp_project_dir
+    ):
         """レガシー形式でのエクスポートテスト"""
         temp_project_dir.mkdir(parents=True, exist_ok=True)
         export_file = temp_project_dir / "legacy.json"
@@ -290,14 +288,14 @@ class TestProjectManager:
         assert export_file.exists()
 
         # レガシー形式の確認
-        with open(export_file, 'r', encoding='utf-8') as f:
+        with open(export_file, "r", encoding="utf-8") as f:
             legacy_data = json.load(f)
 
-        assert 'video_path' in legacy_data
-        assert 'subtitles' in legacy_data
+        assert "video_path" in legacy_data
+        assert "subtitles" in legacy_data
         # メタデータや翻訳データは含まれない
-        assert 'metadata' not in legacy_data
-        assert 'translations' not in legacy_data
+        assert "metadata" not in legacy_data
+        assert "translations" not in legacy_data
 
     def test_relative_path_resolution(self, project_manager, temp_project_dir):
         """相対パスの解決テスト"""
@@ -314,13 +312,13 @@ class TestProjectManager:
                 id="test-relative",
                 name="相対パステスト",
                 created_at=datetime.now().isoformat(),
-                modified_at=datetime.now().isoformat()
+                modified_at=datetime.now().isoformat(),
             ),
             video_file_path="videos/test_video.mp4",  # 相対パス
             subtitles=[],
             translations={},
             qc_results=[],
-            settings={}
+            settings={},
         )
 
         # プロジェクトを保存
@@ -350,8 +348,8 @@ class TestProjectManagerSingleton:
 
     def test_singleton_reset(self):
         """シングルトンのリセットテスト"""
-        from app.core.project_manager import get_project_manager
         import app.core.project_manager
+        from app.core.project_manager import get_project_manager
 
         # 最初のインスタンス取得
         manager1 = get_project_manager()
@@ -385,17 +383,22 @@ class TestProjectData:
                 id="test",
                 name="test",
                 created_at="2024-01-01T00:00:00",
-                modified_at="2024-01-01T00:00:00"
+                modified_at="2024-01-01T00:00:00",
             ),
             video_file_path="",
             subtitles=[
-                {'start_time': 1000, 'end_time': 3000, 'text': '正常データ', 'confidence': 0.9},
-                {'invalid': 'data'},  # 不正なデータ
-                {'start_time': None, 'end_time': 3000, 'text': 'null時間'}  # null時間
+                {
+                    "start_time": 1000,
+                    "end_time": 3000,
+                    "text": "正常データ",
+                    "confidence": 0.9,
+                },
+                {"invalid": "data"},  # 不正なデータ
+                {"start_time": None, "end_time": 3000, "text": "null時間"},  # null時間
             ],
             translations={},
             qc_results=[],
-            settings={}
+            settings={},
         )
 
         subtitle_items = project_data.get_subtitle_items()
