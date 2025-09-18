@@ -349,8 +349,69 @@ class SettingsView(QDialog):
     
     def load_settings(self):
         """設定を読み込み"""
-        # TODO: 実際の設定読み込み処理
-        pass
+        from app.core.settings_manager import get_settings_manager
+
+        try:
+            settings_manager = get_settings_manager()
+            settings = settings_manager.load_settings()
+
+            # 抽出設定
+            self.fps_sample_spin.setValue(settings.extraction.fps_sample)
+            self.resolution_combo.setCurrentText(settings.extraction.resolution)
+
+            if settings.extraction.roi_mode == "bottom":
+                self.roi_bottom_radio.setChecked(True)
+            elif settings.extraction.roi_mode == "auto":
+                self.roi_auto_radio.setChecked(True)
+            elif settings.extraction.roi_mode == "manual":
+                self.roi_manual_radio.setChecked(True)
+
+            self.bottom_ratio_spin.setValue(int(settings.extraction.bottom_ratio * 100))
+
+            if settings.extraction.ocr_engine == "paddleocr":
+                self.ocr_engine_combo.setCurrentIndex(0)
+            else:
+                self.ocr_engine_combo.setCurrentIndex(1)
+
+            self.ocr_confidence_spin.setValue(int(settings.extraction.ocr_confidence * 100))
+
+            # 整形設定
+            self.max_chars_spin.setValue(settings.formatting.max_chars)
+            self.max_lines_spin.setValue(settings.formatting.max_lines)
+            self.min_duration_spin.setValue(settings.formatting.min_duration)
+            self.similarity_spin.setValue(int(settings.formatting.similarity_threshold * 100))
+            self.merge_gap_spin.setValue(settings.formatting.merge_gap)
+            self.normalize_punctuation_check.setChecked(settings.formatting.normalize_punctuation)
+            self.normalize_whitespace_check.setChecked(settings.formatting.normalize_whitespace)
+            self.remove_duplicate_check.setChecked(settings.formatting.remove_duplicate)
+
+            # 出力設定
+            self.output_folder_edit.setText(settings.output.output_folder)
+            self.filename_pattern_edit.setText(settings.output.filename_pattern)
+            self.encoding_combo.setCurrentText(settings.output.encoding)
+            self.srt_bom_check.setChecked(settings.output.srt_bom)
+            self.srt_crlf_check.setChecked(settings.output.srt_crlf)
+            self.default_languages_combo.setCurrentText(settings.output.default_languages)
+            self.auto_translate_check.setChecked(settings.output.auto_translate)
+
+            if settings.output.overwrite_mode == "ask":
+                self.overwrite_ask_radio.setChecked(True)
+            elif settings.output.overwrite_mode == "auto":
+                self.overwrite_auto_radio.setChecked(True)
+            elif settings.output.overwrite_mode == "backup":
+                self.overwrite_backup_radio.setChecked(True)
+
+            # UI設定
+            self.theme_combo.setCurrentText(settings.ui.theme)
+            self.font_size_spin.setValue(settings.ui.font_size)
+            self.auto_save_check.setChecked(settings.ui.auto_save)
+            self.auto_save_interval_spin.setValue(settings.ui.auto_save_interval)
+            self.recent_files_spin.setValue(settings.ui.recent_files_count)
+
+        except Exception as e:
+            logging.error(f"設定読み込みエラー: {e}")
+            # エラーが発生した場合はデフォルト設定を使用
+            pass
     
     def reset_settings(self):
         """設定をデフォルトに戻す"""
@@ -391,8 +452,81 @@ class SettingsView(QDialog):
     
     def accept_settings(self):
         """設定を適用して閉じる"""
-        # TODO: 設定保存処理
-        self.accept()
+        from app.core.settings_manager import get_settings_manager, AppSettings, ExtractionSettings, FormattingSettings, OutputSettings, UISettings
+
+        try:
+            # 現在のUI設定を取得
+            current_settings = self.get_settings()
+
+            # 設定オブジェクトに変換
+            extraction_settings = ExtractionSettings(
+                fps_sample=current_settings["fps_sample"],
+                resolution=current_settings["resolution"],
+                roi_mode=current_settings["roi_mode"],
+                bottom_ratio=current_settings["bottom_ratio"],
+                ocr_engine=current_settings["ocr_engine"],
+                ocr_confidence=current_settings["ocr_confidence"]
+            )
+
+            formatting_settings = FormattingSettings(
+                max_chars=current_settings["max_chars"],
+                max_lines=current_settings["max_lines"],
+                min_duration=current_settings["min_duration"],
+                similarity_threshold=current_settings["similarity_threshold"],
+                merge_gap=current_settings["merge_gap"],
+                normalize_punctuation=current_settings["normalize_punctuation"],
+                normalize_whitespace=current_settings["normalize_whitespace"],
+                remove_duplicate=current_settings["remove_duplicate"]
+            )
+
+            output_settings = OutputSettings(
+                output_folder=current_settings["output_folder"],
+                filename_pattern=current_settings["filename_pattern"],
+                encoding=current_settings["encoding"],
+                srt_bom=current_settings["srt_bom"],
+                srt_crlf=current_settings["srt_crlf"],
+                default_languages=current_settings["default_languages"],
+                auto_translate=current_settings["auto_translate"],
+                overwrite_mode=current_settings["overwrite_mode"]
+            )
+
+            ui_settings = UISettings(
+                theme=current_settings["theme"],
+                font_size=current_settings["font_size"],
+                auto_save=current_settings["auto_save"],
+                auto_save_interval=current_settings["auto_save_interval"],
+                recent_files_count=current_settings["recent_files_count"]
+            )
+
+            app_settings = AppSettings(
+                extraction=extraction_settings,
+                formatting=formatting_settings,
+                output=output_settings,
+                ui=ui_settings
+            )
+
+            # 設定保存
+            settings_manager = get_settings_manager()
+            if settings_manager.save_settings(app_settings):
+                # 保存に成功した場合のみ閉じる
+                self.accept()
+            else:
+                # 保存に失敗した場合はエラーメッセージを表示
+                from PySide6.QtWidgets import QMessageBox
+                QMessageBox.warning(
+                    self,
+                    "設定保存エラー",
+                    "設定の保存に失敗しました。\nディスクの容量やアクセス権限を確認してください。"
+                )
+
+        except Exception as e:
+            logging.error(f"設定保存エラー: {e}")
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.critical(
+                self,
+                "エラー",
+                f"設定保存中にエラーが発生しました:\n{str(e)}"
+            )
     
     def get_settings(self):
         """現在の設定値を取得"""
@@ -423,7 +557,11 @@ class SettingsView(QDialog):
             "srt_crlf": self.srt_crlf_check.isChecked(),
             "default_languages": self.default_languages_combo.currentText(),
             "auto_translate": self.auto_translate_check.isChecked(),
-            "overwrite_mode": "ask" if self.overwrite_ask_radio.isChecked() else "auto",
+            "overwrite_mode": (
+                "ask" if self.overwrite_ask_radio.isChecked() else
+                "backup" if self.overwrite_backup_radio.isChecked() else
+                "auto"
+            ),
             
             # UI設定
             "theme": self.theme_combo.currentText(),

@@ -35,6 +35,8 @@ from app.core.translate import (
     LocalTranslateSettings,
     LocalTranslateError
 )
+from app.core.project_manager import get_project_manager
+from app.core.settings_manager import get_settings_manager
 
 
 def setup_japanese_support(app):
@@ -993,25 +995,99 @@ class MainWindow(QMainWindow):
     def save_project(self):
         """プロジェクトを保存"""
         if not self.current_project:
+            QMessageBox.information(self, "保存エラー", "保存するプロジェクトがありません。")
             return
-        
-        # TODO: プロジェクト保存処理の実装
-        self.status_label.setText("プロジェクトを保存しました")
-        self.project_saved.emit("project.subproj")
+
+        try:
+            project_manager = get_project_manager()
+            current_project_data = project_manager.get_current_project()
+
+            if current_project_data is None:
+                # 新しいプロジェクトの場合は名前を付けて保存
+                self.save_project_as()
+                return
+
+            # 現在の字幕データでプロジェクトを更新
+            if hasattr(self.table_view, 'model') and self.table_view.model():
+                subtitles = self.table_view.model().get_all_subtitles()
+                project_manager.update_subtitles(subtitles)
+
+            # プロジェクトを保存
+            if project_manager.save_project(current_project_data):
+                file_path = project_manager.get_current_file_path()
+                self.status_label.setText(f"プロジェクトを保存しました: {file_path.name if file_path else 'project.subproj'}")
+                self.project_saved.emit(str(file_path) if file_path else "project.subproj")
+            else:
+                QMessageBox.warning(
+                    self,
+                    "保存エラー",
+                    "プロジェクトの保存に失敗しました。\nディスクの容量やアクセス権限を確認してください。"
+                )
+
+        except Exception as e:
+            logging.error(f"プロジェクト保存エラー: {e}")
+            QMessageBox.critical(
+                self,
+                "エラー",
+                f"プロジェクト保存中にエラーが発生しました:\n{str(e)}"
+            )
     
     def save_project_as(self):
         """名前を付けてプロジェクトを保存"""
+        if not self.current_project:
+            QMessageBox.information(self, "保存エラー", "保存するプロジェクトがありません。")
+            return
+
+        # デフォルトの保存先を設定マネージャーから取得
+        settings_manager = get_settings_manager()
+        settings = settings_manager.load_settings()
+        default_dir = settings.output.output_folder or str(Path.home())
+
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "プロジェクトを保存",
-            "",
+            str(Path(default_dir) / "project.subproj"),
             "字幕プロジェクト (*.subproj);;すべてのファイル (*)"
         )
-        
-        if file_path and self.current_project:
-            # TODO: プロジェクト保存処理の実装
-            self.status_label.setText(f"プロジェクトを保存しました: {file_path}")
-            self.project_saved.emit(file_path)
+
+        if file_path:
+            try:
+                project_manager = get_project_manager()
+
+                # 新しいプロジェクトデータを作成または既存データを取得
+                current_project_data = project_manager.get_current_project()
+                if current_project_data is None:
+                    # 新しいプロジェクトを作成
+                    project_name = Path(file_path).stem
+                    video_path = getattr(self, 'current_video_path', '') or ''
+                    current_project_data = project_manager.create_new_project(project_name, video_path)
+
+                # 現在の字幕データでプロジェクトを更新
+                if hasattr(self.table_view, 'model') and self.table_view.model():
+                    subtitles = self.table_view.model().get_all_subtitles()
+                    project_manager.update_subtitles(subtitles)
+
+                # プロジェクトを指定されたパスに保存
+                if project_manager.save_as_project(current_project_data, Path(file_path)):
+                    self.status_label.setText(f"プロジェクトを保存しました: {Path(file_path).name}")
+                    self.project_saved.emit(file_path)
+
+                    # 最近使用したファイルに追加
+                    settings_manager.add_recent_file(file_path)
+                else:
+                    QMessageBox.warning(
+                        self,
+                        "保存エラー",
+                        "プロジェクトの保存に失敗しました。\nディスクの容量やアクセス権限を確認してください。"
+                    )
+
+            except Exception as e:
+                logging.error(f"名前を付けて保存エラー: {e}")
+                QMessageBox.critical(
+                    self,
+                    "エラー",
+                    f"プロジェクト保存中にエラーが発生しました:\n{str(e)}"
+                )
     
     def show_settings(self):
         """設定画面を表示"""
@@ -1167,10 +1243,15 @@ class MainWindow(QMainWindow):
                 # すべて成功
                 saved_files = srt_manager.get_saved_files()
                 file_list = "\n".join(f"- {f.name}" for f in saved_files)
+                message = (
+                    f"{success_count}個の言語のSRTファイルを出力しました：\n\n"
+                    f"{file_list}\n\n"
+                    f"出力先: {output_dir}"
+                )
                 QMessageBox.information(
                     self,
                     "エクスポート完了",
-                    f"{success_count}個の言語のSRTファイルを出力しました：\n\n{file_list}\n\n出力先: {output_dir}"
+                    message
                 )
                 self.status_label.setText(f"多言語SRT出力完了: {success_count}ファイル")
             else:
@@ -1385,14 +1466,40 @@ class MainWindow(QMainWindow):
     
     def get_srt_export_settings(self) -> SRTFormatSettings:
         """SRT出力設定を取得（設定画面から）"""
-        # TODO: 設定画面から取得する実装
-        return SRTFormatSettings(
-            encoding="utf-8",
-            with_bom=False,
-            line_ending="lf",
-            max_chars_per_line=42,
-            max_lines=2
-        )
+        try:
+            settings_manager = get_settings_manager()
+            settings = settings_manager.load_settings()
+
+            # エンコーディング設定
+            encoding = "utf-8"
+            with_bom = settings.output.srt_bom
+
+            if settings.output.encoding == "UTF-8 BOM":
+                encoding = "utf-8"
+                with_bom = True
+            elif settings.output.encoding == "Shift_JIS":
+                encoding = "shift_jis"
+            elif settings.output.encoding == "CP932":
+                encoding = "cp932"
+
+            return SRTFormatSettings(
+                encoding=encoding,
+                with_bom=with_bom,
+                line_ending="crlf" if settings.output.srt_crlf else "lf",
+                max_chars_per_line=settings.formatting.max_chars,
+                max_lines=settings.formatting.max_lines
+            )
+
+        except Exception as e:
+            logging.error(f"SRT設定取得エラー: {e}")
+            # エラー時はデフォルト設定を返す
+            return SRTFormatSettings(
+                encoding="utf-8",
+                with_bom=False,
+                line_ending="lf",
+                max_chars_per_line=42,
+                max_lines=2
+            )
     
     def update_status(self):
         """ステータスの定期更新"""
@@ -1460,12 +1567,148 @@ class MainWindow(QMainWindow):
 
     def load_project(self, file_path: str):
         """プロジェクトファイルを読み込む"""
-        # TODO: プロジェクトファイル読み込み実装
-        QMessageBox.information(
-            self,
-            "プロジェクト読み込み",
-            f"プロジェクトファイル読み込み機能は後のバージョンで実装予定です:\n{Path(file_path).name}"
-        )
+        try:
+            project_manager = get_project_manager()
+            settings_manager = get_settings_manager()
+
+            # 現在の状態を保存（ロールバック用）
+            previous_project = project_manager.current_project
+            previous_file_path = project_manager.current_file_path
+
+            # プロジェクトファイルを読み込み
+            project_data = project_manager.load_project(Path(file_path))
+
+            # プロジェクトデータの妥当性を確認
+            errors = project_manager.validate_project_data(project_data)
+            if errors:
+                # エラーがある場合は警告表示（続行可能）
+                error_msg = "プロジェクトファイルに以下の問題があります:\n\n" + "\n".join(f"• {error}" for error in errors)
+                error_msg += "\n\n続行しますか？"
+
+                reply = QMessageBox.question(
+                    self,
+                    "プロジェクト読み込み警告",
+                    error_msg,
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No
+                )
+
+                if reply == QMessageBox.No:
+                    # ユーザーがキャンセルした場合、ProjectManagerの状態をロールバック
+                    project_manager.current_project = previous_project
+                    project_manager.current_file_path = previous_file_path
+                    return
+
+            # 動画ファイルの確認
+            if project_data.video_file_path:
+                video_path = Path(project_data.video_file_path)
+                if video_path.exists():
+                    # 動画をロード
+                    self.current_video_path = str(video_path)
+                    self.player_view.load_video(str(video_path))
+                else:
+                    # 動画ファイルが見つからない場合、新しいパスを選択
+                    reply = QMessageBox.question(
+                        self,
+                        "動画ファイルが見つかりません",
+                        f"動画ファイルが見つかりません:\n{video_path}\n\n新しい場所を指定しますか？",
+                        QMessageBox.Yes | QMessageBox.No,
+                        QMessageBox.Yes
+                    )
+
+                    if reply == QMessageBox.Yes:
+                        new_video_path, _ = QFileDialog.getOpenFileName(
+                            self,
+                            "動画ファイルを選択",
+                            str(video_path.parent),
+                            "動画ファイル (*.mp4 *.avi *.mov *.mkv);;すべてのファイル (*)"
+                        )
+
+                        if new_video_path:
+                            project_data.video_file_path = new_video_path
+                            self.current_video_path = new_video_path
+                            self.player_view.load_video(new_video_path)
+
+            # 字幕データをテーブルに設定
+            subtitle_items = project_data.get_subtitle_items()
+            if subtitle_items and hasattr(self.table_view, 'model') and self.table_view.model():
+                self.table_view.model().set_subtitles(subtitle_items)
+
+            # 翻訳データを設定
+            for language, translated_items in project_data.translations.items():
+                if translated_items:
+                    translated_subtitles = project_data.get_translated_subtitles(language)
+                    if translated_subtitles:
+                        # 翻訳ビューに設定（メソッドが存在する場合のみ）
+                        if hasattr(self, 'translate_view') and hasattr(self.translate_view, 'set_translations'):
+                            self.translate_view.set_translations(language, translated_subtitles)
+                        else:
+                            # 代替手段: 翻訳データをプロジェクトに保持するだけ
+                            logging.info(f"翻訳データを読み込み: {language} ({len(translated_subtitles)}件)")
+
+            # プロジェクト情報を更新
+            from app.core.models import ProjectSettings
+            self.current_project = Project(
+                source_video=project_data.video_file_path,
+                settings=ProjectSettings(),
+                subtitles=subtitle_items
+            )
+
+            # 最近使用したファイルに追加
+            settings_manager.add_recent_file(file_path)
+
+            # ステータス更新
+            self.status_label.setText(f"プロジェクト読み込み完了: {project_data.metadata.name}")
+            self.setWindowTitle(f"VLog字幕ツール - {project_data.metadata.name}")
+
+            message = (
+                f"プロジェクト '{project_data.metadata.name}' を読み込みました。\n"
+                f"字幕数: {len(subtitle_items)}\n"
+                f"翻訳言語数: {len(project_data.translations)}"
+            )
+            QMessageBox.information(
+                self,
+                "プロジェクト読み込み完了",
+                message
+            )
+
+        except FileNotFoundError:
+            # エラー時もProjectManagerの状態をロールバック
+            try:
+                project_manager.current_project = previous_project
+                project_manager.current_file_path = previous_file_path
+            except:
+                pass
+            QMessageBox.critical(
+                self,
+                "エラー",
+                f"プロジェクトファイルが見つかりません:\n{file_path}"
+            )
+        except ValueError as e:
+            # エラー時もProjectManagerの状態をロールバック
+            try:
+                project_manager.current_project = previous_project
+                project_manager.current_file_path = previous_file_path
+            except:
+                pass
+            QMessageBox.critical(
+                self,
+                "形式エラー",
+                f"プロジェクトファイルの形式が正しくありません:\n{str(e)}"
+            )
+        except Exception as e:
+            # エラー時もProjectManagerの状態をロールバック
+            try:
+                project_manager.current_project = previous_project
+                project_manager.current_file_path = previous_file_path
+            except:
+                pass
+            logging.error(f"プロジェクト読み込みエラー: {e}")
+            QMessageBox.critical(
+                self,
+                "エラー",
+                f"プロジェクト読み込み中にエラーが発生しました:\n{str(e)}"
+            )
 
 
 def main():
