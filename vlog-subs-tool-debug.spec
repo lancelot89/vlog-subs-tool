@@ -154,13 +154,34 @@ except Exception as e:
 # バイナリの定義（PaddleOCRモデルなど）
 binaries = []
 
-# 除外するモジュール（デバッグ用では最小限に）
+# 除外するモジュール（デバッグ用でもサイズ削減）
 excludes = [
+    # GUI関連（不要）
     'tkinter',
     'matplotlib',
+    'wx',
+
+    # データサイエンス・ML（不要）
     'IPython',
     'jupyter',
     'notebook',
+    'scipy',
+    'sklearn',
+    'tensorflow',
+    'torch',
+    'torchvision',
+    'transformers',
+
+    # 削除された機能
+    'app.core.benchmark',
+    'app.core.linux_optimizer',
+
+    # 開発ツール
+    'pytest',
+    'mypy',
+    'black',
+    'isort',
+    'flake8',
 ]
 
 # フックパス設定（存在する場合のみ）
@@ -197,7 +218,7 @@ a = Analysis(
         'app.core.translate',
         'app.core.qc',
     ],
-    # Paddleデータファイルの明示的収集
+    # PaddleOCRデータファイルの明示的収集（デバッグ用）
     collect_data=[
         'paddleocr',
         'paddle',

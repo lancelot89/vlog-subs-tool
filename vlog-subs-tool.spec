@@ -18,134 +18,85 @@ else:
 
 app_dir = project_root / "app"
 
-# 隠しインポートの定義
+# 隠しインポートの定義（最適化済み）
 hidden_imports = [
-    # PySide6関連
+    # PySide6関連（必須）
     'PySide6.QtCore',
     'PySide6.QtGui',
     'PySide6.QtWidgets',
     'PySide6.QtMultimedia',
     'PySide6.QtMultimediaWidgets',
 
-    # PaddleOCR関連（最新版対応）
+    # PaddleOCR関連（コア機能のみ）
     'paddleocr',
     'paddlepaddle',
     'paddle',
-    'paddle.fluid',
-    'paddle.inference',
-    'paddlex',  # PaddleXモジュール
-    'paddlex.utils',
-    'paddlex.utils.version',
-    'paddlex.modules.base.predictor',
-    'paddlex.common',
 
-    # OpenCV関連
+    # OpenCV関連（必須）
     'cv2',
     'numpy',
 
-    # CPU性能最適化関連
-    'psutil',
-    'multiprocessing',
-    'threading',
-    'subprocess',
-    'platform',
-
-    # その他の重要ライブラリ
+    # 基本ライブラリ（必須）
     'PIL',
     'PIL.Image',
     'pytesseract',
-    'google.cloud.translate',
-    'google.cloud.translate_v3',
-    'deepl',
     'pysrt',
-    'loguru',
-    'tqdm',
     'pandas',
     'yaml',
     'bidi.algorithm',
 
-    # アプリケーション内部モジュール（完全収集）
+    # CPU最適化（基本のみ）
+    'psutil',
+
+    # アプリケーション内部モジュール（必要最小限）
     'app',
     'app.main',
     'app.core',
     'app.core.models',
     'app.core.extractor',
     'app.core.extractor.ocr',
-    'app.core.extractor.detector',
     'app.core.format',
     'app.core.format.srt',
     'app.core.csv',
     'app.core.qc',
     'app.core.qc.rules',
     'app.core.translate',
-    'app.core.translate.provider_google',
-    'app.core.translate.provider_deepl',
-    'app.core.cpu_profiler',     # CPU基本検出
+    'app.core.cpu_profiler',
     'app.ui',
     'app.ui.main_window',
     'app.ui.views',
     'app.ui.dialogs',
-    'app.ui.dialogs.ocr_setup_dialog',
-    'app.ui.dialogs.translation_dialog',
-    'app.ui.dialogs.settings_dialog',
 ]
 
-# データファイルの定義
+# データファイルの定義（サイズ最適化）
 datas = [
     ('README.md', '.'),
-    # 組み込みPaddleOCRモデルファイル
-    ('app/models', 'models'),
 ]
 
-# PaddleOCR / PaddlePaddle関連のデータファイルを動的に検出・追加
+# アプリケーションモデルファイルが存在する場合のみ追加
+app_models_path = project_root / "app" / "models"
+if app_models_path.exists():
+    datas.append(('app/models', 'models'))
+    print(f"Added app models directory: {app_models_path}")
+
+# PaddleOCR関連のデータファイル（必要最小限）
 try:
-    import site
     import paddleocr
-    import paddle
-    from pathlib import Path
-
-    # site-packages内のpaddleディレクトリを探索
-    for site_dir in site.getsitepackages():
-        site_path = Path(site_dir)
-
-        # paddlexディレクトリがあれば.versionファイルをコピー
-        paddlex_dir = site_path / 'paddlex'
-        if paddlex_dir.exists():
-            version_file = paddlex_dir / '.version'
-            if version_file.exists():
-                datas.append((str(version_file), 'paddlex'))
-                print(f"Found PaddleX version file: {version_file}")
-
-        # paddleディレクトリの重要ファイルをコピー
-        paddle_dir = site_path / 'paddle'
-        if paddle_dir.exists():
-            # バージョン情報ファイル
-            for version_pattern in ['version.py', '__version__.py', '.version', 'version']:
-                version_file = paddle_dir / version_pattern
-                if version_file.exists():
-                    datas.append((str(version_file), f'paddle/{version_pattern}'))
-                    print(f"Found Paddle version file: {version_file}")
-
-            # paddlex subdirectoryがあればそれもコピー
-            paddlex_subdir = paddle_dir / 'paddlex'
-            if paddlex_subdir.exists():
-                paddlex_version = paddlex_subdir / '.version'
-                if paddlex_version.exists():
-                    datas.append((str(paddlex_version), 'paddle/paddlex'))
-                    print(f"Found Paddle/PaddleX version file: {paddlex_version}")
-
+    print("PaddleOCR found - lightweight support enabled")
 except ImportError as e:
-    print(f"Warning: Could not import paddle modules: {e}")
-except Exception as e:
-    print(f"Warning: Error while detecting paddle data files: {e}")
+    print(f"Warning: PaddleOCR not available: {e}")
 
 # バイナリの定義（PaddleOCRモデルなど）
 binaries = []
 
-# 除外するモジュール
+# 除外するモジュール（サイズ削減）
 excludes = [
+    # GUI関連（不要）
     'tkinter',
     'matplotlib',
+    'wx',
+
+    # データサイエンス・ML（不要）
     'IPython',
     'jupyter',
     'notebook',
@@ -154,6 +105,38 @@ excludes = [
     'tensorflow',
     'torch',
     'torchvision',
+    'transformers',
+
+    # 削除された機能
+    'app.core.benchmark',
+    'app.core.linux_optimizer',
+
+    # 未使用ライブラリ（サイズ削減）
+    'loguru',
+    'tqdm',
+    'deepl',
+    'google.cloud.translate',
+    'google.cloud.translate_v3',
+    'google.auth',
+    'google.api_core',
+
+    # 大型ライブラリ（不要）
+    'openpyxl',
+    'xlsxwriter',
+    'xlrd',
+    'seaborn',
+    'plotly',
+
+    # ネットワーク関連（OCRローカル実行のため）
+    'requests_oauthlib',
+    'urllib3.contrib.pyopenssl',
+
+    # 開発ツール
+    'pytest',
+    'mypy',
+    'black',
+    'isort',
+    'flake8',
 ]
 
 # フックパス設定（存在する場合のみ）
@@ -180,7 +163,7 @@ a = Analysis(
     win_private_assemblies=False,
     cipher=None,
     noarchive=False,
-    # 再帰的にすべてのモジュールを収集
+    # 必要最小限のモジュール収集（サイズ最適化）
     collect_all=[
         'app',
         'app.ui',
@@ -191,16 +174,14 @@ a = Analysis(
         'app.core.qc',
         'psutil',  # CPU情報取得
     ],
-    # Paddleデータファイルの明示的収集
+    # PaddleOCR収集（AVX/non-AVX CPU互換性確保）
     collect_data=[
         'paddleocr',
-        'paddle',
-        'paddlex',
+        'paddle',  # AVX/non-AVX CPU互換性のため必須
     ],
     collect_submodules=[
         'paddleocr',
-        'paddle',
-        'paddlex',
+        'paddle',  # paddle.fluid.core_avx/core_noavx両方をバンドル
     ],
 )
 

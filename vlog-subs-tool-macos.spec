@@ -18,79 +18,85 @@ else:
 
 app_dir = project_root / "app"
 
-# 隠しインポートの定義
+# 隠しインポートの定義（最適化済み）
 hidden_imports = [
-    # PySide6関連
+    # PySide6関連（必須）
     'PySide6.QtCore',
     'PySide6.QtGui',
     'PySide6.QtWidgets',
     'PySide6.QtMultimedia',
     'PySide6.QtMultimediaWidgets',
 
-    # PaddleOCR関連
+    # PaddleOCR関連（コア機能のみ）
     'paddleocr',
     'paddlepaddle',
     'paddle',
-    'paddle.fluid',
-    'paddle.inference',
 
-    # OpenCV関連
+    # OpenCV関連（必須）
     'cv2',
     'numpy',
 
-    # その他の重要ライブラリ
+    # 基本ライブラリ（必須）
     'PIL',
     'PIL.Image',
     'pytesseract',
-    'google.cloud.translate',
-    'google.cloud.translate_v3',
-    'deepl',
     'pysrt',
-    'loguru',
-    'tqdm',
     'pandas',
     'yaml',
     'bidi.algorithm',
 
-    # アプリケーション内部モジュール（完全収集）
+    # CPU最適化（基本のみ）
+    'psutil',
+
+    # アプリケーション内部モジュール（必要最小限）
     'app',
     'app.main',
     'app.core',
     'app.core.models',
     'app.core.extractor',
     'app.core.extractor.ocr',
-    'app.core.extractor.detector',
     'app.core.format',
     'app.core.format.srt',
     'app.core.csv',
     'app.core.qc',
     'app.core.qc.rules',
     'app.core.translate',
-    'app.core.translate.provider_google',
-    'app.core.translate.provider_deepl',
+    'app.core.cpu_profiler',
     'app.ui',
     'app.ui.main_window',
     'app.ui.views',
     'app.ui.dialogs',
-    'app.ui.dialogs.ocr_setup_dialog',
-    'app.ui.dialogs.translation_dialog',
-    'app.ui.dialogs.settings_dialog',
 ]
 
-# データファイルの定義
+# データファイルの定義（サイズ最適化）
 datas = [
     ('README.md', '.'),
-    # 組み込みPaddleOCRモデルファイル
-    ('app/models', 'models'),
 ]
+
+# アプリケーションモデルファイルが存在する場合のみ追加
+app_models_path = project_root / "app" / "models"
+if app_models_path.exists():
+    datas.append(('app/models', 'models'))
+    print(f"Added app models directory: {app_models_path}")
+
+# PaddleOCR関連のデータファイル（必要最小限）
+try:
+    import paddleocr
+    print("PaddleOCR found - lightweight support enabled")
+except ImportError as e:
+    print(f"Warning: PaddleOCR not available: {e}")
 
 # バイナリの定義（PaddleOCRモデルなど）
 binaries = []
 
-# 除外するモジュール
+# 除外するモジュール（サイズ削減）
 excludes = [
+    # GUI関連（不要）
     'tkinter',
     'matplotlib',
+    'wx',
+
+    # データサイエンス・ML（不要）
     'IPython',
     'jupyter',
     'notebook',
@@ -99,6 +105,38 @@ excludes = [
     'tensorflow',
     'torch',
     'torchvision',
+    'transformers',
+
+    # 削除された機能
+    'app.core.benchmark',
+    'app.core.linux_optimizer',
+
+    # 未使用ライブラリ（サイズ削減）
+    'loguru',
+    'tqdm',
+    'deepl',
+    'google.cloud.translate',
+    'google.cloud.translate_v3',
+    'google.auth',
+    'google.api_core',
+
+    # 大型ライブラリ（不要）
+    'openpyxl',
+    'xlsxwriter',
+    'xlrd',
+    'seaborn',
+    'plotly',
+
+    # ネットワーク関連（OCRローカル実行のため）
+    'requests_oauthlib',
+    'urllib3.contrib.pyopenssl',
+
+    # 開発ツール
+    'pytest',
+    'mypy',
+    'black',
+    'isort',
+    'flake8',
 ]
 
 # フックパス設定（存在する場合のみ）
@@ -125,7 +163,7 @@ a = Analysis(
     win_private_assemblies=False,
     cipher=None,
     noarchive=False,
-    # 再帰的にすべてのモジュールを収集
+    # 必要最小限のモジュール収集（サイズ最適化）
     collect_all=[
         'app',
         'app.ui',
@@ -134,15 +172,26 @@ a = Analysis(
         'app.core.format',
         'app.core.translate',
         'app.core.qc',
+        'psutil',  # CPU情報取得
+    ],
+    # PaddleOCR収集（AVX/non-AVX CPU互換性確保）
+    collect_data=[
+        'paddleocr',
+        'paddle',  # AVX/non-AVX CPU互換性のため必須
+    ],
+    collect_submodules=[
+        'paddleocr',
+        'paddle',  # paddle.fluid.core_avx/core_noavx両方をバンドル
     ],
 )
 
 # PYZアーカイブ作成
 pyz = PYZ(a.pure, a.zipped_data, cipher=None)
 
-# TODO: v1リリース時にDEBUG_MODE判定を削除してconsole=Falseに固定
-# デバッグモード判定（main.pyのDEBUG_MODEと連動）
-DEBUG_MODE = True  # 開発版（v1リリース時にFalseにする）
+# デバッグモード判定（環境変数または設定ファイルから判定）
+# 本番ビルド時は console=False に設定
+import os
+DEBUG_MODE = os.environ.get('VLOG_SUBS_DEBUG', 'false').lower() == 'true'
 
 # 実行ファイル設定
 exe = EXE(
@@ -155,7 +204,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,  # UPX圧縮を無効化（誤検知回避）
-    console=DEBUG_MODE,  # デバッグ版ではコンソール表示、本番版では非表示
+    console=DEBUG_MODE,  # 環境変数 VLOG_SUBS_DEBUG=true でコンソール表示
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
