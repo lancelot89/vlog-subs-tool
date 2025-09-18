@@ -6,7 +6,7 @@ DESIGN.mdの画面仕様に基づくGUIレイアウト
 import sys
 import logging
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 from PySide6.QtWidgets import (
     QMainWindow, QApplication, QWidget, QHBoxLayout, QVBoxLayout,
