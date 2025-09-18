@@ -326,7 +326,7 @@ class SimplePaddleOCREngine:
 
                 # Determine if we can use aggressive optimization based on CPU profile
                 use_aggressive = (
-                    (cpu_profile.vendor == "Intel" and cpu_profile.generation and cpu_profile.generation >= 10) or
+                    (cpu_profile.vendor == "Intel" and cpu_profile.generation and cpu_profile.generation >= 8) or  # 8th gen以降（Coffee Lake+）
                     (cpu_profile.vendor == "AMD" and cpu_profile.generation and cpu_profile.generation >= 2) or  # Zen2+
                     (cpu_profile.vendor == "Apple")
                 )
