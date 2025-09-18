@@ -36,7 +36,9 @@ class MockTextSimilarityCalculator:
             return 1.0
 
         # 編集距離ベースの類似度計算
-        edit_distance = MockTextSimilarityCalculator._calculate_edit_distance(text1, text2)
+        edit_distance = MockTextSimilarityCalculator._calculate_edit_distance(
+            text1, text2
+        )
         max_len = max(len(text1), len(text2))
 
         if max_len == 0:
@@ -91,7 +93,9 @@ def merge_time_constrained_duplicates_with_transitive(
             # 連鎖的重複対応: 既存グループのいずれかとの類似度をチェック
             is_similar_to_group = False
             for group_member in current_group:
-                similarity = calc.calculate_similarity(group_member.text, subtitles_copy[j].text)
+                similarity = calc.calculate_similarity(
+                    group_member.text, subtitles_copy[j].text
+                )
                 if similarity > 0.90:
                     is_similar_to_group = True
                     break
@@ -138,7 +142,9 @@ def merge_time_constrained_duplicates_old_behavior(
                 break
 
             # 旧実装: 最初の字幕とのみ比較
-            similarity = calc.calculate_similarity(subtitles_copy[i].text, subtitles_copy[j].text)
+            similarity = calc.calculate_similarity(
+                subtitles_copy[i].text, subtitles_copy[j].text
+            )
 
             if similarity > 0.90:
                 current_group.append(subtitles_copy[j])
@@ -181,7 +187,9 @@ def test_transitive_duplicate_chain():
 
     # 連鎖的重複のケース: A≈B (91%+), B≈C (91%+), but A-C (82% < 90%)
     subtitles = [
-        MockSubtitleItem(index=1, start_ms=1000, end_ms=2000, text="abcdefghijk"),  # A (11文字)
+        MockSubtitleItem(
+            index=1, start_ms=1000, end_ms=2000, text="abcdefghijk"
+        ),  # A (11文字)
         MockSubtitleItem(
             index=2, start_ms=3000, end_ms=4000, text="abcdefghijX"
         ),  # B (1文字違い: k→X)
@@ -222,7 +230,9 @@ def test_transitive_duplicate_chain():
     assert len(new_result) < len(
         old_result
     ), f"新実装で統合されていません: 旧{len(old_result)} vs 新{len(new_result)}"
-    assert len(new_result) == 1, f"連鎖的重複が1つに統合されませんでした: {len(new_result)}"
+    assert (
+        len(new_result) == 1
+    ), f"連鎖的重複が1つに統合されませんでした: {len(new_result)}"
     print("✅ 修正成功: 連鎖的重複が正しく統合されました")
     return True
 
@@ -233,8 +243,12 @@ def test_normal_case_unchanged():
 
     subtitles = [
         MockSubtitleItem(index=1, start_ms=1000, end_ms=2000, text="こんにちは"),
-        MockSubtitleItem(index=2, start_ms=3000, end_ms=4000, text="こんにちは"),  # 同一
-        MockSubtitleItem(index=3, start_ms=10000, end_ms=11000, text="さようなら"),  # 異なる
+        MockSubtitleItem(
+            index=2, start_ms=3000, end_ms=4000, text="こんにちは"
+        ),  # 同一
+        MockSubtitleItem(
+            index=3, start_ms=10000, end_ms=11000, text="さようなら"
+        ),  # 異なる
     ]
 
     old_result = merge_time_constrained_duplicates_old_behavior(subtitles.copy())

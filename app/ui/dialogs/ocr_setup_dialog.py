@@ -299,7 +299,9 @@ class OCRSetupDialog(QDialog):
         # 一般的な解決方法
         formatted_msg += "解決方法:\n"
         formatted_msg += "1. インターネット接続を確認してください\n"
-        formatted_msg += "2. ファイアウォールやアンチウイルスソフトの設定を確認してください\n"
+        formatted_msg += (
+            "2. ファイアウォールやアンチウイルスソフトの設定を確認してください\n"
+        )
         formatted_msg += "3. 企業ネットワークの場合、プロキシ設定を確認してください\n"
         formatted_msg += "4. 'セットアップ開始'ボタンで再試行してください\n"
         formatted_msg += (

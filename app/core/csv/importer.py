@@ -85,7 +85,9 @@ class SubtitleCSVImporter:
             data_rows = content[1:]  # ヘッダーを除く
             translated_subtitles = []
 
-            for row_index, row in enumerate(data_rows, start=2):  # 行番号は1ベース + ヘッダー
+            for row_index, row in enumerate(
+                data_rows, start=2
+            ):  # 行番号は1ベース + ヘッダー
                 try:
                     # メタデータ行やコメント行をスキップ
                     if self._is_metadata_row(row):
@@ -159,7 +161,9 @@ class SubtitleCSVImporter:
 
             for row_index, row in enumerate(data_rows, start=2):
                 try:
-                    subtitle_item = self._create_standard_subtitle_from_row(row, headers, row_index)
+                    subtitle_item = self._create_standard_subtitle_from_row(
+                        row, headers, row_index
+                    )
                     if subtitle_item:
                         subtitles.append(subtitle_item)
                         result.imported_count += 1
@@ -241,7 +245,11 @@ class SubtitleCSVImporter:
             return True
 
         first_cell = row[0].strip()
-        return first_cell.startswith("#") or first_cell.startswith("作成日時") or not first_cell
+        return (
+            first_cell.startswith("#")
+            or first_cell.startswith("作成日時")
+            or not first_cell
+        )
 
     def _create_subtitle_from_row(
         self,
@@ -278,7 +286,9 @@ class SubtitleCSVImporter:
 
             # 翻訳テキスト取得
             translation_index = indices.get("translation", 4)  # 翻訳文列
-            translated_text = row[translation_index].strip() if translation_index < len(row) else ""
+            translated_text = (
+                row[translation_index].strip() if translation_index < len(row) else ""
+            )
 
             if not translated_text and self.settings.skip_empty_translations:
                 return None
@@ -304,11 +314,17 @@ class SubtitleCSVImporter:
             index = int(row[indices.get("index", 0)])
 
             # 新しい形式（開始時間/終了時間）を優先、古い形式にもフォールバック
-            if indices.get("start_time_ms") is not None and indices.get("end_time_ms") is not None:
+            if (
+                indices.get("start_time_ms") is not None
+                and indices.get("end_time_ms") is not None
+            ):
                 # 古い形式：ミリ秒数値
                 start_ms = int(row[indices.get("start_time_ms")])
                 end_ms = int(row[indices.get("end_time_ms")])
-            elif indices.get("start_time") is not None and indices.get("end_time") is not None:
+            elif (
+                indices.get("start_time") is not None
+                and indices.get("end_time") is not None
+            ):
                 # 新しい形式：MM:SS.mmm
                 start_ms = self._parse_time_from_csv(row[indices.get("start_time")])
                 end_ms = self._parse_time_from_csv(row[indices.get("end_time")])
@@ -317,10 +333,14 @@ class SubtitleCSVImporter:
                 start_ms = self._parse_time_from_csv(row[1]) if len(row) > 1 else 0
                 end_ms = self._parse_time_from_csv(row[2]) if len(row) > 2 else 0
 
-            text_index = indices.get("text", 4)  # 字幕テキスト列のデフォルトインデックス調整
+            text_index = indices.get(
+                "text", 4
+            )  # 字幕テキスト列のデフォルトインデックス調整
             text = row[text_index] if text_index < len(row) else ""
 
-            return SubtitleItem(index=index, start_ms=start_ms, end_ms=end_ms, text=text)
+            return SubtitleItem(
+                index=index, start_ms=start_ms, end_ms=end_ms, text=text
+            )
 
         except (ValueError, IndexError) as e:
             print(f"標準字幕作成エラー (行{row_index}): {e}")
@@ -345,7 +365,11 @@ class SubtitleCSVImporter:
                 indices["end_time_ms"] = i
             elif "翻訳文" in header or "translation" in header_lower:
                 indices["translation"] = i
-            elif "字幕テキスト" in header or "テキスト" in header or "text" in header_lower:
+            elif (
+                "字幕テキスト" in header
+                or "テキスト" in header
+                or "text" in header_lower
+            ):
                 indices["text"] = i
 
         return indices
@@ -394,7 +418,9 @@ class SubtitleCSVImporter:
 
         for line in lines:
             if len(line) > 50:  # 少し緩めの制限
-                result.warnings.append(f"行{row_index}: 行が長すぎます（{len(line)}文字）")
+                result.warnings.append(
+                    f"行{row_index}: 行が長すぎます（{len(line)}文字）"
+                )
 
         return True
 

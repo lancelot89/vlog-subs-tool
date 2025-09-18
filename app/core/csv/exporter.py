@@ -147,7 +147,9 @@ class SubtitleCSVExporter:
 
         return headers
 
-    def _create_translation_row(self, subtitle: SubtitleItem, source_lang: str) -> List[str]:
+    def _create_translation_row(
+        self, subtitle: SubtitleItem, source_lang: str
+    ) -> List[str]:
         """翻訳用行データを作成"""
         row = []
 
@@ -278,7 +280,9 @@ class TranslationWorkflowManager:
             print(f"翻訳テンプレート作成エラー: {e}")
             return False
 
-    def _create_gas_config(self, video_name: str, target_langs: List[str], filepath: Path) -> bool:
+    def _create_gas_config(
+        self, video_name: str, target_langs: List[str], filepath: Path
+    ) -> bool:
         """Google Apps Script用設定ファイル作成"""
         try:
             import json
@@ -289,7 +293,9 @@ class TranslationWorkflowManager:
                 "target_languages": target_langs,
                 "files": {
                     "source": f"{video_name}_ja_export.csv",
-                    "templates": [f"{video_name}_{lang}_template.csv" for lang in target_langs],
+                    "templates": [
+                        f"{video_name}_{lang}_template.csv" for lang in target_langs
+                    ],
                 },
                 "translation_settings": {
                     "api_provider": "google",  # google, deepl, manual
@@ -326,15 +332,15 @@ subs/
 """
 
             for lang in target_langs:
-                readme_content += (
-                    f"├── {video_name}_{lang}_template.csv        # {lang}翻訳テンプレート\n"
-                )
+                readme_content += f"├── {video_name}_{lang}_template.csv        # {lang}翻訳テンプレート\n"
 
             readme_content += """└── (翻訳完了後)
 """
 
             for lang in target_langs:
-                readme_content += f"    ├── {video_name}_{lang}_translated.csv  # {lang}翻訳済み\n"
+                readme_content += (
+                    f"    ├── {video_name}_{lang}_translated.csv  # {lang}翻訳済み\n"
+                )
 
             readme_content += f"""
 ## 翻訳手順

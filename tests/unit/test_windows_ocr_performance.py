@@ -100,7 +100,9 @@ model name	: Intel(R) Core(TM) i5-9400 CPU @ 2.90GHz
         }
 
         optimal = _get_optimal_windows_threads(cpu_info)
-        self.assertEqual(optimal, 3)  # min(4, max(2, 6 // 2)) = min(4, max(2, 3)) = min(4, 3) = 3
+        self.assertEqual(
+            optimal, 3
+        )  # min(4, max(2, 6 // 2)) = min(4, max(2, 3)) = min(4, 3) = 3
 
     def test_get_optimal_windows_threads_amd_ryzen(self):
         """Test optimal thread calculation for AMD Ryzen CPUs."""
@@ -117,7 +119,9 @@ model name	: Intel(R) Core(TM) i5-9400 CPU @ 2.90GHz
         cpu_info = {"name": "Unknown Processor", "logical_processors": 8}
 
         optimal = _get_optimal_windows_threads(cpu_info)
-        self.assertEqual(optimal, 2)  # min(3, max(2, 8 // 4)) = min(3, max(2, 2)) = min(3, 2) = 2
+        self.assertEqual(
+            optimal, 2
+        )  # min(3, max(2, 8 // 4)) = min(3, max(2, 2)) = min(3, 2) = 2
 
     @patch("app.core.extractor.ocr.platform.system")
     @patch("app.core.extractor.ocr._get_cpu_info")

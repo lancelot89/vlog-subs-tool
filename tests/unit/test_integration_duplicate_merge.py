@@ -186,8 +186,12 @@ def test_time_constraint_behavior():
             assert (
                 len(merged_subtitles) == 3
             ), f"時間制約により統合されないはず: {len(merged_subtitles)}"
-            thanks_count = sum(1 for s in merged_subtitles if s.text == "ありがとうございます")
-            assert thanks_count == 2, f"「ありがとうございます」が2つ残るはず: {thanks_count}"
+            thanks_count = sum(
+                1 for s in merged_subtitles if s.text == "ありがとうございます"
+            )
+            assert (
+                thanks_count == 2
+            ), f"「ありがとうございます」が2つ残るはず: {thanks_count}"
             print("✅ 時間制約が正しく動作しています")
         else:
             print("⚠️ スタンドアロン版のため時間制約テストをスキップ")

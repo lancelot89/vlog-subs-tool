@@ -99,7 +99,9 @@ class SubtitleDetector:
         # 完了予定時刻
         from datetime import datetime, timedelta
 
-        completion_time = (datetime.now() + timedelta(seconds=remaining_time)).strftime("%H:%M")
+        completion_time = (datetime.now() + timedelta(seconds=remaining_time)).strftime(
+            "%H:%M"
+        )
 
         return {
             "remaining_seconds": remaining_time,
@@ -177,7 +179,9 @@ class SubtitleDetector:
 
             # Step 6: 完了
             elapsed_time = time.time() - self.start_time
-            self._emit_progress(100, f"検出完了: {len(subtitle_items)}件 ({elapsed_time:.1f}秒)")
+            self._emit_progress(
+                100, f"検出完了: {len(subtitle_items)}件 ({elapsed_time:.1f}秒)"
+            )
 
             self.logger.info(f"字幕検出完了: {len(subtitle_items)}件の字幕を検出")
             return subtitle_items
@@ -242,7 +246,9 @@ class SubtitleDetector:
         # ROI検出実行
         roi_region = self.roi_manager.detect_roi(roi_mode, sample_frames)
 
-        self.logger.info(f"ROI検出完了: {roi_region.rect}, 信頼度: {roi_region.confidence}")
+        self.logger.info(
+            f"ROI検出完了: {roi_region.rect}, 信頼度: {roi_region.confidence}"
+        )
         return roi_region
 
     def _sample_frames(self, roi_region: ROIRegion) -> List[VideoFrame]:
@@ -271,7 +277,9 @@ class SubtitleDetector:
                     current_time = time.time()
                     if current_time - last_progress_time >= 1.0:
                         if total_video_frames > 0:
-                            processed_ratio = (frame.frame_number / total_video_frames) * 100
+                            processed_ratio = (
+                                frame.frame_number / total_video_frames
+                            ) * 100
                             self._emit_progress(
                                 32,
                                 f"フレームサンプリング中... ({frame_count}フレーム, {processed_ratio:.1f}%処理済み)",
@@ -294,7 +302,9 @@ class SubtitleDetector:
                     current_time = time.time()
                     if current_time - last_progress_time >= 1.0:
                         if total_video_frames > 0:
-                            processed_ratio = (frame.frame_number / total_video_frames) * 100
+                            processed_ratio = (
+                                frame.frame_number / total_video_frames
+                            ) * 100
                             self._emit_progress(
                                 32,
                                 f"フレームサンプリング中... ({frame_count}フレーム, {processed_ratio:.1f}%処理済み)",
@@ -352,7 +362,8 @@ class SubtitleDetector:
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 # チャンク内のOCRタスクを並列実行
                 future_to_frame = {
-                    executor.submit(self._ocr_single_frame, frame): frame for frame in chunk_frames
+                    executor.submit(self._ocr_single_frame, frame): frame
+                    for frame in chunk_frames
                 }
 
                 chunk_completed_count = 0
@@ -375,7 +386,9 @@ class SubtitleDetector:
                             chunk_successful_count += 1
 
                     except Exception as e:
-                        self.logger.warning(f"フレーム {frame.frame_number} のOCR処理に失敗: {e}")
+                        self.logger.warning(
+                            f"フレーム {frame.frame_number} のOCR処理に失敗: {e}"
+                        )
 
                     chunk_completed_count += 1
                     processed_count += 1
@@ -404,7 +417,10 @@ class SubtitleDetector:
 
                     # 進捗を0.5秒間隔で更新
                     current_time = time.time()
-                    if current_time - last_progress_time >= 0.5 or processed_count == total_frames:
+                    if (
+                        current_time - last_progress_time >= 0.5
+                        or processed_count == total_frames
+                    ):
                         self._emit_progress(progress, message)
                         last_progress_time = current_time
 
@@ -431,7 +447,9 @@ class SubtitleDetector:
             self.logger.warning(f"フレーム {frame.frame_number} のOCR失敗: {e}")
             return []
 
-    def _group_subtitles(self, frame_results: List[FrameOCRResult]) -> List[SubtitleItem]:
+    def _group_subtitles(
+        self, frame_results: List[FrameOCRResult]
+    ) -> List[SubtitleItem]:
         """字幕のグルーピング・統合"""
         # 設定の変換
         grouping_settings = {

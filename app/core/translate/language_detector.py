@@ -71,7 +71,9 @@ class LanguageDetector:
 
     def __init__(self):
         if not LANGDETECT_AVAILABLE:
-            raise LanguageDetectionError("langdetectパッケージがインストールされていません")
+            raise LanguageDetectionError(
+                "langdetectパッケージがインストールされていません"
+            )
 
         # langdetectの設定
         langdetect.DetectorFactory.seed = 0  # 一貫した結果のため
@@ -110,7 +112,9 @@ class LanguageDetector:
 
             # 信頼度チェック
             if top_lang.prob < min_confidence:
-                logging.info(f"言語検出の信頼度が低い: {internal_lang} ({top_lang.prob:.2f})")
+                logging.info(
+                    f"言語検出の信頼度が低い: {internal_lang} ({top_lang.prob:.2f})"
+                )
                 return None
 
             # 代替候補も内部言語コードに変換
@@ -118,7 +122,9 @@ class LanguageDetector:
             for lang_prob in lang_probs[1:]:
                 alt_internal = self.LANGDETECT_TO_INTERNAL.get(lang_prob.lang)
                 if alt_internal:
-                    alternatives.append({"language": alt_internal, "confidence": lang_prob.prob})
+                    alternatives.append(
+                        {"language": alt_internal, "confidence": lang_prob.prob}
+                    )
 
             return LanguageDetectionResult(
                 language=internal_lang,

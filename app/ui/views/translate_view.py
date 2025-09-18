@@ -74,12 +74,16 @@ class TranslationWorker(QThread):
 
             for i, target_lang in enumerate(self.target_languages):
                 lang_progress = int((i * 100) / total_languages)
-                self.progress_updated.emit(f"{target_lang}への翻訳を開始...", lang_progress)
+                self.progress_updated.emit(
+                    f"{target_lang}への翻訳を開始...", lang_progress
+                )
 
                 def progress_callback(message: str, progress: int):
                     # 言語単位の進捗を全体進捗に変換
                     total_progress = lang_progress + int(progress / total_languages)
-                    self.progress_updated.emit(f"{target_lang}: {message}", total_progress)
+                    self.progress_updated.emit(
+                        f"{target_lang}: {message}", total_progress
+                    )
 
                 # ローカル翻訳実行
                 result = router.translate_batch(
@@ -105,7 +109,9 @@ class TranslationWorker(QThread):
 
                     translations[target_lang] = translated_subtitles
                 else:
-                    raise Exception(f"{target_lang}への翻訳に失敗: {result.error_message}")
+                    raise Exception(
+                        f"{target_lang}への翻訳に失敗: {result.error_message}"
+                    )
 
             self.translation_completed.emit(translations)
 
@@ -113,7 +119,9 @@ class TranslationWorker(QThread):
             # ローカル翻訳固有エラー
             guidance = ""
             if hasattr(e, "error_code"):
-                temp_provider = LocalTranslateProvider(LocalTranslateSettings(self.models_dir))
+                temp_provider = LocalTranslateProvider(
+                    LocalTranslateSettings(self.models_dir)
+                )
                 guidance = temp_provider.get_error_guidance(e)
 
             self.translation_error.emit(f"{str(e)}\\n\\n{guidance}")
@@ -137,7 +145,9 @@ class TranslationWorker(QThread):
         )
 
         # ローカル翻訳プロバイダーを登録
-        success = router.register_provider(TranslationProviderType.LOCAL, local_settings)
+        success = router.register_provider(
+            TranslationProviderType.LOCAL, local_settings
+        )
         if not success:
             raise Exception("ローカル翻訳プロバイダーの初期化に失敗しました")
 
@@ -163,7 +173,9 @@ class TranslateView(QDialog):
 
         self.init_ui()
 
-    def set_subtitles(self, subtitles: List[SubtitleItem], project: Optional[Project] = None):
+    def set_subtitles(
+        self, subtitles: List[SubtitleItem], project: Optional[Project] = None
+    ):
         """字幕データを設定"""
         self.subtitles = subtitles
         self.project = project
@@ -381,8 +393,12 @@ class TranslateView(QDialog):
                 models_dir=str(models_dir),
             )
 
-            self.translation_worker.progress_updated.connect(self.on_translation_progress)
-            self.translation_worker.translation_completed.connect(self.on_translation_completed)
+            self.translation_worker.progress_updated.connect(
+                self.on_translation_progress
+            )
+            self.translation_worker.translation_completed.connect(
+                self.on_translation_completed
+            )
             self.translation_worker.translation_error.connect(self.on_translation_error)
             self.translation_worker.start()
 
@@ -538,7 +554,9 @@ class TranslateView(QDialog):
 
         except Exception as e:
             self.log_text.append(f"エクスポートエラー: {str(e)}")
-            QMessageBox.critical(self, "エラー", f"CSVエクスポートに失敗しました:\\n{str(e)}")
+            QMessageBox.critical(
+                self, "エラー", f"CSVエクスポートに失敗しました:\\n{str(e)}"
+            )
 
     def import_csv(self):
         """翻訳済みCSVを取り込み"""
@@ -576,7 +594,9 @@ class TranslateView(QDialog):
                     imported_languages.append(result.language)
                     total_imported += result.imported_count
 
-                    self.log_text.append(f"  ✓ {result.language}: {result.imported_count}件取得")
+                    self.log_text.append(
+                        f"  ✓ {result.language}: {result.imported_count}件取得"
+                    )
 
                     # 警告があれば表示
                     if result.warnings:
@@ -584,7 +604,9 @@ class TranslateView(QDialog):
                         for warning in result.warnings[:3]:  # 最初の3件のみ表示
                             self.log_text.append(f"    {warning}")
                         if len(result.warnings) > 3:
-                            self.log_text.append(f"    ...他{len(result.warnings) - 3}件")
+                            self.log_text.append(
+                                f"    ...他{len(result.warnings) - 3}件"
+                            )
                 else:
                     self.log_text.append(f"  ✗ インポート失敗: {Path(file_path).name}")
                     for error in result.errors:
@@ -604,11 +626,15 @@ class TranslateView(QDialog):
                     f"「SRT一括保存」で字幕ファイルを生成できます",
                 )
             else:
-                QMessageBox.warning(self, "警告", "有効な翻訳データが見つかりませんでした")
+                QMessageBox.warning(
+                    self, "警告", "有効な翻訳データが見つかりませんでした"
+                )
 
         except Exception as e:
             self.log_text.append(f"インポートエラー: {str(e)}")
-            QMessageBox.critical(self, "エラー", f"CSVインポートに失敗しました:\\n{str(e)}")
+            QMessageBox.critical(
+                self, "エラー", f"CSVインポートに失敗しました:\\n{str(e)}"
+            )
 
     def save_all_srt(self):
         """全言語のSRTファイルを保存"""
@@ -649,10 +675,13 @@ class TranslateView(QDialog):
                     self,
                     "保存完了",
                     f"SRTファイルを保存しました\\n保存先: {output_dir}\\n\\n"
-                    f"保存されたファイル:\\n" + "\\n".join([f"• {file}" for file in saved_files]),
+                    f"保存されたファイル:\\n"
+                    + "\\n".join([f"• {file}" for file in saved_files]),
                 )
             else:
-                QMessageBox.warning(self, "警告", "保存できるファイルがありませんでした")
+                QMessageBox.warning(
+                    self, "警告", "保存できるファイルがありませんでした"
+                )
 
         except Exception as e:
             self.log_text.append(f"SRT保存エラー: {str(e)}")

@@ -118,7 +118,9 @@ class VideoSampler:
         if not ret:
             raise RuntimeError(f"フレーム {frame_number} の読み込みに失敗しました")
 
-        return VideoFrame(frame_number=frame_number, timestamp_ms=time_ms, image=frame.copy())
+        return VideoFrame(
+            frame_number=frame_number, timestamp_ms=time_ms, image=frame.copy()
+        )
 
     def get_frames_in_range(self, start_ms: int, end_ms: int) -> List[VideoFrame]:
         """
@@ -200,7 +202,9 @@ class VideoSampler:
 class BottomROISampler(VideoSampler):
     """下段領域専用サンプラー（DESIGN.mdの下段30%仕様）"""
 
-    def __init__(self, video_path: str, sample_fps: float = 3.0, bottom_ratio: float = 0.3):
+    def __init__(
+        self, video_path: str, sample_fps: float = 3.0, bottom_ratio: float = 0.3
+    ):
         """
         Args:
             video_path: 動画ファイルパス

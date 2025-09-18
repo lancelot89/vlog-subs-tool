@@ -45,7 +45,9 @@ class TestPaddleOCRExtraction(unittest.TestCase):
 
     def test_ocr_engine_initialization(self):
         """OCRエンジンの初期化テスト"""
-        self.assertTrue(self.engine_initialized, "PaddleOCRエンジンが正常に初期化されること")
+        self.assertTrue(
+            self.engine_initialized, "PaddleOCRエンジンが正常に初期化されること"
+        )
         self.assertIsNotNone(self.ocr_engine._ocr, "内部OCRオブジェクトが存在すること")
 
     def test_extract_english_subtitle(self):
@@ -93,7 +95,9 @@ class TestPaddleOCRExtraction(unittest.TestCase):
 
         # 日本語文字が含まれることを確認（完全一致は求めない）
         has_japanese = any(char in best_result.text for char in "こんにちは世界")
-        self.assertTrue(has_japanese, f"日本語文字が含まれること。実際の結果: {best_result.text}")
+        self.assertTrue(
+            has_japanese, f"日本語文字が含まれること。実際の結果: {best_result.text}"
+        )
 
         self.logger.info(
             f"日本語ひらがな字幕抽出結果: {best_result.text} (信頼度: {best_result.confidence:.3f})"
@@ -117,7 +121,9 @@ class TestPaddleOCRExtraction(unittest.TestCase):
 
         # 日本語文字が含まれることを確認
         has_japanese = any(char in best_result.text for char in "今日良天気")
-        self.assertTrue(has_japanese, f"日本語文字が含まれること。実際の結果: {best_result.text}")
+        self.assertTrue(
+            has_japanese, f"日本語文字が含まれること。実際の結果: {best_result.text}"
+        )
 
         self.logger.info(
             f"日本語混合字幕抽出結果: {best_result.text} (信頼度: {best_result.confidence:.3f})"
@@ -167,8 +173,12 @@ class TestPaddleOCRExtraction(unittest.TestCase):
             self.assertIsInstance(
                 result.confidence, float, "confidenceフィールドが浮動小数点数であること"
             )
-            self.assertIsInstance(result.bbox, tuple, "bboxフィールドがタプルであること")
-            self.assertEqual(len(result.bbox), 4, "bboxが4つの要素を持つこと (x, y, w, h)")
+            self.assertIsInstance(
+                result.bbox, tuple, "bboxフィールドがタプルであること"
+            )
+            self.assertEqual(
+                len(result.bbox), 4, "bboxが4つの要素を持つこと (x, y, w, h)"
+            )
 
             # 信頼度が0.0-1.0の範囲内であることを確認
             self.assertGreaterEqual(result.confidence, 0.0, "信頼度が0.0以上であること")
@@ -198,7 +208,9 @@ class TestPaddleOCRExtraction(unittest.TestCase):
             best_result = max(results, key=lambda x: x.confidence)
 
             # 何らかの日本語文字が検出されることを期待
-            self.assertGreater(len(best_result.text), 0, "何らかのテキストが検出されること")
+            self.assertGreater(
+                len(best_result.text), 0, "何らかのテキストが検出されること"
+            )
 
             self.logger.info(
                 f"リアルVLOGフレーム抽出結果: {best_result.text} (信頼度: {best_result.confidence:.3f})"

@@ -238,7 +238,9 @@ class TestCharacterCountRule:
     def test_too_many_chars(self):
         """文字数過多のテスト"""
         rule = CharacterCountRule(max_chars=10)
-        subtitle = SubtitleItem(1, 1000, 3000, "これは非常に長いテキストで文字数制限を超えています")
+        subtitle = SubtitleItem(
+            1, 1000, 3000, "これは非常に長いテキストで文字数制限を超えています"
+        )
 
         results = rule.check(subtitle)
         assert len(results) == 1

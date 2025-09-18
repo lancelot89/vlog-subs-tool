@@ -91,14 +91,22 @@ def test_duplicate_merge_basic():
                 shower_group = subtitle
                 break
 
-        if shower_group and shower_group.start_ms == 16000 and shower_group.end_ms == 27200:
+        if (
+            shower_group
+            and shower_group.start_ms == 16000
+            and shower_group.end_ms == 27200
+        ):
             print("✅ 時間範囲統合が正しく動作しました")
             return True
         else:
-            print(f"❌ 時間範囲が正しくありません: {shower_group.start_ms}-{shower_group.end_ms}ms")
+            print(
+                f"❌ 時間範囲が正しくありません: {shower_group.start_ms}-{shower_group.end_ms}ms"
+            )
             return False
     else:
-        print(f"❌ テスト失敗: 期待値 {expected_groups} != 実際 {len(merged_subtitles)}")
+        print(
+            f"❌ テスト失敗: 期待値 {expected_groups} != 実際 {len(merged_subtitles)}"
+        )
         return False
 
 
@@ -170,7 +178,9 @@ def test_exact_duplicate():
             and same_text_subtitle.end_ms == 5000
         ):
             print("✅ テスト成功: 完全同一テキストが正しく統合されました")
-            print(f"  統合後時間範囲: {same_text_subtitle.start_ms}-{same_text_subtitle.end_ms}ms")
+            print(
+                f"  統合後時間範囲: {same_text_subtitle.start_ms}-{same_text_subtitle.end_ms}ms"
+            )
             return True
         else:
             print(

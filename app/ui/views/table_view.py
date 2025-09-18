@@ -160,7 +160,9 @@ class SubtitleTableView(QWidget):
 
         # 複数行テキスト編集用デリゲートを設定
         self.multiline_delegate = MultilineTextDelegate()
-        self.multiline_delegate.next_subtitle_requested.connect(self.move_to_next_subtitle)
+        self.multiline_delegate.next_subtitle_requested.connect(
+            self.move_to_next_subtitle
+        )
         self.table.setItemDelegateForColumn(3, self.multiline_delegate)  # 本文列用
 
         # テーブルの設定
@@ -287,7 +289,9 @@ class SubtitleTableView(QWidget):
             if column == 1:  # 開始時間
                 new_start_ms = self.parse_time(item.text())
                 if new_start_ms >= subtitle.end_ms:
-                    QMessageBox.warning(self, "警告", "開始時間は終了時間より前に設定してください")
+                    QMessageBox.warning(
+                        self, "警告", "開始時間は終了時間より前に設定してください"
+                    )
                     item.setText(self.format_time(subtitle.start_ms))
                     return
                 subtitle.start_ms = new_start_ms
@@ -295,7 +299,9 @@ class SubtitleTableView(QWidget):
             elif column == 2:  # 終了時間
                 new_end_ms = self.parse_time(item.text())
                 if new_end_ms <= subtitle.start_ms:
-                    QMessageBox.warning(self, "警告", "終了時間は開始時間より後に設定してください")
+                    QMessageBox.warning(
+                        self, "警告", "終了時間は開始時間より後に設定してください"
+                    )
                     item.setText(self.format_time(subtitle.end_ms))
                     return
                 subtitle.end_ms = new_end_ms
@@ -410,8 +416,12 @@ class SubtitleTableView(QWidget):
         # テキストも分割
         text_parts = subtitle.text.split()
         mid_point = len(text_parts) // 2
-        first_text = " ".join(text_parts[:mid_point]) if mid_point > 0 else subtitle.text
-        second_text = " ".join(text_parts[mid_point:]) if mid_point < len(text_parts) else ""
+        first_text = (
+            " ".join(text_parts[:mid_point]) if mid_point > 0 else subtitle.text
+        )
+        second_text = (
+            " ".join(text_parts[mid_point:]) if mid_point < len(text_parts) else ""
+        )
 
         # 元の字幕を変更
         subtitle.end_ms = middle_time
@@ -433,7 +443,9 @@ class SubtitleTableView(QWidget):
         """選択された2つの字幕を結合"""
         selected_rows = sorted(set(item.row() for item in self.table.selectedItems()))
         if len(selected_rows) != 2:
-            QMessageBox.information(self, "情報", "結合するには2つの字幕を選択してください")
+            QMessageBox.information(
+                self, "情報", "結合するには2つの字幕を選択してください"
+            )
             return
 
         first_row, second_row = selected_rows

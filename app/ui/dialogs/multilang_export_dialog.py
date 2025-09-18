@@ -138,7 +138,8 @@ class MultiLanguageExportDialog(QDialog):
 
         # ファイル名パターンの説明
         pattern_label = QLabel(
-            "ファイル名形式: {ベース名}.{言語コード}.srt\n" "例: video.ja.srt, video.en.srt"
+            "ファイル名形式: {ベース名}.{言語コード}.srt\n"
+            "例: video.ja.srt, video.en.srt"
         )
         pattern_label.setStyleSheet("QLabel { color: #666; font-size: 10pt; }")
         form_layout.addRow("", pattern_label)
@@ -241,14 +242,18 @@ class MultiLanguageExportDialog(QDialog):
                 return
 
         # 確認ダイアログ
-        lang_names = [self.SUPPORTED_LANGUAGES.get(lang, lang) for lang in selected_languages]
+        lang_names = [
+            self.SUPPORTED_LANGUAGES.get(lang, lang) for lang in selected_languages
+        ]
         message = (
             f"以下の{len(selected_languages)}言語でSRTファイルを出力します：\n\n"
             f"{', '.join(lang_names)}\n\n"
             f"出力先: {output_dir}"
         )
 
-        reply = QMessageBox.question(self, "確認", message, QMessageBox.Yes | QMessageBox.No)
+        reply = QMessageBox.question(
+            self, "確認", message, QMessageBox.Yes | QMessageBox.No
+        )
 
         if reply == QMessageBox.Yes:
             # エクスポート実行のシグナルを送信

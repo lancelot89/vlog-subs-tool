@@ -236,7 +236,9 @@ class SRTFormatter:
                     f.write(srt_content.encode("utf-8"))
             else:
                 # 通常の保存
-                with open(filepath, "w", encoding=self.settings.encoding, newline="") as f:
+                with open(
+                    filepath, "w", encoding=self.settings.encoding, newline=""
+                ) as f:
                     f.write(srt_content)
 
             return True
@@ -343,7 +345,9 @@ class SRTParser:
             text_lines = lines[2:]
             text = "\n".join(text_lines)
 
-            return SubtitleItem(index=index, start_ms=start_ms, end_ms=end_ms, text=text)
+            return SubtitleItem(
+                index=index, start_ms=start_ms, end_ms=end_ms, text=text
+            )
 
         except (ValueError, IndexError) as e:
             print(f"SRTエントリ解析エラー: {e}")
@@ -361,7 +365,9 @@ class MultiLanguageSRTManager:
         self.base_filepath = base_filepath
         self.formatters: Dict[str, SRTFormatter] = {}
 
-    def add_language(self, lang_code: str, settings: Optional[SRTFormatSettings] = None):
+    def add_language(
+        self, lang_code: str, settings: Optional[SRTFormatSettings] = None
+    ):
         """言語フォーマッタを追加"""
         self.formatters[lang_code] = SRTFormatter(settings or SRTFormatSettings())
 

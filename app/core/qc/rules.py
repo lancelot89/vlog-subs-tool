@@ -63,7 +63,9 @@ class MaxLinesRule(QCRule):
     """最大行数チェックルール"""
 
     def __init__(self, max_lines: int = 2, enabled: bool = True):
-        super().__init__(name="最大行数チェック", description=f"最大{max_lines}行", enabled=enabled)
+        super().__init__(
+            name="最大行数チェック", description=f"最大{max_lines}行", enabled=enabled
+        )
         self.max_lines = max_lines
 
     def check(self, subtitles: List[SubtitleItem]) -> List[QCResult]:
@@ -146,7 +148,10 @@ class TimeOverlapRule(QCRule):
         for i, subtitle1 in enumerate(subtitles):
             for j, subtitle2 in enumerate(subtitles[i + 1 :], i + 1):
                 # 時間重複の判定
-                if subtitle1.start_ms < subtitle2.end_ms and subtitle1.end_ms > subtitle2.start_ms:
+                if (
+                    subtitle1.start_ms < subtitle2.end_ms
+                    and subtitle1.end_ms > subtitle2.start_ms
+                ):
 
                     overlap_start = max(subtitle1.start_ms, subtitle2.start_ms)
                     overlap_end = min(subtitle1.end_ms, subtitle2.end_ms)

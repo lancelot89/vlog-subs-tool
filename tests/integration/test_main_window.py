@@ -193,7 +193,9 @@ class TestSubtitleTableIntegration:
         # 最初の行を選択
         selection_model = table_view.selectionModel()
         index = model.index(0, 0)
-        selection_model.setCurrentIndex(index, selection_model.SelectionFlag.ClearAndSelect)
+        selection_model.setCurrentIndex(
+            index, selection_model.SelectionFlag.ClearAndSelect
+        )
 
         # 選択が正しく設定されていることを確認
         current_index = selection_model.currentIndex()

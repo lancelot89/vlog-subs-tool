@@ -98,7 +98,9 @@ def test_multiline_detection():
     # 上段: "こんにちは" (Y座標: 50-70)
     # 下段: "皆さん" (Y座標: 80-100)
     ocr_results = [
-        MockOCRResult(text="こんにちは", confidence=0.9, bbox=(100, 50, 120, 20)),  # 1行目
+        MockOCRResult(
+            text="こんにちは", confidence=0.9, bbox=(100, 50, 120, 20)
+        ),  # 1行目
         MockOCRResult(text="皆さん", confidence=0.85, bbox=(110, 80, 80, 20)),  # 2行目
     ]
 
@@ -146,7 +148,9 @@ def test_horizontal_ordering():
 
     # 2行で、各行に複数の文字が水平に配置
     ocr_results = [
-        MockOCRResult(text="んにちは", confidence=0.9, bbox=(150, 50, 80, 20)),  # 1行目右
+        MockOCRResult(
+            text="んにちは", confidence=0.9, bbox=(150, 50, 80, 20)
+        ),  # 1行目右
         MockOCRResult(text="こ", confidence=0.85, bbox=(100, 50, 30, 20)),  # 1行目左
         MockOCRResult(text="さん", confidence=0.8, bbox=(150, 80, 60, 20)),  # 2行目右
         MockOCRResult(text="皆", confidence=0.85, bbox=(110, 80, 30, 20)),  # 2行目左
@@ -176,7 +180,9 @@ def test_same_line_grouping():
         MockOCRResult(
             text="ちは", confidence=0.85, bbox=(170, 52, 40, 18)
         ),  # わずかにY座標がずれている
-        MockOCRResult(text="皆さん", confidence=0.8, bbox=(110, 90, 80, 20)),  # 明らかに異なる行
+        MockOCRResult(
+            text="皆さん", confidence=0.8, bbox=(110, 90, 80, 20)
+        ),  # 明らかに異なる行
     ]
 
     detected_text = detect_multiline_text(ocr_results)

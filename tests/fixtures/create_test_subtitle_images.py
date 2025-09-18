@@ -178,7 +178,9 @@ def create_test_images():
         img = create_subtitle_image(text)
 
         # ファイル名を生成
-        filename = f"test_subtitle_{i:02d}_{text.replace(' ', '_').replace('/', '_')}.png"
+        filename = (
+            f"test_subtitle_{i:02d}_{text.replace(' ', '_').replace('/', '_')}.png"
+        )
         filepath = output_dir / filename
 
         # 画像を保存

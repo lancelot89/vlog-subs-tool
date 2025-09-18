@@ -204,7 +204,9 @@ class SubtitleGrouper:
         self.max_gap_ms = int(max_gap_sec * 1000)
         self.similarity_calc = TextSimilarityCalculator()
 
-    def group_frame_results(self, frame_results: List[FrameOCRResult]) -> List[SubtitleItem]:
+    def group_frame_results(
+        self, frame_results: List[FrameOCRResult]
+    ) -> List[SubtitleItem]:
         """
         フレームOCR結果を字幕アイテムにグルーピング
 
@@ -265,11 +267,14 @@ class SubtitleGrouper:
             )
 
             # 時間間隔の確認
-            time_gap = current_result.frame.timestamp_ms - prev_result.frame.timestamp_ms
+            time_gap = (
+                current_result.frame.timestamp_ms - prev_result.frame.timestamp_ms
+            )
 
             # 同一グループに追加する条件
             if (
-                similarity >= self.similarity_threshold and time_gap <= self.max_gap_ms * 3
+                similarity >= self.similarity_threshold
+                and time_gap <= self.max_gap_ms * 3
             ):  # 少し余裕を持たせる
                 current_group.append(current_result)
             else:
@@ -380,7 +385,9 @@ class SubtitleGrouper:
         # 2行構成できない場合は単行として返す
         return frame_result.best_text
 
-    def _group_by_vertical_position(self, sorted_results: List[OCRResult]) -> List[List[OCRResult]]:
+    def _group_by_vertical_position(
+        self, sorted_results: List[OCRResult]
+    ) -> List[List[OCRResult]]:
         """OCR結果を垂直位置でグループ化"""
         if not sorted_results:
             return []
@@ -435,7 +442,9 @@ class SubtitleGrouper:
 
         return cleaned
 
-    def _calculate_bbox(self, frame_result: FrameOCRResult) -> Optional[Tuple[int, int, int, int]]:
+    def _calculate_bbox(
+        self, frame_result: FrameOCRResult
+    ) -> Optional[Tuple[int, int, int, int]]:
         """バウンディングボックスの計算"""
         if not frame_result.ocr_results:
             return None
@@ -448,7 +457,9 @@ class SubtitleGrouper:
 
         return (min_x, min_y, max_x - min_x, max_y - min_y)
 
-    def _merge_short_subtitles(self, subtitles: List[SubtitleItem]) -> List[SubtitleItem]:
+    def _merge_short_subtitles(
+        self, subtitles: List[SubtitleItem]
+    ) -> List[SubtitleItem]:
         """短すぎる字幕を前後と統合"""
         if not subtitles:
             return []
@@ -524,7 +535,9 @@ class ExtractionProcessor:
             max_gap_sec=settings.get("max_gap_sec", 0.5),
         )
 
-    def process_extraction_results(self, frame_results: List[FrameOCRResult]) -> List[SubtitleItem]:
+    def process_extraction_results(
+        self, frame_results: List[FrameOCRResult]
+    ) -> List[SubtitleItem]:
         """
         抽出結果の処理
 
@@ -542,7 +555,9 @@ class ExtractionProcessor:
 
         return subtitle_items
 
-    def _post_process_subtitles(self, subtitles: List[SubtitleItem]) -> List[SubtitleItem]:
+    def _post_process_subtitles(
+        self, subtitles: List[SubtitleItem]
+    ) -> List[SubtitleItem]:
         """字幕の後処理"""
         # 重複除去
         subtitles = self._remove_duplicates(subtitles)
@@ -599,7 +614,9 @@ class ExtractionProcessor:
                 # 連鎖的重複対応: 既存グループのいずれかとの類似度をチェック
                 is_similar_to_group = False
                 for group_member in current_group:
-                    similarity = calc.calculate_similarity(group_member.text, subtitles[j].text)
+                    similarity = calc.calculate_similarity(
+                        group_member.text, subtitles[j].text
+                    )
                     if similarity > 0.90:
                         is_similar_to_group = True
                         break
@@ -621,7 +638,9 @@ class ExtractionProcessor:
 
         return merged
 
-    def _merge_overlapping_subtitles(self, subtitles: List[SubtitleItem]) -> List[SubtitleItem]:
+    def _merge_overlapping_subtitles(
+        self, subtitles: List[SubtitleItem]
+    ) -> List[SubtitleItem]:
         """時間重複している字幕の統合"""
         if not subtitles:
             return []
@@ -638,7 +657,8 @@ class ExtractionProcessor:
             for i, existing in enumerate(merged):
                 # 時間重複の判定
                 time_overlap = (
-                    subtitle.start_ms < existing.end_ms and subtitle.end_ms > existing.start_ms
+                    subtitle.start_ms < existing.end_ms
+                    and subtitle.end_ms > existing.start_ms
                 )
 
                 if time_overlap:
