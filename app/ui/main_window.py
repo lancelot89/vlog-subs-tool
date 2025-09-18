@@ -1632,9 +1632,12 @@ class MainWindow(QMainWindow):
                 if translated_items:
                     translated_subtitles = project_data.get_translated_subtitles(language)
                     if translated_subtitles:
-                        # 翻訳ビューに設定（存在する場合）
-                        if hasattr(self, 'translate_view'):
+                        # 翻訳ビューに設定（メソッドが存在する場合のみ）
+                        if hasattr(self, 'translate_view') and hasattr(self.translate_view, 'set_translations'):
                             self.translate_view.set_translations(language, translated_subtitles)
+                        else:
+                            # 代替手段: 翻訳データをプロジェクトに保持するだけ
+                            logging.info(f"翻訳データを読み込み: {language} ({len(translated_subtitles)}件)")
 
             # プロジェクト情報を更新
             from app.core.models import ProjectSettings
