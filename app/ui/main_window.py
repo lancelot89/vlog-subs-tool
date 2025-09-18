@@ -224,7 +224,12 @@ class MainWindow(QMainWindow):
         
         # 編集メニュー
         edit_menu = menubar.addMenu("編集(&E)")
-        
+
+        qc_check_action = QAction("QCチェック(&Q)", self)
+        qc_check_action.setShortcut("Ctrl+Q")
+        qc_check_action.triggered.connect(self.run_qc_check)
+        edit_menu.addAction(qc_check_action)
+
         # 表示メニュー
         view_menu = menubar.addMenu("表示(&V)")
         
@@ -271,17 +276,11 @@ class MainWindow(QMainWindow):
         
         toolbar.addSeparator()
         
-        # 自動抽出
-        self.extract_btn = QPushButton("自動抽出")
+        # 字幕抽出
+        self.extract_btn = QPushButton("字幕抽出")
         self.extract_btn.clicked.connect(self.start_extraction)
         self.extract_btn.setEnabled(False)
         toolbar.addWidget(self.extract_btn)
-        
-        # 再抽出
-        self.re_extract_btn = QPushButton("再抽出")
-        self.re_extract_btn.clicked.connect(self.re_extract)
-        self.re_extract_btn.setEnabled(False)
-        toolbar.addWidget(self.re_extract_btn)
 
         # 旧キャンセルボタン（下位互換のため残すが、使用は停止）
         self.cancel_btn = QPushButton("🛑 抽出停止")
@@ -289,14 +288,6 @@ class MainWindow(QMainWindow):
         self.cancel_btn.setVisible(False)  # 常に非表示
         # NOTE: 新しい実装では自動抽出ボタン自体がキャンセルボタンに変化するため、
         # この独立したキャンセルボタンは表示されません
-        
-        toolbar.addSeparator()
-        
-        # QCチェック
-        self.qc_btn = QPushButton("QCチェック")
-        self.qc_btn.clicked.connect(self.run_qc_check)
-        self.qc_btn.setEnabled(False)
-        toolbar.addWidget(self.qc_btn)
         
         toolbar.addSeparator()
         
@@ -314,13 +305,7 @@ class MainWindow(QMainWindow):
         self.csv_export_action = self.csv_export_btn
         
         toolbar.addSeparator()
-        
-        # 保存
-        self.save_btn = QPushButton("保存")
-        self.save_btn.clicked.connect(self.save_project)
-        self.save_btn.setEnabled(False)
-        toolbar.addWidget(self.save_btn)
-        
+
         # SRT出力
         self.export_srt_btn = QPushButton("SRT出力")
         self.export_srt_btn.clicked.connect(self.export_japanese_srt)
@@ -490,7 +475,6 @@ class MainWindow(QMainWindow):
 
             # UIの更新
             self.extract_btn.setEnabled(True)
-            self.save_btn.setEnabled(True)
 
             # ファイル情報の更新
             file_name = Path(file_path).name
@@ -583,8 +567,6 @@ class MainWindow(QMainWindow):
 
         # UI状態の更新
         self.extract_btn.setEnabled(True)
-        self.re_extract_btn.setEnabled(True)
-        self.qc_btn.setEnabled(True)
         self.translate_btn.setEnabled(True)
         self.csv_export_btn.setEnabled(True)
         if hasattr(self, 'csv_export_menu_action') and self.csv_export_menu_action is not None:
@@ -607,7 +589,6 @@ class MainWindow(QMainWindow):
 
         # UI状態をリセット
         self.extract_btn.setEnabled(True)
-        self.re_extract_btn.setEnabled(True)
         self.status_label.setText("字幕の抽出に失敗しました")
 
     def on_extraction_cancelled(self):
@@ -621,7 +602,6 @@ class MainWindow(QMainWindow):
 
         # UI状態をリセット
         self.extract_btn.setEnabled(True)
-        self.re_extract_btn.setEnabled(True)
         self.status_label.setText("字幕抽出がキャンセルされました")
     
     def on_extraction_finished(self):
@@ -674,7 +654,6 @@ class MainWindow(QMainWindow):
         self.extract_btn.setStyleSheet("")
 
         # 再抽出ボタンも無効化
-        self.re_extract_btn.setEnabled(False)
 
         logging.info("自動抽出ボタンが🛑抽出停止ボタンに変更されました")
         logging.info("=== 🛑 ボタン変更処理完了 ===")
