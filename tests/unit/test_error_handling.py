@@ -337,8 +337,7 @@ class TestMemoryErrors:
                 exporter.export_for_translation(
                     subtitles=large_subtitles,
                     filepath=csv_path,
-                    source_language="ja",
-                    target_language="en",
+                    source_lang="ja",
                 )
 
                 assert csv_path.exists(), "大量データのCSVエクスポートに失敗"
