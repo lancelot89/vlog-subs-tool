@@ -362,19 +362,23 @@ class ProgressErrorHandler(QObject):
 
         return not self.is_cancelled
 
-    def handle_operation_error(self,
-                              error: Union[Exception, ErrorInfo],
-                              context: Optional[Dict[str, Any]] = None,
-                              allow_retry: bool = True) -> bool:
+    def handle_operation_error(
+        self,
+        error: Union[Exception, ErrorInfo],
+        context: Optional[Dict[str, Any]] = None,
+        allow_retry: bool = True,
+    ) -> bool:
         """操作中のエラーを処理"""
 
         context = context or {}
-        context.update({
-            "operation": self.operation_name,
-            "step": self.current_step,
-            "total_steps": self.total_steps,
-            "retry_count": self.retry_count
-        })
+        context.update(
+            {
+                "operation": self.operation_name,
+                "step": self.current_step,
+                "total_steps": self.total_steps,
+                "retry_count": self.retry_count,
+            }
+        )
 
         # プログレスダイアログを一時的に隠す
         if self.progress_dialog:
@@ -440,9 +444,10 @@ class ProgressErrorHandler(QObject):
 
 # 便利な関数群
 
-def create_file_operation_error(file_path: Union[str, Path],
-                               operation: str,
-                               original_error: Exception) -> ErrorInfo:
+
+def create_file_operation_error(
+    file_path: Union[str, Path], operation: str, original_error: Exception
+) -> ErrorInfo:
     """ファイル操作エラー用のErrorInfoを作成"""
 
     suggestions = [

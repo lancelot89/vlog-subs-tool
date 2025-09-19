@@ -11,20 +11,24 @@ from dataclasses import dataclass
 
 from app.core.models import SubtitleItem
 from app.core.error_handler import (
-    ErrorHandler, ErrorInfo, ErrorCategory, ErrorSeverity,
-    create_file_operation_error
+    ErrorHandler,
+    ErrorInfo,
+    ErrorCategory,
+    ErrorSeverity,
+    create_file_operation_error,
 )
 
 
 @dataclass
 class SRTFormatSettings:
     """SRT出力設定"""
+
     encoding: str = "utf-8"
     with_bom: bool = False
     line_ending: str = "lf"  # "lf", "crlf"
     max_chars_per_line: int = 42
     max_lines: int = 2
-    
+
     @property
     def line_separator(self) -> str:
         """改行コードを取得"""
@@ -34,52 +38,57 @@ class SRTFormatSettings:
 class SRTFormatter:
     """SRTフォーマッタ - 強化されたエラーハンドリング付き"""
 
-    def __init__(self, settings: Optional[SRTFormatSettings] = None, error_handler: Optional[ErrorHandler] = None):
+    def __init__(
+        self,
+        settings: Optional[SRTFormatSettings] = None,
+        error_handler: Optional[ErrorHandler] = None,
+    ):
         self.settings = settings or SRTFormatSettings()
         self.error_handler = error_handler or ErrorHandler()
         self.logger = logging.getLogger(__name__)
-    
+
+
     def format_time(self, time_ms: int) -> str:
         """
         ミリ秒をSRT時間フォーマットに変換
-        
+
         Args:
             time_ms: 時間（ミリ秒）
-            
+
         Returns:
             str: SRT時間形式 "HH:MM:SS,mmm"
         """
         total_seconds = time_ms // 1000
         milliseconds = time_ms % 1000
-        
+
         hours = total_seconds // 3600
         minutes = (total_seconds % 3600) // 60
         seconds = total_seconds % 60
-        
+
         return f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
-    
+
     def parse_time(self, time_str: str) -> int:
         """
         SRT時間フォーマットをミリ秒に変換
-        
+
         Args:
             time_str: SRT時間形式 "HH:MM:SS,mmm"
-            
+
         Returns:
             int: 時間（ミリ秒）
         """
         # パターンマッチング
-        pattern = r'(\d{2}):(\d{2}):(\d{2}),(\d{3})'
+        pattern = r"(\d{2}):(\d{2}):(\d{2}),(\d{3})"
         match = re.match(pattern, time_str)
-        
+
         if not match:
             raise ValueError(f"Invalid SRT time format: {time_str}")
-        
+
         hours, minutes, seconds, milliseconds = map(int, match.groups())
-        
+
         total_ms = (hours * 3600 + minutes * 60 + seconds) * 1000 + milliseconds
         return total_ms
-    
+
     def format_text(self, text: str) -> str:
         """
         テキストをSRT用にフォーマット
@@ -103,7 +112,7 @@ class SRTFormatter:
             "&amp;": "&",
             "&quot;": '"',
             "&apos;": "'",
-            "&nbsp;": " "
+            "&nbsp;": " ",
         }
         
         for entity, char in html_entities.items():
@@ -117,7 +126,7 @@ class SRTFormatter:
     def _wrap_text(self, text: str) -> str:
         """テキストの行分割処理"""
         # 既存の改行を考慮
-        lines = text.split('\n')
+        lines = text.split("\n")
         wrapped_lines = []
         
         for line in lines:
@@ -133,9 +142,9 @@ class SRTFormatter:
         
         # 最大行数に制限
         if len(wrapped_lines) > self.settings.max_lines:
-            wrapped_lines = wrapped_lines[:self.settings.max_lines]
-        
-        return '\n'.join(wrapped_lines)
+            wrapped_lines = wrapped_lines[: self.settings.max_lines]
+
+        return "\n".join(wrapped_lines)
     
     def _split_long_line(self, line: str) -> List[str]:
         """長い行を適切に分割"""
