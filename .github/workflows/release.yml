@@ -35,7 +35,7 @@ jobs:
       is_draft: ${{ steps.version.outputs.is_draft }}
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - name: Determine release parameters
       id: version
@@ -77,7 +77,7 @@ jobs:
     needs: validate-release
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -142,7 +142,7 @@ jobs:
     needs: validate-release
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -182,7 +182,7 @@ jobs:
     needs: validate-release
     runs-on: macos-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -237,7 +237,7 @@ jobs:
     needs: [validate-release, build-linux, build-windows, build-macos]
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
       with:
         fetch-depth: 0
 
