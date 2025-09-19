@@ -324,15 +324,85 @@ print(f'機能: {cpu_info.features}')
 "
 ```
 
-#### コード品質チェック
-```bash
-# リント
-python -m flake8 app/
-python -m mypy app/
+#### 🎯 Makefileによる開発ワークフロー（推奨）
 
-# コードフォーマット
-python -m black app/
-python -m isort app/
+プロジェクトには**GitHub Actionsと同等のCode Quality Checks**をローカルで実行できるMakefileが用意されています。
+
+##### 🚀 初回セットアップ
+```bash
+# venv仮想環境 + 開発用依存関係の一括セットアップ
+make setup
+```
+
+##### ✅ Code Quality Checks（GitHub Actions相当）
+```bash
+# 🎯 プッシュ前のクイックチェック（推奨）
+make quality
+
+# 📋 個別チェック
+make format-check  # blackフォーマットチェック（CI相当）
+make type-check    # mypyでの型チェック（CI相当）
+make test          # pytest単体テスト実行（CI相当）
+
+# 🤖 GitHub Actions風の完全チェック
+make ci            # format-check + type-check + test + security
+```
+
+##### 🔧 自動修正・整形
+```bash
+# コードの自動フォーマット（black + isort）
+make format
+
+# 修正可能な問題を一括修正
+make quality-fix
+```
+
+##### 🏗️ ビルド・環境管理
+```bash
+# PyInstallerでアプリビルド
+make build
+
+# 一時ファイル削除
+make clean
+
+# venv環境も含む完全削除
+make clean-all
+
+# ヘルプ・コマンド一覧表示
+make help
+```
+
+##### 📊 利用可能なMakefileコマンド一覧
+| コマンド | 説明 | GitHub Actions相当 |
+|----------|------|-------------------|
+| `make setup` | venv環境セットアップ（初回必須） | - |
+| `make quality` | **全Code Qualityチェック実行** | ✅ **Code Quality Checks** |
+| `make format-check` | blackフォーマットチェック | ✅ Check code formatting |
+| `make type-check` | mypy型チェック | ✅ Type checking |
+| `make test` | pytest単体テスト | ✅ Run unit tests |
+| `make ci` | GitHub Actions風完全チェック | ✅ **Pull Request Tests** |
+| `make quality-fix` | 自動修正実行 | - |
+| `make build` | PyInstallerビルド | ✅ Build Test |
+
+> **💡 推奨ワークフロー**: `make setup` → コード編集 → `make quality` → git commit・push
+
+#### 手動でのコード品質チェック
+venv環境を手動でアクティベートして実行する場合：
+```bash
+# venv環境のアクティベート
+source venv/bin/activate  # Linux/macOS
+# venv\Scripts\activate   # Windows
+
+# 手動でのCode Quality Checks
+python -m black --check --diff app/ tests/  # フォーマットチェック
+python -m isort --check-only --diff --profile=black app/ tests/  # インポート順序
+python -m mypy app/ --ignore-missing-imports --no-strict-optional  # 型チェック
+python -m pytest tests/unit/ -v --tb=short  # 単体テスト
+python -m safety check --json  # セキュリティチェック
+
+# 自動フォーマット
+python -m black app/ tests/
+python -m isort --profile=black app/ tests/
 ```
 
 ### バイナリビルド
