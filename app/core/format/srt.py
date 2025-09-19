@@ -1,12 +1,21 @@
 """
 SRT字幕ファイルフォーマット処理
+強化されたエラーハンドリングとユーザーフィードバック付き
 """
 
+import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from app.core.error_handler import (
+    ErrorCategory,
+    ErrorHandler,
+    ErrorInfo,
+    ErrorSeverity,
+    create_file_operation_error,
+)
 from app.core.models import SubtitleItem
 
 
@@ -27,10 +36,16 @@ class SRTFormatSettings:
 
 
 class SRTFormatter:
-    """SRTフォーマッタ"""
+    """SRTフォーマッタ - 強化されたエラーハンドリング付き"""
 
-    def __init__(self, settings: Optional[SRTFormatSettings] = None):
+    def __init__(
+        self,
+        settings: Optional[SRTFormatSettings] = None,
+        error_handler: Optional[ErrorHandler] = None,
+    ):
         self.settings = settings or SRTFormatSettings()
+        self.error_handler = error_handler or ErrorHandler()
+        self.logger = logging.getLogger(__name__)
 
     def format_time(self, time_ms: int) -> str:
         """
@@ -214,77 +229,373 @@ class SRTFormatter:
         # エントリ間の空行
         return self.settings.line_separator.join(srt_entries)
 
-    def save_srt_file(self, subtitles: List[SubtitleItem], filepath: Path) -> bool:
+    def save_srt_file(
+        self, subtitles: List[SubtitleItem], filepath: Path, show_errors: bool = True
+    ) -> bool:
         """
-        SRTファイルを保存
+        SRTファイルを保存 - 強化されたエラーハンドリング付き
 
         Args:
             subtitles: 字幕アイテムリスト
             filepath: 保存先ファイルパス
+            show_errors: エラーダイアログ表示可否
 
         Returns:
             bool: 保存成功可否
         """
         try:
-            srt_content = self.subtitles_to_srt(subtitles)
+            # 事前検証
+            if not subtitles:
+                if show_errors:
+                    error_info = ErrorInfo(
+                        message="保存する字幕データがありません",
+                        category=ErrorCategory.VALIDATION,
+                        severity=ErrorSeverity.WARNING,
+                        suggestions=["字幕を抽出してから保存してください"],
+                    )
+                    self.error_handler.handle_error(error_info, {"file_path": str(filepath)})
+                return False
 
-            # エンコーディング処理
-            if self.settings.with_bom and self.settings.encoding.lower() == "utf-8":
-                # UTF-8 BOM付き
-                with open(filepath, "wb") as f:
-                    f.write(b"\xef\xbb\xbf")  # BOM
-                    f.write(srt_content.encode("utf-8"))
-            else:
-                # 通常の保存
-                with open(filepath, "w", encoding=self.settings.encoding, newline="") as f:
-                    f.write(srt_content)
+            # ディレクトリ存在確認
+            parent_dir = filepath.parent
+            if not parent_dir.exists():
+                try:
+                    parent_dir.mkdir(parents=True, exist_ok=True)
+                    self.logger.info(f"保存ディレクトリを作成: {parent_dir}")
+                except Exception as e:
+                    if show_errors:
+                        error_info = create_file_operation_error(
+                            parent_dir, "保存ディレクトリ作成", e
+                        )
+                        self.error_handler.handle_error(error_info, {"target_file": str(filepath)})
+                    return False
 
-            return True
+            # 書き込み権限確認
+            if filepath.exists():
+                try:
+                    # 書き込み可能かテスト
+                    with open(filepath, "a", encoding=self.settings.encoding):
+                        pass
+                except PermissionError as e:
+                    if show_errors:
+                        error_info = create_file_operation_error(
+                            filepath, "ファイル書き込み権限確認", e
+                        )
+                        error_info.suggestions.extend(
+                            [
+                                "ファイルが他のアプリケーションで開かれていないか確認してください",
+                                "管理者権限でアプリケーションを実行してみてください",
+                            ]
+                        )
+                        self.error_handler.handle_error(
+                            error_info, {"subtitles_count": len(subtitles)}
+                        )
+                    return False
+
+            # SRTコンテンツ生成
+            try:
+                srt_content = self.subtitles_to_srt(subtitles)
+            except Exception as e:
+                if show_errors:
+                    error_info = ErrorInfo(
+                        message="字幕データのSRT形式変換に失敗しました",
+                        category=ErrorCategory.VALIDATION,
+                        severity=ErrorSeverity.ERROR,
+                        technical_details=str(e),
+                        suggestions=[
+                            "字幕データが正しい形式であることを確認してください",
+                            "時間情報が正しく設定されているか確認してください",
+                        ],
+                    )
+                    self.error_handler.handle_error(
+                        error_info, {"subtitles_count": len(subtitles), "file_path": str(filepath)}
+                    )
+                return False
+
+            # ファイル保存処理（安全なバックアップ付き）
+            backup_path = None
+            backup_created = False
+
+            if filepath.exists():
+                # バックアップ作成
+                try:
+                    backup_path = filepath.with_suffix(f"{filepath.suffix}.backup")
+                    filepath.replace(backup_path)
+                    backup_created = True
+                    self.logger.info(f"バックアップ作成: {backup_path}")
+                except Exception as e:
+                    self.logger.warning(f"バックアップ作成失敗: {e}")
+
+            try:
+                # エンコーディング処理
+                if self.settings.with_bom and self.settings.encoding.lower() == "utf-8":
+                    # UTF-8 BOM付き
+                    with open(filepath, "wb") as f:
+                        f.write(b"\xef\xbb\xbf")  # BOM
+                        f.write(srt_content.encode("utf-8"))
+                else:
+                    # 通常の保存
+                    with open(filepath, "w", encoding=self.settings.encoding, newline="") as f:
+                        f.write(srt_content)
+
+                # 保存成功時はバックアップを削除（オプション）
+                if backup_created and backup_path and backup_path.exists():
+                    try:
+                        backup_path.unlink()  # バックアップ削除
+                        self.logger.debug(f"バックアップ削除: {backup_path}")
+                    except Exception as e:
+                        self.logger.warning(f"バックアップ削除失敗: {e}")
+
+                # 保存成功ログ
+                file_size = filepath.stat().st_size
+                self.logger.info(
+                    f"SRTファイル保存成功: {filepath.name} ({len(subtitles)}件, {file_size:,}bytes)"
+                )
+                return True
+
+            except UnicodeEncodeError as e:
+                # バックアップを復元
+                self._restore_backup_on_error(filepath, backup_path, backup_created)
+
+                if show_errors:
+                    error_info = ErrorInfo(
+                        message=f"文字エンコーディング（{self.settings.encoding}）での保存に失敗しました",
+                        category=ErrorCategory.FILE_OPERATION,
+                        severity=ErrorSeverity.ERROR,
+                        technical_details=str(e),
+                        suggestions=[
+                            "UTF-8エンコーディングを使用してください",
+                            "特殊文字が含まれていないか確認してください",
+                        ],
+                    )
+                    self.error_handler.handle_error(
+                        error_info, {"encoding": self.settings.encoding, "file_path": str(filepath)}
+                    )
+                return False
+
+            except OSError as e:
+                # バックアップを復元
+                self._restore_backup_on_error(filepath, backup_path, backup_created)
+
+                # ディスク容量不足などのシステムエラー
+                if show_errors:
+                    error_info = create_file_operation_error(filepath, "SRTファイル保存", e)
+                    if "No space left" in str(e):
+                        error_info.suggestions.insert(0, "ディスク容量を確保してください")
+                    self.error_handler.handle_error(error_info, {"subtitles_count": len(subtitles)})
+                return False
 
         except Exception as e:
-            print(f"SRT保存エラー: {e}")
+            # バックアップを復元（予期しないエラーの場合）
+            if "backup_path" in locals() and "backup_created" in locals():
+                self._restore_backup_on_error(filepath, backup_path, backup_created)
+
+            # 予期しないエラー
+            if show_errors:
+                error_info = ErrorInfo(
+                    message="SRTファイル保存中に予期しないエラーが発生しました",
+                    category=ErrorCategory.SYSTEM,
+                    severity=ErrorSeverity.ERROR,
+                    technical_details=f"{type(e).__name__}: {str(e)}",
+                    suggestions=[
+                        "ファイルパスが正しいことを確認してください",
+                        "別のファイル名で保存してみてください",
+                        "アプリケーションを再起動してみてください",
+                    ],
+                )
+                self.error_handler.handle_error(
+                    error_info, {"file_path": str(filepath), "subtitles_count": len(subtitles)}
+                )
             return False
+
+    def _restore_backup_on_error(
+        self, filepath: Path, backup_path: Optional[Path], backup_created: bool
+    ):
+        """エラー時のバックアップファイル復元"""
+        if backup_created and backup_path and backup_path.exists():
+            try:
+                # 破損した可能性のあるファイルを削除
+                if filepath.exists():
+                    filepath.unlink()
+
+                # バックアップから復元
+                backup_path.replace(filepath)
+                self.logger.info(f"バックアップから復元: {backup_path} -> {filepath}")
+            except Exception as e:
+                self.logger.error(f"バックアップ復元失敗: {e}")
+                # この場合、両方のファイルが失われる可能性があるため重要なログ
+                self.logger.error(
+                    f"重要: 元ファイルはバックアップ名で残っている可能性: {backup_path}"
+                )
 
 
 class SRTParser:
-    """SRTファイルパーサー"""
+    """SRTファイルパーサー - 強化されたエラーハンドリング付き"""
 
-    def __init__(self):
+    def __init__(self, error_handler: Optional[ErrorHandler] = None):
         self.formatter = SRTFormatter()
+        self.error_handler = error_handler or ErrorHandler()
+        self.logger = logging.getLogger(__name__)
 
-    def parse_srt_file(self, filepath: Path) -> List[SubtitleItem]:
+    def parse_srt_file(self, filepath: Path, show_errors: bool = True) -> List[SubtitleItem]:
         """
-        SRTファイルを読み込んで字幕リストを作成
+        SRTファイルを読み込んで字幕リストを作成 - 強化されたエラーハンドリング付き
 
         Args:
             filepath: SRTファイルパス
+            show_errors: エラーダイアログ表示可否
 
         Returns:
             List[SubtitleItem]: 字幕アイテムリスト
         """
         try:
+            # ファイル存在確認
+            if not filepath.exists():
+                if show_errors:
+                    error_info = create_file_operation_error(
+                        filepath,
+                        "SRTファイル読み込み",
+                        FileNotFoundError(f"ファイルが見つかりません: {filepath}"),
+                    )
+                    self.error_handler.handle_error(error_info)
+                return []
+
+            # ファイルサイズ確認
+            try:
+                file_size = filepath.stat().st_size
+                if file_size == 0:
+                    if show_errors:
+                        error_info = ErrorInfo(
+                            message="SRTファイルが空です",
+                            category=ErrorCategory.FILE_OPERATION,
+                            severity=ErrorSeverity.WARNING,
+                            suggestions=["正しいSRTファイルを選択してください"],
+                        )
+                        self.error_handler.handle_error(error_info, {"file_path": str(filepath)})
+                    return []
+
+                # 大きすぎるファイルの警告
+                max_file_size = 50 * 1024 * 1024  # 50MB
+                if file_size > max_file_size:
+                    if show_errors:
+                        error_info = ErrorInfo(
+                            message=f"SRTファイルが非常に大きいです ({file_size // 1024 // 1024}MB)",
+                            category=ErrorCategory.VALIDATION,
+                            severity=ErrorSeverity.WARNING,
+                            suggestions=[
+                                "ファイルサイズが正しいか確認してください",
+                                "処理に時間がかかる可能性があります",
+                            ],
+                        )
+                        self.error_handler.handle_error(error_info, {"file_size": file_size})
+
+            except OSError as e:
+                if show_errors:
+                    error_info = create_file_operation_error(filepath, "ファイル情報取得", e)
+                    self.error_handler.handle_error(error_info)
+                return []
+
             # エンコーディングを自動検出して読み込み
-            content = self._read_file_with_encoding(filepath)
-            return self.parse_srt_content(content)
+            try:
+                content = self._read_file_with_encoding_enhanced(filepath)
+            except Exception as e:
+                if show_errors:
+                    error_info = ErrorInfo(
+                        message="SRTファイルの読み込みに失敗しました",
+                        category=ErrorCategory.FILE_OPERATION,
+                        severity=ErrorSeverity.ERROR,
+                        technical_details=str(e),
+                        suggestions=[
+                            "ファイルが破損していないか確認してください",
+                            "ファイルのエンコーディングを確認してください",
+                            "別のSRTファイルで試してください",
+                        ],
+                    )
+                    self.error_handler.handle_error(error_info, {"file_path": str(filepath)})
+                return []
+
+            # SRT形式の解析
+            try:
+                subtitle_items = self.parse_srt_content(content)
+                self.logger.info(
+                    f"SRTファイル読み込み成功: {filepath.name} ({len(subtitle_items)}件)"
+                )
+                return subtitle_items
+            except Exception as e:
+                if show_errors:
+                    error_info = ErrorInfo(
+                        message="SRTファイルの形式解析に失敗しました",
+                        category=ErrorCategory.VALIDATION,
+                        severity=ErrorSeverity.ERROR,
+                        technical_details=str(e),
+                        suggestions=[
+                            "ファイルが正しいSRT形式であることを確認してください",
+                            "時間形式が正しいか確認してください (HH:MM:SS,mmm)",
+                            "字幕番号が連続しているか確認してください",
+                        ],
+                    )
+                    self.error_handler.handle_error(
+                        error_info,
+                        {
+                            "file_path": str(filepath),
+                            "content_preview": content[:500] if content else "",
+                        },
+                    )
+                return []
 
         except Exception as e:
-            print(f"SRT読み込みエラー: {e}")
+            if show_errors:
+                error_info = ErrorInfo(
+                    message="SRTファイル処理中に予期しないエラーが発生しました",
+                    category=ErrorCategory.SYSTEM,
+                    severity=ErrorSeverity.ERROR,
+                    technical_details=f"{type(e).__name__}: {str(e)}",
+                    suggestions=[
+                        "ファイルが他のアプリケーションで使用されていないか確認してください",
+                        "ファイルの権限を確認してください",
+                        "アプリケーションを再起動してみてください",
+                    ],
+                )
+                self.error_handler.handle_error(error_info, {"file_path": str(filepath)})
             return []
 
-    def _read_file_with_encoding(self, filepath: Path) -> str:
-        """エンコーディングを自動検出してファイルを読み込み"""
-        encodings = ["utf-8", "utf-8-sig", "shift_jis", "cp932", "euc-jp"]
+    def _read_file_with_encoding_enhanced(self, filepath: Path) -> str:
+        """エンコーディングを自動検出してファイルを読み込み - 強化版"""
+        encodings = ["utf-8", "utf-8-sig", "shift_jis", "cp932", "euc-jp", "iso-8859-1", "latin1"]
+
+        last_error = None
+        attempted_encodings = []
 
         for encoding in encodings:
             try:
+                self.logger.debug(f"エンコーディング試行: {encoding}")
                 with open(filepath, "r", encoding=encoding) as f:
-                    return f.read()
-            except UnicodeDecodeError:
+                    content = f.read()
+                    if content:  # 空でない場合
+                        self.logger.info(f"ファイル読み込み成功: {encoding} エンコーディング")
+                        return content
+                attempted_encodings.append(encoding)
+            except UnicodeDecodeError as e:
+                attempted_encodings.append(encoding)
+                last_error = e
+                self.logger.debug(f"エンコーディング {encoding} でデコード失敗: {e}")
+                continue
+            except Exception as e:
+                attempted_encodings.append(encoding)
+                last_error = e
+                self.logger.warning(f"エンコーディング {encoding} で読み込みエラー: {e}")
                 continue
 
-        # すべて失敗した場合はutf-8でエラーを発生させる
-        with open(filepath, "r", encoding="utf-8") as f:
-            return f.read()
+        # すべて失敗した場合の詳細エラー
+        error_detail = f"試行したエンコーディング: {', '.join(attempted_encodings)}"
+        if last_error:
+            error_detail += f", 最後のエラー: {last_error}"
+
+        raise UnicodeDecodeError("encoding detection failed", b"", 0, 1, error_detail)
+
+    def _read_file_with_encoding(self, filepath: Path) -> str:
+        """エンコーディングを自動検出してファイルを読み込み（レガシー版）"""
+        return self._read_file_with_encoding_enhanced(filepath)
 
     def parse_srt_content(self, content: str) -> List[SubtitleItem]:
         """
@@ -328,8 +639,7 @@ class SRTParser:
             # タイムコード行
             time_line = lines[1]
             time_match = re.match(
-                r"(\d{2}:\d{2}:\d{2},\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2},\d{3})",
-                time_line,
+                r"(\d{2}:\d{2}:\d{2},\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2},\d{3})", time_line
             )
 
             if not time_match:
