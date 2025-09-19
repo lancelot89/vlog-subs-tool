@@ -144,7 +144,10 @@ class TestSubtitleTableEditing:
 
         # 2行目を選択して削除
         table_view.table.setCurrentCell(1, 0)
-        table_view.delete_subtitle()
+        # Mock QMessageBox to avoid blocking dialog
+        from unittest.mock import patch
+        with patch('PySide6.QtWidgets.QMessageBox.question', return_value=QMessageBox.Yes):
+            table_view.delete_subtitle()
 
         # 行数が減っていることを確認
         new_count = table_view.table.rowCount()
@@ -180,11 +183,10 @@ class TestSubtitleTableEditing:
 
         # 連続する2行を選択
         table_view.table.setCurrentCell(0, 0)
-        table_view.table.setRangeSelected(
-            table_view.table.selectionModel().model().createIndex(0, 0),
-            table_view.table.selectionModel().model().createIndex(1, 3),
-            True,
-        )
+        # Use setRangeSelected with proper QTableWidgetSelectionRange
+        from PySide6.QtWidgets import QTableWidgetSelectionRange
+        selection_range = QTableWidgetSelectionRange(0, 0, 1, 3)
+        table_view.table.setRangeSelected(selection_range, True)
 
         # 結合前のテキストを記録
         first_text = table_view.table.item(0, 3).text()
@@ -300,8 +302,10 @@ class TestSubtitleTableEditing:
         # 一括削除操作（単一削除を繰り返し）
         original_count = table_view.table.rowCount()
         # 複数回削除を実行
-        for _ in range(3):
-            table_view.delete_subtitle()
+        from unittest.mock import patch
+        with patch('PySide6.QtWidgets.QMessageBox.question', return_value=QMessageBox.Yes):
+            for _ in range(3):
+                table_view.delete_subtitle()
 
         # 削除された行数を確認
         new_count = table_view.table.rowCount()
