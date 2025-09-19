@@ -15,9 +15,9 @@ from PySide6.QtCore import QTimer, pyqtSignal
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QProgressBar, QProgressDialog
 
-from app.core.models import SubtitleItem
+from app.core.models import SubtitleItem, ProjectSettings
 from app.ui.extraction_worker import ExtractionWorker
-from app.ui.views.player_view import VideoPlayerView
+from app.ui.views.player_view import PlayerView
 from app.ui.views.table_view import SubtitleTableView
 
 
@@ -72,7 +72,7 @@ class TestVideoPreviewSync:
     @pytest.fixture
     def player_view(self, qapp):
         """動画プレーヤービューのフィクスチャ"""
-        player = VideoPlayerView()
+        player = PlayerView()
         player.show()
         return player
 
@@ -237,9 +237,10 @@ class TestProgressDisplays:
     """プログレス表示テスト"""
 
     @pytest.fixture
-    def extraction_worker(self, qapp):
+    def extraction_worker(self, qapp, test_video_with_subtitles):
         """抽出ワーカーのフィクスチャ"""
-        worker = ExtractionWorker()
+        settings = ProjectSettings()
+        worker = ExtractionWorker(str(test_video_with_subtitles), settings)
         return worker
 
     def test_extraction_progress_initialization(self, extraction_worker):

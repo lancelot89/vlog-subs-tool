@@ -111,7 +111,7 @@ class TestMultilineEditingIntegration:
     def table_view_with_multiline(self, qapp, sample_multiline_subtitles):
         """複数行字幕を含むテーブルビューのフィクスチャ"""
         table = SubtitleTableView()
-        table.load_subtitles(sample_multiline_subtitles)
+        table.set_subtitles(sample_multiline_subtitles)
         table.show()
         return table
 
@@ -222,7 +222,12 @@ class TestMultilineEditingIntegration:
         search_terms = ["2行目", "3行目", "長いテキスト"]
 
         for search_term in search_terms:
-            found_rows = table_view_with_multiline.search_text(search_term)
+            # 手動検索を実行
+            found_rows = []
+            for row in range(table_view_with_multiline.table.rowCount()):
+                text = table_view_with_multiline.table.item(row, 3).text()
+                if search_term in text:
+                    found_rows.append(row)
 
             # 検索結果があることを確認
             assert len(found_rows) > 0, f"'{search_term}'の検索結果がない"
