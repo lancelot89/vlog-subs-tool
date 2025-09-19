@@ -268,7 +268,7 @@ jobs:
         echo "changelog=$CHANGELOG_ESCAPED" >> $GITHUB_OUTPUT
 
     - name: Download all artifacts
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v5
 
     - name: Create Release
       uses: softprops/action-gh-release@v1
