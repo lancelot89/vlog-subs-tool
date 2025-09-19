@@ -16,7 +16,7 @@ from PySide6.QtCore import QTimer
 from app.core.extractor.detector import SubtitleDetector
 from app.core.extractor.ocr import SimplePaddleOCREngine
 from app.core.format.srt import SRTWriter
-from app.core.models import SubtitleItem
+from app.core.models import SubtitleItem, ProjectSettings
 from app.ui.extraction_worker import ExtractionWorker
 
 
@@ -52,7 +52,8 @@ class TestOCRFlowIntegration:
 
     def test_subtitle_detector_initialization(self):
         """字幕検出器の初期化テスト"""
-        detector = SubtitleDetector()
+        settings = ProjectSettings()
+        detector = SubtitleDetector(settings)
 
         # 基本的な初期化が正しく行われることを確認
         assert hasattr(detector, 'detect_subtitles'), "detect_subtitlesメソッドが存在しない"
@@ -214,7 +215,8 @@ class TestOCRFlowIntegration:
 
     def test_subtitle_detection_with_video(self, mock_video_file):
         """動画ファイルでの字幕検出テスト"""
-        detector = SubtitleDetector()
+        settings = ProjectSettings()
+        detector = SubtitleDetector(settings)
 
         try:
             # 字幕検出を実行
@@ -235,7 +237,8 @@ class TestOCRFlowIntegration:
 
     def test_error_handling_in_pipeline(self):
         """パイプラインでのエラーハンドリングテスト"""
-        detector = SubtitleDetector()
+        settings = ProjectSettings()
+        detector = SubtitleDetector(settings)
 
         # 無効な動画パスでのテスト
         with pytest.raises(Exception):
@@ -252,7 +255,8 @@ class TestOCRFlowIntegration:
         """完全ワークフローのシミュレーション"""
         try:
             # 1. 字幕検出
-            detector = SubtitleDetector()
+            settings = ProjectSettings()
+        detector = SubtitleDetector(settings)
             subtitles = detector.detect_subtitles(str(mock_video_file))
 
             # 検出結果がない場合はダミーデータを作成

@@ -198,9 +198,15 @@ class TestVideoPreviewSync:
         # プレーヤーと字幕テーブルの同期（実際のAPIでは手動設定）
         player_view.set_subtitles(subtitles)
 
-        # 字幕のタイミングを編集
+        # 字幕のタイミングを編集（テーブルアイテムを直接更新）
         modified_subtitle = SubtitleItem(2, 2000, 4000, "編集された字幕")  # 元: 3500-5500
-        table_view.update_subtitle_at_row(1, modified_subtitle)
+
+        # テーブルの該当行を直接更新
+        row = 1
+        table_view.table.item(row, 0).setText(str(modified_subtitle.index))  # インデックス
+        table_view.table.item(row, 1).setText(table_view.format_time(modified_subtitle.start_ms))  # 開始時間
+        table_view.table.item(row, 2).setText(table_view.format_time(modified_subtitle.end_ms))    # 終了時間
+        table_view.table.item(row, 3).setText(modified_subtitle.text)  # テキスト
 
         # 編集後の同期を確認
         player_view.seek_to_time(3000)  # 3秒位置
