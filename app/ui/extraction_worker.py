@@ -3,18 +3,23 @@
 強化されたエラーハンドリングとユーザーフィードバック付き
 """
 
-from PySide6.QtCore import QThread, Signal, QObject, QTimer
-from typing import List, Optional, Dict, Any
 import logging
 import time
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-from app.core.models import SubtitleItem, ProjectSettings
-from app.core.extractor.detector import SubtitleDetector
+from PySide6.QtCore import QObject, QThread, QTimer, Signal
+
 from app.core.error_handler import (
-    ErrorHandler, ErrorInfo, ErrorCategory, ErrorSeverity,
-    create_ocr_error, create_file_operation_error
+    ErrorCategory,
+    ErrorHandler,
+    ErrorInfo,
+    ErrorSeverity,
+    create_file_operation_error,
+    create_ocr_error,
 )
+from app.core.extractor.detector import SubtitleDetector
+from app.core.models import ProjectSettings, SubtitleItem
 
 
 class ExtractionWorker(QThread):
@@ -22,16 +27,16 @@ class ExtractionWorker(QThread):
 
     # シグナル定義
     progress_updated = Signal(int, str)  # プログレス更新 (percentage, message)
-    subtitles_extracted = Signal(list)   # 抽出完了 (subtitle_items)
-    error_occurred = Signal(str)         # 基本エラー発生 (error_message) - 互換性のため維持
+    subtitles_extracted = Signal(list)  # 抽出完了 (subtitle_items)
+    error_occurred = Signal(str)  # 基本エラー発生 (error_message) - 互換性のため維持
     detailed_error_occurred = Signal(ErrorInfo, dict)  # 詳細エラー情報 (error_info, context)
-    cancelled = Signal()                 # キャンセル完了
+    cancelled = Signal()  # キャンセル完了
     recovery_suggested = Signal(str, dict)  # 復旧提案 (recovery_option, context)
 
     # 新しいシグナル
     operation_retrying = Signal(int, str)  # 再試行中 (attempt, reason)
-    partial_success = Signal(list, list)   # 部分成功 (extracted_subtitles, failed_frames)
-    
+    partial_success = Signal(list, list)  # 部分成功 (extracted_subtitles, failed_frames)
+
     def __init__(self, video_path: str, settings: ProjectSettings, parent_widget=None):
         super().__init__()
         self.video_path = video_path
@@ -58,9 +63,9 @@ class ExtractionWorker(QThread):
             "frames_processed": 0,
             "ocr_failures": 0,
             "memory_errors": 0,
-            "timeout_errors": 0
+            "timeout_errors": 0,
         }
-    
+
     def run(self):
         """ワーカーメイン処理 - 強化されたエラーハンドリング付き"""
         self.start_time = time.time()
@@ -92,7 +97,7 @@ class ExtractionWorker(QThread):
 
         finally:
             self._cleanup_and_log_stats()
-    
+
     def _on_progress_with_monitoring(self, percentage: int, message: str):
         """プログレスコールバック - 監視機能付き"""
         if self._is_cancelled:
@@ -119,10 +124,13 @@ class ExtractionWorker(QThread):
 
             if not video_path.exists():
                 error_info = create_file_operation_error(
-                    self.video_path, "動画ファイルの読み込み",
-                    FileNotFoundError(f"ファイルが見つかりません: {self.video_path}")
+                    self.video_path,
+                    "動画ファイルの読み込み",
+                    FileNotFoundError(f"ファイルが見つかりません: {self.video_path}"),
                 )
-                self.detailed_error_occurred.emit(error_info, {"validation_stage": "file_existence"})
+                self.detailed_error_occurred.emit(
+                    error_info, {"validation_stage": "file_existence"}
+                )
                 self.error_occurred.emit(error_info.message)  # 互換性のため
                 return False
 
@@ -131,7 +139,7 @@ class ExtractionWorker(QThread):
                     message="指定されたパスはファイルではありません",
                     category=ErrorCategory.VALIDATION,
                     severity=ErrorSeverity.ERROR,
-                    technical_details=f"Path is not a file: {self.video_path}"
+                    technical_details=f"Path is not a file: {self.video_path}",
                 )
                 self.detailed_error_occurred.emit(error_info, {"validation_stage": "file_type"})
                 self.error_occurred.emit(error_info.message)
@@ -144,7 +152,7 @@ class ExtractionWorker(QThread):
                     message="動画ファイルが空です",
                     category=ErrorCategory.VALIDATION,
                     severity=ErrorSeverity.ERROR,
-                    suggestions=["別の動画ファイルを選択してください"]
+                    suggestions=["別の動画ファイルを選択してください"],
                 )
                 self.detailed_error_occurred.emit(error_info, {"validation_stage": "file_size"})
                 self.error_occurred.emit(error_info.message)
@@ -166,7 +174,9 @@ class ExtractionWorker(QThread):
                 return False
 
             try:
-                self.progress_updated.emit(5 * attempt, f"OCRエンジン初期化中... ({attempt}/{self.max_retries})")
+                self.progress_updated.emit(
+                    5 * attempt, f"OCRエンジン初期化中... ({attempt}/{self.max_retries})"
+                )
                 self.detector = SubtitleDetector(self.settings)
                 self.logger.info(f"検出器初期化成功 (試行 {attempt}/{self.max_retries})")
                 return True
@@ -187,10 +197,12 @@ class ExtractionWorker(QThread):
                         suggestions=[
                             "アプリケーションを再起動してください",
                             "システムのメモリが十分にあることを確認してください",
-                            "他のアプリケーションを終了してリソースを解放してください"
-                        ]
+                            "他のアプリケーションを終了してリソースを解放してください",
+                        ],
                     )
-                    self.detailed_error_occurred.emit(error_info, {"initialization_attempts": attempt})
+                    self.detailed_error_occurred.emit(
+                        error_info, {"initialization_attempts": attempt}
+                    )
                     self.error_occurred.emit(error_info.message)
                     return False
 
@@ -229,7 +241,7 @@ class ExtractionWorker(QThread):
 
         # 統計ログ
         self._log_cancellation_stats()
-    
+
     def cleanup(self):
         """リソースクリーンアップ - 強化版"""
         try:
@@ -238,7 +250,7 @@ class ExtractionWorker(QThread):
                 self.detector = None
 
             # エラーハンドラーのクリーンアップ
-            if hasattr(self, 'error_handler'):
+            if hasattr(self, "error_handler"):
                 del self.error_handler
 
         except Exception as e:
@@ -262,12 +274,12 @@ class ExtractionWorker(QThread):
                 suggestions=[
                     "他のアプリケーションを終了してメモリを解放してください",
                     "より小さい解像度で処理を実行してください",
-                    "システムを再起動してください"
+                    "システムを再起動してください",
                 ],
                 recovery_options={
                     "低解像度で再試行": lambda: self._retry_with_lower_resolution(),
-                    "部分抽出を試行": lambda: self._try_partial_extraction()
-                }
+                    "部分抽出を試行": lambda: self._try_partial_extraction(),
+                },
             )
 
             if self._attempt_recovery_extraction(error_info):
@@ -284,11 +296,9 @@ class ExtractionWorker(QThread):
                 technical_details=str(e),
                 suggestions=[
                     "より短い動画で試してください",
-                    "設定でフレームサンプリング率を下げてください"
+                    "設定でフレームサンプリング率を下げてください",
                 ],
-                recovery_options={
-                    "部分抽出を試行": lambda: self._try_partial_extraction()
-                }
+                recovery_options={"部分抽出を試行": lambda: self._try_partial_extraction()},
             )
 
             if self._attempt_recovery_extraction(error_info):
@@ -336,8 +346,8 @@ class ExtractionWorker(QThread):
                 suggestions=[
                     "アプリケーションを再起動してください",
                     "別の動画ファイルで試してください",
-                    "設定を初期化してください"
-                ]
+                    "設定を初期化してください",
+                ],
             )
 
         # 復旧試行
@@ -351,7 +361,7 @@ class ExtractionWorker(QThread):
         context = {
             "recovery_attempt": True,
             "original_error": error_info.technical_details,
-            "performance_stats": self.performance_stats.copy()
+            "performance_stats": self.performance_stats.copy(),
         }
 
         self.detailed_error_occurred.emit(error_info, context)
@@ -380,7 +390,9 @@ class ExtractionWorker(QThread):
                 max_chars=self.settings.max_chars,
                 max_lines=min(1, self.settings.max_lines),  # 1行のみ
                 min_dur_sec=max(1.5, self.settings.min_dur_sec),  # 最小時間を延長
-                similarity_threshold=min(0.95, self.settings.similarity_threshold + 0.05)  # 類似度しきい値を厳格化
+                similarity_threshold=min(
+                    0.95, self.settings.similarity_threshold + 0.05
+                ),  # 類似度しきい値を厳格化
             )
 
             # 新しい検出器で部分抽出試行
@@ -410,8 +422,8 @@ class ExtractionWorker(QThread):
                 suggestions=[
                     "動画に字幕が含まれていることを確認してください",
                     "OCR設定（信頼度、領域指定など）を調整してみてください",
-                    "動画の画質や字幕の鮮明度を確認してください"
-                ]
+                    "動画の画質や字幕の鮮明度を確認してください",
+                ],
             )
             self.detailed_error_occurred.emit(error_info, {"result_count": 0})
             self.error_occurred.emit(error_info.message)
@@ -445,14 +457,11 @@ class ExtractionWorker(QThread):
             suggestions=[
                 "アプリケーションを再起動してください",
                 "システムの状態を確認してください",
-                "問題が継続する場合はサポートにお問い合わせください"
-            ]
+                "問題が継続する場合はサポートにお問い合わせください",
+            ],
         )
 
-        context = {
-            "unexpected_error": True,
-            "stack_trace": str(exception.__traceback__)
-        }
+        context = {"unexpected_error": True, "stack_trace": str(exception.__traceback__)}
 
         self.detailed_error_occurred.emit(error_info, context)
         self.error_occurred.emit(error_info.message)
@@ -465,13 +474,13 @@ class ExtractionWorker(QThread):
             severity=ErrorSeverity.ERROR,
             suggestions=[
                 "より短い動画で試してください",
-                "フレームサンプリング設定を調整してください"
-            ]
+                "フレームサンプリング設定を調整してください",
+            ],
         )
 
         context = {
             "timeout_seconds": self.operation_timeout,
-            "elapsed_time": time.time() - self.start_time if self.start_time else 0
+            "elapsed_time": time.time() - self.start_time if self.start_time else 0,
         }
 
         self.detailed_error_occurred.emit(error_info, context)
@@ -496,9 +505,9 @@ class ExtractionWorker(QThread):
 
         # メインスレッドにキャンセル要求を送信
         # 実際のスレッド終了処理はメインスレッド側で行う
-        self.recovery_suggested.emit("cancel_from_timeout", {
-            "reason": "timeout_deadlock_prevention"
-        })
+        self.recovery_suggested.emit(
+            "cancel_from_timeout", {"reason": "timeout_deadlock_prevention"}
+        )
 
     def _cleanup_and_log_stats(self):
         """クリーンアップと統計ログ"""

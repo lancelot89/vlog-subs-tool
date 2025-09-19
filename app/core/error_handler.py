@@ -4,13 +4,13 @@
 
 import logging
 import traceback
-from typing import Optional, Dict, Any, Callable, Union
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Callable, Dict, Optional, Union
 
-from PySide6.QtWidgets import QWidget, QMessageBox, QProgressDialog
-from PySide6.QtCore import QTimer, Signal, QObject
+from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import QMessageBox, QProgressDialog, QWidget
 
 
 class ErrorSeverity:
