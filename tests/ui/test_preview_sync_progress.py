@@ -11,11 +11,11 @@ from unittest.mock import Mock, patch
 import cv2
 import numpy as np
 import pytest
-from PySide6.QtCore import QTimer, pyqtSignal
+from PySide6.QtCore import QTimer, Signal
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QProgressBar, QProgressDialog
 
-from app.core.models import SubtitleItem, ProjectSettings
+from app.core.models import ProjectSettings, SubtitleItem
 from app.ui.extraction_worker import ExtractionWorker
 from app.ui.views.player_view import PlayerView
 from app.ui.views.table_view import SubtitleTableView
@@ -25,10 +25,10 @@ from app.ui.views.table_view import SubtitleTableView
 def test_video_with_subtitles():
     """字幕付きテスト動画のフィクスチャ（モジュールスコープ）"""
     # テスト動画を作成
-    with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as f:
+    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as f:
         video_path = Path(f.name)
 
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     out = cv2.VideoWriter(str(video_path), fourcc, 30.0, (640, 480))
 
     # 10秒間の動画を作成
@@ -45,8 +45,7 @@ def test_video_with_subtitles():
 
         # 時間表示
         time_text = f"{i/30:.1f}s"
-        cv2.putText(frame, time_text, (10, 30),
-                   cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        cv2.putText(frame, time_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
 
         out.write(frame)
 
@@ -84,7 +83,9 @@ class TestVideoPreviewSync:
         table.show()
         return table
 
-    def test_player_subtitle_sync_initialization(self, player_view, table_view, test_video_with_subtitles):
+    def test_player_subtitle_sync_initialization(
+        self, player_view, table_view, test_video_with_subtitles
+    ):
         """プレーヤーと字幕同期の初期化テスト"""
         video_path, subtitles = test_video_with_subtitles
 
@@ -99,9 +100,11 @@ class TestVideoPreviewSync:
         player_view.set_subtitles(subtitles)
 
         # 同期が設定されていることを確認（プレーヤーに字幕が設定されている）
-        assert hasattr(player_view, 'set_subtitles'), "set_subtitlesメソッドが存在しない"
+        assert hasattr(player_view, "set_subtitles"), "set_subtitlesメソッドが存在しない"
 
-    def test_subtitle_selection_updates_player_position(self, player_view, table_view, test_video_with_subtitles):
+    def test_subtitle_selection_updates_player_position(
+        self, player_view, table_view, test_video_with_subtitles
+    ):
         """字幕選択でプレーヤー位置が更新されるテスト"""
         video_path, subtitles = test_video_with_subtitles
 
@@ -122,9 +125,13 @@ class TestVideoPreviewSync:
         current_position = expected_position + 200  # 誤差を含む仮の位置
 
         # 多少の誤差を許容
-        assert abs(current_position - expected_position) < 1000, f"プレーヤー位置が正しくない: {current_position} != {expected_position}"
+        assert (
+            abs(current_position - expected_position) < 1000
+        ), f"プレーヤー位置が正しくない: {current_position} != {expected_position}"
 
-    def test_player_position_updates_subtitle_selection(self, player_view, table_view, test_video_with_subtitles):
+    def test_player_position_updates_subtitle_selection(
+        self, player_view, table_view, test_video_with_subtitles
+    ):
         """プレーヤー位置で字幕選択が更新されるテスト"""
         video_path, subtitles = test_video_with_subtitles
 
@@ -148,9 +155,13 @@ class TestVideoPreviewSync:
                 expected_row = i
                 break
 
-        assert selected_row == expected_row, f"字幕選択が正しくない: {selected_row} != {expected_row}"
+        assert (
+            selected_row == expected_row
+        ), f"字幕選択が正しくない: {selected_row} != {expected_row}"
 
-    def test_subtitle_highlighting_during_playback(self, player_view, table_view, test_video_with_subtitles):
+    def test_subtitle_highlighting_during_playback(
+        self, player_view, table_view, test_video_with_subtitles
+    ):
         """再生中の字幕ハイライトテスト"""
         video_path, subtitles = test_video_with_subtitles
 
@@ -183,7 +194,9 @@ class TestVideoPreviewSync:
                     break
 
             if expected_subtitle is not None:
-                assert current_row == expected_subtitle, f"位置{position}msで字幕{expected_subtitle}がハイライトされていない"
+                assert (
+                    current_row == expected_subtitle
+                ), f"位置{position}msで字幕{expected_subtitle}がハイライトされていない"
 
         # 再生停止
         player_view.stop()  # 停止
@@ -204,8 +217,12 @@ class TestVideoPreviewSync:
         # テーブルの該当行を直接更新
         row = 1
         table_view.table.item(row, 0).setText(str(modified_subtitle.index))  # インデックス
-        table_view.table.item(row, 1).setText(table_view.format_time(modified_subtitle.start_ms))  # 開始時間
-        table_view.table.item(row, 2).setText(table_view.format_time(modified_subtitle.end_ms))    # 終了時間
+        table_view.table.item(row, 1).setText(
+            table_view.format_time(modified_subtitle.start_ms)
+        )  # 開始時間
+        table_view.table.item(row, 2).setText(
+            table_view.format_time(modified_subtitle.end_ms)
+        )  # 終了時間
         table_view.table.item(row, 3).setText(modified_subtitle.text)  # テキスト
 
         # 編集後の同期を確認
@@ -223,7 +240,7 @@ class TestVideoPreviewSync:
             start_ms = i * 1000
             end_ms = start_ms + 500
             text = f"字幕{i+1}"
-            many_subtitles.append(SubtitleItem(i+1, start_ms, end_ms, text))
+            many_subtitles.append(SubtitleItem(i + 1, start_ms, end_ms, text))
 
         # 字幕を読み込み
         table_view.set_subtitles(many_subtitles)
@@ -261,8 +278,8 @@ class TestProgressDisplays:
     def test_extraction_progress_initialization(self, extraction_worker):
         """抽出プログレス初期化テスト"""
         # プログレス関連のシグナルが存在することを確認
-        assert hasattr(extraction_worker, 'progress_updated'), "プログレス更新シグナルが存在しない"
-        assert hasattr(extraction_worker, 'error_occurred'), "エラーシグナルが存在しない"
+        assert hasattr(extraction_worker, "progress_updated"), "プログレス更新シグナルが存在しない"
+        assert hasattr(extraction_worker, "error_occurred"), "エラーシグナルが存在しない"
 
     def test_progress_signal_emission(self, extraction_worker, qapp):
         """プログレスシグナル発行テスト"""
@@ -288,7 +305,9 @@ class TestProgressDisplays:
 
         # シグナルが正しく受信されることを確認
         assert progress_values == test_progress_values, "プログレス値が正しく受信されていない"
-        assert status_messages == test_status_messages, "ステータスメッセージが正しく受信されていない"
+        assert (
+            status_messages == test_status_messages
+        ), "ステータスメッセージが正しく受信されていない"
 
     def test_progress_dialog_creation(self, qapp):
         """プログレスダイアログ作成テスト"""
@@ -315,7 +334,9 @@ class TestProgressDisplays:
 
         for value in test_values:
             progress_bar.setValue(value)
-            assert progress_bar.value() == value, f"プログレスバーの値が正しくない: {progress_bar.value()} != {value}"
+            assert (
+                progress_bar.value() == value
+            ), f"プログレスバーの値が正しくない: {progress_bar.value()} != {value}"
 
     def test_long_operation_progress_simulation(self, extraction_worker, qapp):
         """長時間操作のプログレスシミュレーションテスト"""
@@ -340,7 +361,7 @@ class TestProgressDisplays:
             (50, "フレーム抽出中 (2/4)"),
             (75, "OCR処理中"),
             (90, "結果整理中"),
-            (100, "完了")
+            (100, "完了"),
         ]
 
         for progress, status in operation_steps:
@@ -361,7 +382,7 @@ class TestProgressDisplays:
         extraction_worker.cancel()
 
         # キャンセルシグナルが存在することを確認
-        assert hasattr(extraction_worker, 'cancelled'), "キャンセルシグナルが存在しない"
+        assert hasattr(extraction_worker, "cancelled"), "キャンセルシグナルが存在しない"
 
     def test_indeterminate_progress(self, qapp):
         """不確定プログレスのテスト"""
@@ -417,7 +438,7 @@ class TestProgressDisplays:
             error_message = message
 
         # エラーシグナルを接続（存在する場合）
-        if hasattr(extraction_worker, 'error_occurred'):
+        if hasattr(extraction_worker, "error_occurred"):
             extraction_worker.error_occurred.connect(on_error)
 
             # エラーをシミュレート
@@ -430,8 +451,8 @@ class TestProgressDisplays:
 
     def test_progress_with_file_operations(self, qapp):
         """ファイル操作でのプログレステスト"""
-        import tempfile
         import os
+        import tempfile
 
         # 一時ファイルを作成してプログレス付きで処理
         temp_files = []

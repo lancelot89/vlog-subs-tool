@@ -58,7 +58,9 @@ class TestSubtitleTableEditing:
         # ダブルクリックで編集モードに入る
         item = table_view.table.item(0, 3)
         rect = table_view.table.visualItemRect(item)
-        QTest.mouseDblClick(table_view.table.viewport(), Qt.LeftButton, Qt.NoModifier, rect.center())
+        QTest.mouseDblClick(
+            table_view.table.viewport(), Qt.LeftButton, Qt.NoModifier, rect.center()
+        )
 
         # 新しいテキストを入力
         new_text = "編集されたテキスト"
@@ -83,7 +85,9 @@ class TestSubtitleTableEditing:
         # 編集モードに入る
         item = table_view.table.item(1, 3)
         rect = table_view.table.visualItemRect(item)
-        QTest.mouseDblClick(table_view.table.viewport(), Qt.LeftButton, Qt.NoModifier, rect.center())
+        QTest.mouseDblClick(
+            table_view.table.viewport(), Qt.LeftButton, Qt.NoModifier, rect.center()
+        )
 
         # 複数行テキストを入力
         new_multiline_text = "新しい1行目\n新しい2行目"
@@ -179,7 +183,7 @@ class TestSubtitleTableEditing:
         table_view.table.setRangeSelected(
             table_view.table.selectionModel().model().createIndex(0, 0),
             table_view.table.selectionModel().model().createIndex(1, 3),
-            True
+            True,
         )
 
         # 結合前のテキストを記録
@@ -205,7 +209,9 @@ class TestSubtitleTableEditing:
         # ダブルクリックで編集を試みる
         item = table_view.table.item(0, 1)
         rect = table_view.table.visualItemRect(item)
-        QTest.mouseDblClick(table_view.table.viewport(), Qt.LeftButton, Qt.NoModifier, rect.center())
+        QTest.mouseDblClick(
+            table_view.table.viewport(), Qt.LeftButton, Qt.NoModifier, rect.center()
+        )
 
         # 時間列は編集不可であることを確認
         flags = item.flags()
@@ -238,12 +244,7 @@ class TestSubtitleTableEditing:
         rect = table_view.table.visualItemRect(item)
 
         # 右クリックメニューを開く
-        QTest.mouseClick(
-            table_view.table.viewport(),
-            Qt.RightButton,
-            Qt.NoModifier,
-            rect.center()
-        )
+        QTest.mouseClick(table_view.table.viewport(), Qt.RightButton, Qt.NoModifier, rect.center())
 
         # コンテキストメニューが表示されることを確認（実装依存）
         # この部分は実際のメニュー実装に応じて調整が必要
@@ -257,7 +258,9 @@ class TestSubtitleTableEditing:
         table_view.table.setCurrentCell(0, 3)
         item = table_view.table.item(0, 3)
         rect = table_view.table.visualItemRect(item)
-        QTest.mouseDblClick(table_view.table.viewport(), Qt.LeftButton, Qt.NoModifier, rect.center())
+        QTest.mouseDblClick(
+            table_view.table.viewport(), Qt.LeftButton, Qt.NoModifier, rect.center()
+        )
 
         new_text = "変更されたテキスト"
         QTest.keyClicks(table_view.table, new_text)

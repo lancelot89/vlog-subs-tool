@@ -12,16 +12,16 @@ import numpy as np
 import pytest
 
 from app.core.extractor.sampler import VideoSampler
-from app.core.format.srt import SRTReader, SRTWriter
+from app.core.format.srt import SRTFormatter, SRTParser
 from app.core.models import SubtitleItem
 
 
 class TestVideoFormatSupport:
     """動画フォーマット対応テスト"""
 
-    def create_test_video(self, format_ext, codec='mp4v', duration_seconds=3):
+    def create_test_video(self, format_ext, codec="mp4v", duration_seconds=3):
         """テスト用動画ファイルを作成"""
-        with tempfile.NamedTemporaryFile(suffix=f'.{format_ext}', delete=False) as f:
+        with tempfile.NamedTemporaryFile(suffix=f".{format_ext}", delete=False) as f:
             video_path = Path(f.name)
 
         # OpenCVで動画を作成
@@ -35,18 +35,22 @@ class TestVideoFormatSupport:
             # 黒背景に白文字で時間を表示
             frame = np.zeros((480, 640, 3), dtype=np.uint8)
             time_text = f"{i/fps:.1f}s"
-            cv2.putText(frame, time_text, (250, 240),
-                       cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+            cv2.putText(
+                frame, time_text, (250, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2
+            )
             out.write(frame)
 
         out.release()
         return video_path
 
-    @pytest.mark.parametrize("format_ext,codec", [
-        ("mp4", "mp4v"),
-        ("avi", "XVID"),
-        ("mov", "mp4v"),
-    ])
+    @pytest.mark.parametrize(
+        "format_ext,codec",
+        [
+            ("mp4", "mp4v"),
+            ("avi", "XVID"),
+            ("mov", "mp4v"),
+        ],
+    )
     def test_video_format_reading(self, format_ext, codec):
         """各種動画フォーマットの読み込みテスト"""
         video_path = None
@@ -63,8 +67,8 @@ class TestVideoFormatSupport:
 
             # フレームデータの形式確認
             first_frame = frames[0]
-            assert hasattr(first_frame, 'frame'), "フレームデータが正しくない"
-            assert hasattr(first_frame, 'timestamp_ms'), "タイムスタンプが正しくない"
+            assert hasattr(first_frame, "frame"), "フレームデータが正しくない"
+            assert hasattr(first_frame, "timestamp_ms"), "タイムスタンプが正しくない"
             assert first_frame.frame.shape == (480, 640, 3), "フレームサイズが正しくない"
 
         except Exception as e:
@@ -77,7 +81,7 @@ class TestVideoFormatSupport:
     def test_corrupted_video_handling(self):
         """破損した動画ファイルの処理テスト"""
         # 不正な動画ファイルを作成
-        with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as f:
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as f:
             corrupted_path = Path(f.name)
             f.write(b"This is not a video file")
 
@@ -151,26 +155,29 @@ class TestSRTFormatSupport:
             SubtitleItem(4, 10000, 12000, "長い字幕テキストのテスト。" * 5),
         ]
 
-    @pytest.mark.parametrize("encoding", [
-        "utf-8",
-        "utf-8-sig",  # BOM付きUTF-8
-        "utf-16",
-        "shift_jis",
-        "euc-jp",
-    ])
+    @pytest.mark.parametrize(
+        "encoding",
+        [
+            "utf-8",
+            "utf-8-sig",  # BOM付きUTF-8
+            "utf-16",
+            "shift_jis",
+            "euc-jp",
+        ],
+    )
     def test_srt_encoding_support(self, sample_subtitles, encoding):
         """SRT文字エンコーディング対応テスト"""
         srt_path = None
         try:
-            with tempfile.NamedTemporaryFile(suffix='.srt', delete=False, encoding=encoding) as f:
+            with tempfile.NamedTemporaryFile(suffix=".srt", delete=False, encoding=encoding) as f:
                 srt_path = Path(f.name)
 
             # 指定エンコーディングでSRTファイルを書き出し
-            writer = SRTWriter()
+            writer = SRTFormatter()
 
             # エンコーディングによっては特殊文字が扱えない場合がある
             try:
-                writer.write_srt_file(sample_subtitles, str(srt_path), encoding=encoding)
+                writer.save_srt_file(sample_subtitles, srt_path)
             except UnicodeEncodeError:
                 pytest.skip(f"エンコーディング {encoding} では特殊文字が扱えない")
 
@@ -178,11 +185,13 @@ class TestSRTFormatSupport:
             assert srt_path.exists(), f"SRTファイルが作成されていない ({encoding})"
 
             # SRTファイルを読み込み
-            reader = SRTReader()
-            loaded_subtitles = reader.read_srt_file(str(srt_path), encoding=encoding)
+            reader = SRTParser()
+            loaded_subtitles = reader.parse_srt_file(srt_path)
 
             # 読み込んだデータが元データと一致することを確認
-            assert len(loaded_subtitles) == len(sample_subtitles), f"字幕数が一致しない ({encoding})"
+            assert len(loaded_subtitles) == len(
+                sample_subtitles
+            ), f"字幕数が一致しない ({encoding})"
 
             for original, loaded in zip(sample_subtitles, loaded_subtitles):
                 assert loaded.start_ms == original.start_ms, f"開始時間が一致しない ({encoding})"
@@ -209,16 +218,18 @@ class TestSRTFormatSupport:
         ]
 
         for i, content in enumerate(malformed_contents):
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.srt', delete=False, encoding='utf-8') as f:
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".srt", delete=False, encoding="utf-8"
+            ) as f:
                 srt_path = Path(f.name)
                 f.write(content)
 
             try:
-                reader = SRTReader()
+                reader = SRTParser()
 
                 # 不正ファイルでもエラーハンドリングが働くことを確認
                 with pytest.raises(Exception):
-                    reader.read_srt_file(str(srt_path))
+                    reader.parse_srt_file(srt_path)
 
             finally:
                 if srt_path.exists():
@@ -241,20 +252,22 @@ class TestSRTFormatSupport:
 
         srt_path = None
         try:
-            with tempfile.NamedTemporaryFile(suffix='.srt', delete=False) as f:
+            with tempfile.NamedTemporaryFile(suffix=".srt", delete=False) as f:
                 srt_path = Path(f.name)
 
             # UTF-8で書き出し
-            writer = SRTWriter()
-            writer.write_srt_file(special_subtitles, str(srt_path), encoding='utf-8')
+            writer = SRTFormatter()
+            writer.save_srt_file(special_subtitles, srt_path)
 
             # 読み込み
-            reader = SRTReader()
-            loaded_subtitles = reader.read_srt_file(str(srt_path), encoding='utf-8')
+            reader = SRTParser()
+            loaded_subtitles = reader.parse_srt_file(srt_path)
 
             # 特殊文字が保持されていることを確認
             for original, loaded in zip(special_subtitles, loaded_subtitles):
-                assert loaded.text == original.text, f"特殊文字が保持されていない: '{loaded.text}' != '{original.text}'"
+                assert (
+                    loaded.text == original.text
+                ), f"特殊文字が保持されていない: '{loaded.text}' != '{original.text}'"
 
         finally:
             if srt_path and srt_path.exists():
@@ -271,21 +284,25 @@ class TestSRTFormatSupport:
 
         srt_path = None
         try:
-            with tempfile.NamedTemporaryFile(suffix='.srt', delete=False) as f:
+            with tempfile.NamedTemporaryFile(suffix=".srt", delete=False) as f:
                 srt_path = Path(f.name)
 
             # 書き出し
-            writer = SRTWriter()
-            writer.write_srt_file(precise_subtitles, str(srt_path))
+            writer = SRTFormatter()
+            writer.save_srt_file(precise_subtitles, srt_path)
 
             # 読み込み
-            reader = SRTReader()
-            loaded_subtitles = reader.read_srt_file(str(srt_path))
+            reader = SRTParser()
+            loaded_subtitles = reader.parse_srt_file(srt_path)
 
             # タイムスタンプの精度が保持されていることを確認
             for original, loaded in zip(precise_subtitles, loaded_subtitles):
-                assert loaded.start_ms == original.start_ms, f"開始時間の精度が失われた: {loaded.start_ms} != {original.start_ms}"
-                assert loaded.end_ms == original.end_ms, f"終了時間の精度が失われた: {loaded.end_ms} != {original.end_ms}"
+                assert (
+                    loaded.start_ms == original.start_ms
+                ), f"開始時間の精度が失われた: {loaded.start_ms} != {original.start_ms}"
+                assert (
+                    loaded.end_ms == original.end_ms
+                ), f"終了時間の精度が失われた: {loaded.end_ms} != {original.end_ms}"
 
         finally:
             if srt_path and srt_path.exists():
@@ -301,23 +318,23 @@ class TestSRTFormatSupport:
             start_ms = i * 2000
             end_ms = start_ms + 1500
             text = f"字幕 {i+1}: これは大容量ファイルのパフォーマンステスト用の長いテキストです。"
-            large_subtitles.append(SubtitleItem(i+1, start_ms, end_ms, text))
+            large_subtitles.append(SubtitleItem(i + 1, start_ms, end_ms, text))
 
         srt_path = None
         try:
-            with tempfile.NamedTemporaryFile(suffix='.srt', delete=False) as f:
+            with tempfile.NamedTemporaryFile(suffix=".srt", delete=False) as f:
                 srt_path = Path(f.name)
 
             # 書き出し時間を測定
-            writer = SRTWriter()
+            writer = SRTFormatter()
             start_time = time.time()
-            writer.write_srt_file(large_subtitles, str(srt_path))
+            writer.save_srt_file(large_subtitles, srt_path)
             write_time = time.time() - start_time
 
             # 読み込み時間を測定
-            reader = SRTReader()
+            reader = SRTParser()
             start_time = time.time()
-            loaded_subtitles = reader.read_srt_file(str(srt_path))
+            loaded_subtitles = reader.parse_srt_file(srt_path)
             read_time = time.time() - start_time
 
             # パフォーマンス検証
@@ -355,15 +372,17 @@ class TestFilePathHandling:
                 test_subtitles = [SubtitleItem(1, 1000, 3000, "テスト")]
 
                 # 書き出し
-                writer = SRTWriter()
-                writer.write_srt_file(test_subtitles, str(srt_path))
+                writer = SRTFormatter()
+                writer.save_srt_file(test_subtitles, srt_path)
 
                 # ファイルが作成されていることを確認
-                assert srt_path.exists(), f"Unicode文字を含むファイル名で作成できない: {unicode_name}"
+                assert (
+                    srt_path.exists()
+                ), f"Unicode文字を含むファイル名で作成できない: {unicode_name}"
 
                 # 読み込み
-                reader = SRTReader()
-                loaded_subtitles = reader.read_srt_file(str(srt_path))
+                reader = SRTParser()
+                loaded_subtitles = reader.parse_srt_file(srt_path)
 
                 assert len(loaded_subtitles) == 1, "Unicode文字ファイル名で読み込みできない"
 
@@ -392,12 +411,12 @@ class TestFilePathHandling:
             test_subtitles = [SubtitleItem(1, 1000, 3000, "長いパステスト")]
 
             # 書き出し
-            writer = SRTWriter()
-            writer.write_srt_file(test_subtitles, str(srt_path))
+            writer = SRTFormatter()
+            writer.save_srt_file(test_subtitles, srt_path)
 
             # 読み込み
-            reader = SRTReader()
-            loaded_subtitles = reader.read_srt_file(str(srt_path))
+            reader = SRTParser()
+            loaded_subtitles = reader.parse_srt_file(srt_path)
 
             assert len(loaded_subtitles) == 1, "長いパスで処理できない"
 
@@ -438,12 +457,12 @@ class TestFilePathHandling:
                 test_subtitles = [SubtitleItem(1, 1000, 3000, "特殊文字パステスト")]
 
                 # 書き出し
-                writer = SRTWriter()
-                writer.write_srt_file(test_subtitles, str(srt_path))
+                writer = SRTFormatter()
+                writer.save_srt_file(test_subtitles, srt_path)
 
                 # 読み込み
-                reader = SRTReader()
-                loaded_subtitles = reader.read_srt_file(str(srt_path))
+                reader = SRTParser()
+                loaded_subtitles = reader.parse_srt_file(srt_path)
 
                 assert len(loaded_subtitles) == 1, f"特殊文字パスで処理できない: {special_path}"
 

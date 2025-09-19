@@ -227,7 +227,9 @@ class TestReadingSpeedRule:
     def test_too_fast_reading(self):
         """読み速度過多のテスト"""
         rule = ReadingSpeedRule(max_chars_per_second=5.0)
-        subtitle = SubtitleItem(1, 1000, 2000, "これは非常に長いテキストで読み速度制限を超えています")
+        subtitle = SubtitleItem(
+            1, 1000, 2000, "これは非常に長いテキストで読み速度制限を超えています"
+        )
 
         results = rule.check([subtitle])
         assert len(results) == 1

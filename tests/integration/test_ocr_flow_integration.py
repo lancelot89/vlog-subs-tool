@@ -15,8 +15,8 @@ from PySide6.QtCore import QTimer
 
 from app.core.extractor.detector import SubtitleDetector
 from app.core.extractor.ocr import SimplePaddleOCREngine
-from app.core.format.srt import SRTWriter
-from app.core.models import SubtitleItem, ProjectSettings
+from app.core.format.srt import SRTFormatter
+from app.core.models import ProjectSettings, SubtitleItem
 from app.ui.extraction_worker import ExtractionWorker
 
 
@@ -30,7 +30,7 @@ class TestOCRFlowIntegration:
             video_path = Path(f.name)
 
         # 簡単なテスト動画を作成（黒い画面に白いテキスト）
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         out = cv2.VideoWriter(str(video_path), fourcc, 30.0, (640, 480))
 
         for i in range(90):  # 3秒間（30fps）
@@ -38,8 +38,15 @@ class TestOCRFlowIntegration:
 
             # 字幕テキストをフレームに描画
             if 30 <= i < 60:  # 1-2秒の間に字幕を表示
-                cv2.putText(frame, "Test Subtitle", (50, 400),
-                           cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+                cv2.putText(
+                    frame,
+                    "Test Subtitle",
+                    (50, 400),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    1,
+                    (255, 255, 255),
+                    2,
+                )
 
             out.write(frame)
 
@@ -56,14 +63,14 @@ class TestOCRFlowIntegration:
         detector = SubtitleDetector(settings)
 
         # 基本的な初期化が正しく行われることを確認
-        assert hasattr(detector, 'detect_subtitles'), "detect_subtitlesメソッドが存在しない"
+        assert hasattr(detector, "detect_subtitles"), "detect_subtitlesメソッドが存在しない"
 
     def test_ocr_engine_initialization(self):
         """OCRエンジン初期化テスト"""
         ocr_engine = SimplePaddleOCREngine()
 
         # 基本的な初期化が正しく行われることを確認
-        assert hasattr(ocr_engine, 'extract_text'), "extract_textメソッドが存在しない"
+        assert hasattr(ocr_engine, "extract_text"), "extract_textメソッドが存在しない"
 
     def test_ocr_with_test_image(self):
         """テスト画像でのOCR処理テスト"""
@@ -71,8 +78,9 @@ class TestOCRFlowIntegration:
 
         # テスト用画像を作成
         test_image = np.zeros((100, 300, 3), dtype=np.uint8)
-        cv2.putText(test_image, "Test Text", (10, 50),
-                   cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        cv2.putText(
+            test_image, "Test Text", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2
+        )
 
         # OCR処理を実行
         try:
@@ -103,7 +111,7 @@ class TestOCRFlowIntegration:
         subtitles = [
             SubtitleItem(1, 1000, 3000, "最初の字幕"),
             SubtitleItem(2, 4000, 6000, "2番目の字幕"),
-            SubtitleItem(3, 7000, 9000, "最後の字幕")
+            SubtitleItem(3, 7000, 9000, "最後の字幕"),
         ]
 
         # SRTファイルに書き出し
@@ -111,14 +119,14 @@ class TestOCRFlowIntegration:
             srt_path = Path(f.name)
 
         try:
-            writer = SRTWriter()
-            writer.write_srt_file(subtitles, str(srt_path))
+            formatter = SRTFormatter()
+            formatter.save_srt_file(subtitles, srt_path)
 
             # ファイルが作成されていることを確認
             assert srt_path.exists(), "SRTファイルが作成されていない"
 
             # ファイル内容の確認
-            content = srt_path.read_text(encoding='utf-8')
+            content = srt_path.read_text(encoding="utf-8")
             assert "最初の字幕" in content, "字幕テキストがファイルに含まれていない"
             assert "00:00:01,000 --> 00:00:03,000" in content, "タイムコードが正しくない"
 
@@ -127,7 +135,7 @@ class TestOCRFlowIntegration:
             if srt_path.exists():
                 srt_path.unlink()
 
-    @patch('app.core.extractor.ocr.PaddleOCR')
+    @patch("app.core.extractor.ocr.PaddleOCR")
     def test_ocr_engine_initialization_integration(self, mock_paddle_ocr):
         """OCRエンジン初期化の統合テスト"""
         # PaddleOCRのモック設定
@@ -149,8 +157,9 @@ class TestOCRFlowIntegration:
 
     def test_memory_efficiency_in_pipeline(self, mock_video_file):
         """パイプラインでのメモリ効率テスト"""
-        import psutil
         import os
+
+        import psutil
 
         process = psutil.Process(os.getpid())
         initial_memory = process.memory_info().rss
@@ -168,12 +177,14 @@ class TestOCRFlowIntegration:
         memory_increase = final_memory - initial_memory
 
         # 20MB以上のメモリ増加は異常とみなす
-        assert memory_increase < 20 * 1024 * 1024, f"メモリリークの可能性: {memory_increase / 1024 / 1024:.1f}MB増加"
+        assert (
+            memory_increase < 20 * 1024 * 1024
+        ), f"メモリリークの可能性: {memory_increase / 1024 / 1024:.1f}MB増加"
 
     def test_concurrent_processing_safety(self):
         """並行処理の安全性テスト"""
-        from concurrent.futures import ThreadPoolExecutor
         import threading
+        from concurrent.futures import ThreadPoolExecutor
 
         ocr_engine = SimplePaddleOCREngine()
         results = []
@@ -184,8 +195,15 @@ class TestOCRFlowIntegration:
             try:
                 # テスト用フレームを作成
                 frame = np.zeros((100, 300, 3), dtype=np.uint8)
-                cv2.putText(frame, f"Frame {frame_index}", (10, 50),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                cv2.putText(
+                    frame,
+                    f"Frame {frame_index}",
+                    (10, 50),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.7,
+                    (255, 255, 255),
+                    2,
+                )
 
                 # OCR処理
                 ocr_results = ocr_engine.extract_text(frame)
@@ -227,7 +245,9 @@ class TestOCRFlowIntegration:
 
             # 結果が空でも正常（テスト動画に字幕がない可能性があるため）
             for subtitle in subtitles:
-                assert isinstance(subtitle, SubtitleItem), f"字幕項目の型が正しくない: {type(subtitle)}"
+                assert isinstance(
+                    subtitle, SubtitleItem
+                ), f"字幕項目の型が正しくない: {type(subtitle)}"
                 assert subtitle.start_ms >= 0, "開始時間が無効"
                 assert subtitle.end_ms > subtitle.start_ms, "終了時間が無効"
 
@@ -256,14 +276,14 @@ class TestOCRFlowIntegration:
         try:
             # 1. 字幕検出
             settings = ProjectSettings()
-        detector = SubtitleDetector(settings)
+            detector = SubtitleDetector(settings)
             subtitles = detector.detect_subtitles(str(mock_video_file))
 
             # 検出結果がない場合はダミーデータを作成
             if not subtitles:
                 subtitles = [
                     SubtitleItem(1, 1000, 3000, "シミュレート字幕1"),
-                    SubtitleItem(2, 4000, 6000, "シミュレート字幕2")
+                    SubtitleItem(2, 4000, 6000, "シミュレート字幕2"),
                 ]
 
             # 2. SRTエクスポート
@@ -271,13 +291,13 @@ class TestOCRFlowIntegration:
                 srt_path = Path(f.name)
 
             try:
-                writer = SRTWriter()
-                writer.write_srt_file(subtitles, str(srt_path))
+                formatter = SRTFormatter()
+                formatter.save_srt_file(subtitles, srt_path)
 
                 # 3. 結果の検証
                 assert srt_path.exists(), "SRTファイルが作成されていない"
 
-                content = srt_path.read_text(encoding='utf-8')
+                content = srt_path.read_text(encoding="utf-8")
                 assert len(content) > 0, "SRTファイルが空"
 
                 # タイムコード形式の確認

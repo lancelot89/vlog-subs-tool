@@ -16,7 +16,7 @@ from app.core.csv.exporter import SubtitleCSVExporter
 from app.core.csv.importer import SubtitleCSVImporter
 from app.core.error_handler import ErrorHandler
 from app.core.extractor.sampler import VideoSampler
-from app.core.format.srt import SRTReader, SRTWriter
+from app.core.format.srt import SRTFormatter, SRTParser
 from app.core.models import SubtitleItem
 from app.core.project_manager import ProjectManager
 
@@ -26,7 +26,7 @@ class TestFilePermissionErrors:
 
     def test_read_permission_denied(self):
         """読み込み権限なしファイルのテスト"""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.srt', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".srt", delete=False) as f:
             srt_path = Path(f.name)
             f.write("1\n00:00:01,000 --> 00:00:03,000\nテスト字幕\n\n")
 
@@ -34,11 +34,11 @@ class TestFilePermissionErrors:
             # ファイルを読み取り専用にする（Windowsでは効果が限定的）
             os.chmod(str(srt_path), 0o000)
 
-            reader = SRTReader()
+            parser = SRTParser()
 
             # 権限エラーが適切に処理されることを確認
             with pytest.raises((PermissionError, OSError)):
-                reader.read_srt_file(str(srt_path))
+                parser.parse_srt_file(srt_path)
 
         except OSError:
             # OS によっては権限変更できない場合がある
@@ -64,11 +64,11 @@ class TestFilePermissionErrors:
             srt_path = temp_dir / "test.srt"
             test_subtitles = [SubtitleItem(1, 1000, 3000, "テスト")]
 
-            writer = SRTWriter()
+            writer = SRTFormatter()
 
             # 書き込み権限エラーが適切に処理されることを確認
             with pytest.raises((PermissionError, OSError)):
-                writer.write_srt_file(test_subtitles, str(srt_path))
+                writer.save_srt_file(test_subtitles, srt_path)
 
         except OSError:
             pytest.skip("権限変更がサポートされていない")
@@ -83,7 +83,7 @@ class TestFilePermissionErrors:
 
     def test_readonly_file_overwrite_attempt(self):
         """読み取り専用ファイルの上書き試行テスト"""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.srt', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".srt", delete=False) as f:
             srt_path = Path(f.name)
             f.write("元のデータ")
 
@@ -92,11 +92,11 @@ class TestFilePermissionErrors:
             os.chmod(str(srt_path), 0o444)
 
             test_subtitles = [SubtitleItem(1, 1000, 3000, "新しいデータ")]
-            writer = SRTWriter()
+            writer = SRTFormatter()
 
             # 読み取り専用ファイルの上書きでエラーが発生することを確認
             with pytest.raises((PermissionError, OSError)):
-                writer.write_srt_file(test_subtitles, str(srt_path))
+                writer.save_srt_file(test_subtitles, srt_path)
 
         except OSError:
             pytest.skip("権限変更がサポートされていない")
@@ -112,7 +112,7 @@ class TestFilePermissionErrors:
 class TestDiskSpaceErrors:
     """ディスク容量エラーのテスト"""
 
-    @patch('builtins.open')
+    @patch("builtins.open")
     def test_disk_full_simulation(self, mock_open):
         """ディスク容量不足のシミュレーションテスト"""
         # ディスク容量不足エラーをシミュレート
@@ -121,11 +121,11 @@ class TestDiskSpaceErrors:
         mock_open.return_value.__enter__.return_value = mock_file
 
         test_subtitles = [SubtitleItem(1, 1000, 3000, "テスト")]
-        writer = SRTWriter()
+        writer = SRTFormatter()
 
         # ディスク容量不足エラーが適切に処理されることを確認
         with pytest.raises(OSError):
-            writer.write_srt_file(test_subtitles, "/tmp/test.srt")
+            writer.save_srt_file(test_subtitles, Path("/tmp/test.srt"))
 
     def test_large_file_creation_failure(self):
         """大容量ファイル作成失敗のテスト"""
@@ -133,18 +133,18 @@ class TestDiskSpaceErrors:
         huge_subtitles = []
         for i in range(100000):  # 10万項目
             text = "非常に長いテキスト" * 100  # 長いテキスト
-            huge_subtitles.append(SubtitleItem(i+1, i*1000, (i+1)*1000, text))
+            huge_subtitles.append(SubtitleItem(i + 1, i * 1000, (i + 1) * 1000, text))
 
-        with tempfile.NamedTemporaryFile(suffix='.srt', delete=False) as f:
+        with tempfile.NamedTemporaryFile(suffix=".srt", delete=False) as f:
             srt_path = Path(f.name)
 
         try:
-            writer = SRTWriter()
+            writer = SRTFormatter()
 
             # 大容量ファイルの作成を試行（システムの制限に依存）
             # メモリ不足やディスク容量不足が発生する可能性
             try:
-                writer.write_srt_file(huge_subtitles, str(srt_path))
+                writer.save_srt_file(huge_subtitles, srt_path)
                 # 成功した場合、ファイルサイズを確認
                 if srt_path.exists():
                     file_size = srt_path.stat().st_size
@@ -164,7 +164,7 @@ class TestCorruptedFileHandling:
     def test_corrupted_video_file(self):
         """破損動画ファイルの処理テスト"""
         # 不正な動画ファイルを作成
-        with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as f:
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as f:
             corrupted_path = Path(f.name)
             f.write(b"This is not a video file content")
 
@@ -189,16 +189,18 @@ class TestCorruptedFileHandling:
         ]
 
         for i, content in enumerate(truncated_contents):
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.srt', delete=False, encoding='utf-8') as f:
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".srt", delete=False, encoding="utf-8"
+            ) as f:
                 srt_path = Path(f.name)
                 f.write(content)
 
             try:
-                reader = SRTReader()
+                reader = SRTParser()
 
                 # 不完全ファイルでもエラーハンドリングが働くことを確認
                 try:
-                    subtitles = reader.read_srt_file(str(srt_path))
+                    subtitles = reader.parse_srt_file(srt_path)
                     # 読み込めた場合は、部分的にでもデータが取得できることを確認
                     assert isinstance(subtitles, list), "部分的読み込みでもリストが返される"
                 except Exception:
@@ -212,19 +214,19 @@ class TestCorruptedFileHandling:
     def test_binary_data_in_text_file(self):
         """テキストファイルにバイナリデータが含まれる場合のテスト"""
         # バイナリデータを含むファイルを作成
-        with tempfile.NamedTemporaryFile(mode='wb', suffix='.srt', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="wb", suffix=".srt", delete=False) as f:
             binary_path = Path(f.name)
             # 正常なテキストとバイナリデータを混在
             f.write(b"1\n00:00:01,000 --> 00:00:03,000\n")
-            f.write(b"\x00\x01\x02\x03\xFF\xFE")  # バイナリデータ
+            f.write(b"\x00\x01\x02\x03\xff\xfe")  # バイナリデータ
             f.write(b"\n\n2\n00:00:04,000 --> 00:00:06,000\n\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e")
 
         try:
-            reader = SRTReader()
+            reader = SRTParser()
 
             # バイナリデータを含むファイルでもエラーハンドリングが働くことを確認
             with pytest.raises((UnicodeDecodeError, Exception)):
-                reader.read_srt_file(str(binary_path))
+                reader.parse_srt_file(binary_path)
 
         finally:
             if binary_path.exists():
@@ -234,17 +236,17 @@ class TestCorruptedFileHandling:
 class TestNetworkAndIOErrors:
     """ネットワークとI/Oエラーのテスト"""
 
-    @patch('pathlib.Path.exists')
+    @patch("pathlib.Path.exists")
     def test_file_disappeared_during_operation(self, mock_exists):
         """操作中にファイルが消失する場合のテスト"""
         # ファイルが存在すると最初は答えるが、実際のアクセス時には存在しない
         mock_exists.return_value = True
 
-        reader = SRTReader()
+        reader = SRTParser()
 
         # 存在しないファイルへのアクセスでエラーが適切に処理されることを確認
         with pytest.raises(FileNotFoundError):
-            reader.read_srt_file("nonexistent_file.srt")
+            reader.parse_srt_file(Path("nonexistent_file.srt"))
 
     def test_device_disconnection_simulation(self):
         """デバイス切断シミュレーションテスト"""
@@ -257,17 +259,17 @@ class TestNetworkAndIOErrors:
 
         for invalid_path in invalid_paths:
             try:
-                reader = SRTReader()
+                reader = SRTParser()
 
                 # デバイス切断時のエラーが適切に処理されることを確認
                 with pytest.raises((FileNotFoundError, OSError)):
-                    reader.read_srt_file(invalid_path)
+                    reader.parse_srt_file(invalid_path)
 
             except OSError:
                 # OSによってはパス形式自体がサポートされていない場合
                 continue
 
-    @patch('builtins.open')
+    @patch("builtins.open")
     def test_io_interrupt_during_read(self, mock_open):
         """読み込み中のI/O割り込みテスト"""
         # I/O割り込みエラーをシミュレート
@@ -275,13 +277,13 @@ class TestNetworkAndIOErrors:
         mock_file.read.side_effect = IOError("I/O operation interrupted")
         mock_open.return_value.__enter__.return_value = mock_file
 
-        reader = SRTReader()
+        reader = SRTParser()
 
         # I/O割り込みエラーが適切に処理されることを確認
         with pytest.raises(IOError):
-            reader.read_srt_file("test.srt")
+            reader.parse_srt_file(Path("test.srt"))
 
-    @patch('builtins.open')
+    @patch("builtins.open")
     def test_io_interrupt_during_write(self, mock_open):
         """書き込み中のI/O割り込みテスト"""
         # I/O割り込みエラーをシミュレート
@@ -290,28 +292,28 @@ class TestNetworkAndIOErrors:
         mock_open.return_value.__enter__.return_value = mock_file
 
         test_subtitles = [SubtitleItem(1, 1000, 3000, "テスト")]
-        writer = SRTWriter()
+        writer = SRTFormatter()
 
         # I/O割り込みエラーが適切に処理されることを確認
         with pytest.raises(IOError):
-            writer.write_srt_file(test_subtitles, "test.srt")
+            writer.save_srt_file(test_subtitles, Path("test.srt"))
 
 
 class TestMemoryErrors:
     """メモリエラーのテスト"""
 
-    @patch('app.core.format.srt.SRTWriter.write_srt_file')
+    @patch("app.core.format.srt.SRTFormatter.save_srt_file")
     def test_memory_exhaustion_during_write(self, mock_write):
         """書き込み中のメモリ不足テスト"""
         # メモリ不足エラーをシミュレート
         mock_write.side_effect = MemoryError("Out of memory")
 
         test_subtitles = [SubtitleItem(1, 1000, 3000, "テスト")]
-        writer = SRTWriter()
+        writer = SRTFormatter()
 
         # メモリ不足エラーが適切に処理されることを確認
         with pytest.raises(MemoryError):
-            writer.write_srt_file(test_subtitles, "test.srt")
+            writer.save_srt_file(test_subtitles, Path("test.srt"))
 
     def test_large_subtitle_list_handling(self):
         """大量字幕リストの処理テスト"""
@@ -320,13 +322,13 @@ class TestMemoryErrors:
             large_subtitles = []
             for i in range(50000):  # 5万項目
                 text = f"字幕{i}: " + "長いテキスト" * 10
-                large_subtitles.append(SubtitleItem(i+1, i*1000, (i+1)*1000, text))
+                large_subtitles.append(SubtitleItem(i + 1, i * 1000, (i + 1) * 1000, text))
 
             # メモリ効率的に処理されることを確認
             assert len(large_subtitles) == 50000, "大量データの生成に失敗"
 
             # CSVエクスポートでのメモリ効率をテスト
-            with tempfile.NamedTemporaryFile(suffix='.csv', delete=False) as f:
+            with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as f:
                 csv_path = Path(f.name)
 
             try:
@@ -336,7 +338,7 @@ class TestMemoryErrors:
                     subtitles=large_subtitles,
                     filepath=csv_path,
                     source_language="ja",
-                    target_language="en"
+                    target_language="en",
                 )
 
                 assert csv_path.exists(), "大量データのCSVエクスポートに失敗"
@@ -357,8 +359,8 @@ class TestErrorHandlerIntegration:
         handler = ErrorHandler()
 
         # 基本的な初期化が正しく行われることを確認
-        assert hasattr(handler, 'handle_error'), "handle_errorメソッドが存在しない"
-        assert hasattr(handler, 'log_error'), "log_errorメソッドが存在しない"
+        assert hasattr(handler, "handle_error"), "handle_errorメソッドが存在しない"
+        assert hasattr(handler, "log_error"), "log_errorメソッドが存在しない"
 
     def test_error_logging_functionality(self):
         """エラーログ機能のテスト"""
@@ -420,7 +422,9 @@ class TestProjectManagerErrorHandling:
     def test_invalid_project_file_handling(self):
         """無効なプロジェクトファイルの処理テスト"""
         # 無効なJSON形式のプロジェクトファイルを作成
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.subproj', delete=False, encoding='utf-8') as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".subproj", delete=False, encoding="utf-8"
+        ) as f:
             project_path = Path(f.name)
             f.write("{ invalid json content }")
 
@@ -438,7 +442,9 @@ class TestProjectManagerErrorHandling:
     def test_corrupted_project_data_recovery(self):
         """破損プロジェクトデータの回復テスト"""
         # 部分的に破損したプロジェクトファイルを作成
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.subproj', delete=False, encoding='utf-8') as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".subproj", delete=False, encoding="utf-8"
+        ) as f:
             project_path = Path(f.name)
             # 一部のフィールドが欠けているJSON
             f.write('{"version": "1.0", "subtitles": []}')  # 他の必要フィールドが欠けている

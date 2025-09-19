@@ -29,13 +29,15 @@ class TestMultilineTextDelegate:
             SubtitleItem(1, 1000, 3000, "単一行の字幕"),
             SubtitleItem(2, 4000, 6000, "複数行の字幕\n2行目のテキスト"),
             SubtitleItem(3, 7000, 9000, "3行の字幕\n2行目\n3行目"),
-            SubtitleItem(4, 10000, 12000, "長い複数行字幕\n非常に長いテキストが含まれている2行目\n短い3行目"),
+            SubtitleItem(
+                4, 10000, 12000, "長い複数行字幕\n非常に長いテキストが含まれている2行目\n短い3行目"
+            ),
         ]
 
     def test_multiline_editor_creation(self, delegate, qapp):
         """複数行エディター作成のテスト"""
-        from PySide6.QtWidgets import QWidget
         from PySide6.QtCore import QModelIndex
+        from PySide6.QtWidgets import QWidget
 
         parent = QWidget()
         index = QModelIndex()
@@ -47,13 +49,16 @@ class TestMultilineTextDelegate:
         assert isinstance(editor, QPlainTextEdit), "複数行エディターがQPlainTextEditでない"
 
         # ワードラップが設定されていることを確認
-        assert editor.wordWrapMode() == QTextOption.WrapAtWordBoundaryOrAnywhere, "ワードラップが正しく設定されていない"
+        assert (
+            editor.wordWrapMode() == QTextOption.WrapAtWordBoundaryOrAnywhere
+        ), "ワードラップが正しく設定されていない"
 
     def test_multiline_editor_data_setting(self, delegate, qapp):
         """複数行エディターへのデータ設定テスト"""
-        from PySide6.QtWidgets import QWidget
-        from PySide6.QtCore import QAbstractTableModel, QModelIndex
         from unittest.mock import Mock
+
+        from PySide6.QtCore import QAbstractTableModel, QModelIndex
+        from PySide6.QtWidgets import QWidget
 
         parent = QWidget()
 
@@ -79,9 +84,10 @@ class TestMultilineTextDelegate:
 
     def test_multiline_editor_data_getting(self, delegate, qapp):
         """複数行エディターからのデータ取得テスト"""
-        from PySide6.QtWidgets import QWidget
-        from PySide6.QtCore import QAbstractTableModel, QModelIndex
         from unittest.mock import Mock
+
+        from PySide6.QtCore import QAbstractTableModel, QModelIndex
+        from PySide6.QtWidgets import QWidget
 
         parent = QWidget()
 
@@ -122,7 +128,9 @@ class TestMultilineEditingIntegration:
             SubtitleItem(1, 1000, 3000, "単一行の字幕"),
             SubtitleItem(2, 4000, 6000, "複数行の字幕\n2行目のテキスト"),
             SubtitleItem(3, 7000, 9000, "3行の字幕\n2行目\n3行目"),
-            SubtitleItem(4, 10000, 12000, "長い複数行字幕\n非常に長いテキストが含まれている2行目\n短い3行目"),
+            SubtitleItem(
+                4, 10000, 12000, "長い複数行字幕\n非常に長いテキストが含まれている2行目\n短い3行目"
+            ),
         ]
 
     def test_multiline_display_in_table(self, table_view_with_multiline):
@@ -289,7 +297,9 @@ class TestMultilineEditingIntegration:
 
             # 元のテキストに戻っていることを確認
             undone_text = current_editor.toPlainText()
-            assert original_text in undone_text or len(undone_text) < len(new_text), "アンドゥが機能していない"
+            assert original_text in undone_text or len(undone_text) < len(
+                new_text
+            ), "アンドゥが機能していない"
 
             # リドゥ
             QTest.keyClick(current_editor, Qt.Key_Y, Qt.ControlModifier)
@@ -303,7 +313,7 @@ class TestMultilineEditingIntegration:
         table = table_view_with_multiline.table
 
         # 特殊な文字を含む複数行テキスト
-        special_multiline_text = "1行目：特殊文字\n2行目：タブ\t文字\n3行目：\"クォート\"文字"
+        special_multiline_text = '1行目：特殊文字\n2行目：タブ\t文字\n3行目："クォート"文字'
 
         # 編集
         table.setCurrentCell(1, 3)
@@ -339,7 +349,9 @@ class TestMultilineEditingIntegration:
             single_line_height = current_editor.fontMetrics().height()
 
             # 複数行を表示できる高さがあることを確認
-            assert editor_height >= single_line_height * 2, "エディターが複数行表示に適したサイズでない"
+            assert (
+                editor_height >= single_line_height * 2
+            ), "エディターが複数行表示に適したサイズでない"
 
             # 非常に長いテキストを入力
             very_long_text = "\n".join([f"非常に長い行のテキスト{i}" * 5 for i in range(5)])
@@ -347,4 +359,6 @@ class TestMultilineEditingIntegration:
 
             # スクロールバーが表示される、またはテキストが適切に表示されることを確認
             # （具体的な確認方法は実装に依存）
-            assert current_editor.toPlainText() == very_long_text, "長いテキストが正しく設定されていない"
+            assert (
+                current_editor.toPlainText() == very_long_text
+            ), "長いテキストが正しく設定されていない"
