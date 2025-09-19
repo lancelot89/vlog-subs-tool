@@ -21,53 +21,54 @@ from app.ui.views.player_view import PlayerView
 from app.ui.views.table_view import SubtitleTableView
 
 
+@pytest.fixture(scope="module")
+def test_video_with_subtitles():
+    """字幕付きテスト動画のフィクスチャ（モジュールスコープ）"""
+    # テスト動画を作成
+    with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as f:
+        video_path = Path(f.name)
+
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(str(video_path), fourcc, 30.0, (640, 480))
+
+    # 10秒間の動画を作成
+    for i in range(300):  # 10秒 × 30fps
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+
+        # 時間に応じて異なる背景色
+        if i < 90:  # 0-3秒: 青
+            frame[:, :, 0] = 100
+        elif i < 180:  # 3-6秒: 緑
+            frame[:, :, 1] = 100
+        else:  # 6-10秒: 赤
+            frame[:, :, 2] = 100
+
+        # 時間表示
+        time_text = f"{i/30:.1f}s"
+        cv2.putText(frame, time_text, (10, 30),
+                   cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+
+        out.write(frame)
+
+    out.release()
+
+    # 対応する字幕データ
+    subtitles = [
+        SubtitleItem(1, 1000, 3000, "最初の字幕 (1-3秒)"),
+        SubtitleItem(2, 3500, 5500, "2番目の字幕 (3.5-5.5秒)"),
+        SubtitleItem(3, 6000, 8000, "3番目の字幕 (6-8秒)"),
+        SubtitleItem(4, 8500, 9500, "最後の字幕 (8.5-9.5秒)"),
+    ]
+
+    yield video_path, subtitles
+
+    # クリーンアップ
+    if video_path.exists():
+        video_path.unlink()
+
+
 class TestVideoPreviewSync:
     """動画プレビュー同期テスト"""
-
-    @pytest.fixture
-    def test_video_with_subtitles(self):
-        """字幕付きテスト動画のフィクスチャ"""
-        # テスト動画を作成
-        with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as f:
-            video_path = Path(f.name)
-
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        out = cv2.VideoWriter(str(video_path), fourcc, 30.0, (640, 480))
-
-        # 10秒間の動画を作成
-        for i in range(300):  # 10秒 × 30fps
-            frame = np.zeros((480, 640, 3), dtype=np.uint8)
-
-            # 時間に応じて異なる背景色
-            if i < 90:  # 0-3秒: 青
-                frame[:, :, 0] = 100
-            elif i < 180:  # 3-6秒: 緑
-                frame[:, :, 1] = 100
-            else:  # 6-10秒: 赤
-                frame[:, :, 2] = 100
-
-            # 時間表示
-            time_text = f"{i/30:.1f}s"
-            cv2.putText(frame, time_text, (10, 30),
-                       cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-
-            out.write(frame)
-
-        out.release()
-
-        # 対応する字幕データ
-        subtitles = [
-            SubtitleItem(1, 1000, 3000, "最初の字幕 (1-3秒)"),
-            SubtitleItem(2, 3500, 5500, "2番目の字幕 (3.5-5.5秒)"),
-            SubtitleItem(3, 6000, 8000, "3番目の字幕 (6-8秒)"),
-            SubtitleItem(4, 8500, 9500, "最後の字幕 (8.5-9.5秒)"),
-        ]
-
-        yield video_path, subtitles
-
-        # クリーンアップ
-        if video_path.exists():
-            video_path.unlink()
 
     @pytest.fixture
     def player_view(self, qapp):
@@ -239,8 +240,9 @@ class TestProgressDisplays:
     @pytest.fixture
     def extraction_worker(self, qapp, test_video_with_subtitles):
         """抽出ワーカーのフィクスチャ"""
+        video_path, subtitles = test_video_with_subtitles
         settings = ProjectSettings()
-        worker = ExtractionWorker(str(test_video_with_subtitles), settings)
+        worker = ExtractionWorker(str(video_path), settings)
         return worker
 
     def test_extraction_progress_initialization(self, extraction_worker):

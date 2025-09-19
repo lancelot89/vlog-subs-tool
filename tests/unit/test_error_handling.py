@@ -12,8 +12,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from app.core.csv.exporter import CSVExporter
-from app.core.csv.importer import CSVImporter
+from app.core.csv.exporter import SubtitleCSVExporter
+from app.core.csv.importer import SubtitleCSVImporter
 from app.core.error_handler import ErrorHandler
 from app.core.extractor.sampler import VideoFrameSampler
 from app.core.format.srt import SRTReader, SRTWriter
@@ -330,11 +330,11 @@ class TestMemoryErrors:
                 csv_path = Path(f.name)
 
             try:
-                exporter = CSVExporter()
+                exporter = SubtitleCSVExporter()
                 # メモリ不足にならずに完了することを確認
                 exporter.export_for_translation(
                     subtitles=large_subtitles,
-                    output_path=str(csv_path),
+                    filepath=csv_path,
                     source_language="ja",
                     target_language="en"
                 )
