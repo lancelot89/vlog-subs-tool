@@ -54,9 +54,9 @@ class TestVideoFormatSupport:
             # テスト動画を作成
             video_path = self.create_test_video(format_ext, codec)
 
-            # VideoFrameSamplerで読み込み
-            sampler = VideoFrameSampler()
-            frames = sampler.sample_frames(str(video_path), fps=1.0)
+            # VideoSamplerで読み込み
+            sampler = VideoSampler(str(video_path), sample_fps=1.0)
+            frames = list(sampler.sample_frames())
 
             # フレームが正しく取得できることを確認
             assert len(frames) > 0, f"{format_ext}形式の動画からフレームを取得できない"
@@ -82,11 +82,11 @@ class TestVideoFormatSupport:
             f.write(b"This is not a video file")
 
         try:
-            sampler = VideoFrameSampler()
+            sampler = VideoSampler(str(corrupted_path), sample_fps=1.0)
 
             # 破損ファイルの処理でエラーハンドリングが働くことを確認
             with pytest.raises(Exception):
-                sampler.sample_frames(str(corrupted_path), fps=1.0)
+                list(sampler.sample_frames())
 
         finally:
             if corrupted_path.exists():
@@ -99,10 +99,10 @@ class TestVideoFormatSupport:
             # 長時間の動画を作成（10秒間）
             video_path = self.create_test_video("mp4", "mp4v", duration_seconds=10)
 
-            sampler = VideoFrameSampler()
+            sampler = VideoSampler(str(video_path), sample_fps=0.5)
 
             # 低いサンプリングレートで処理
-            frames = sampler.sample_frames(str(video_path), fps=0.5)
+            frames = list(sampler.sample_frames())
 
             # メモリ効率的に処理されていることを確認
             assert len(frames) == 5, "サンプリング数が正しくない"  # 10秒 × 0.5fps = 5フレーム

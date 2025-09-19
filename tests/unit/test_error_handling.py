@@ -169,11 +169,11 @@ class TestCorruptedFileHandling:
             f.write(b"This is not a video file content")
 
         try:
-            sampler = VideoFrameSampler()
+            sampler = VideoSampler(str(corrupted_path), sample_fps=1.0)
 
             # 破損動画ファイルの処理でエラーが適切に処理されることを確認
             with pytest.raises(Exception):
-                sampler.sample_frames(str(corrupted_path), fps=1.0)
+                list(sampler.sample_frames())
 
         finally:
             if corrupted_path.exists():
