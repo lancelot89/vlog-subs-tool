@@ -15,6 +15,7 @@ from PySide6.QtGui import QIcon
 
 class ErrorSeverity:
     """エラー重要度の定義"""
+
     INFO = "info"
     WARNING = "warning"
     ERROR = "error"
@@ -23,6 +24,7 @@ class ErrorSeverity:
 
 class ErrorCategory:
     """エラーカテゴリの定義"""
+
     FILE_OPERATION = "file_operation"
     OCR_PROCESSING = "ocr_processing"
     VIDEO_PROCESSING = "video_processing"
@@ -35,13 +37,15 @@ class ErrorCategory:
 class ErrorInfo:
     """エラー情報を格納するクラス"""
 
-    def __init__(self,
-                 message: str,
-                 category: str = ErrorCategory.SYSTEM,
-                 severity: str = ErrorSeverity.ERROR,
-                 technical_details: Optional[str] = None,
-                 suggestions: Optional[list] = None,
-                 recovery_options: Optional[Dict[str, Callable]] = None):
+    def __init__(
+        self,
+        message: str,
+        category: str = ErrorCategory.SYSTEM,
+        severity: str = ErrorSeverity.ERROR,
+        technical_details: Optional[str] = None,
+        suggestions: Optional[list] = None,
+        recovery_options: Optional[Dict[str, Callable]] = None,
+    ):
         self.message = message
         self.category = category
         self.severity = severity
@@ -71,11 +75,13 @@ class ErrorHandler(QObject):
         self.auto_recovery_enabled = True
         self.max_retry_attempts = 3
 
-    def handle_error(self,
-                    error: Union[Exception, ErrorInfo],
-                    context: Optional[Dict[str, Any]] = None,
-                    show_dialog: bool = True,
-                    allow_retry: bool = False) -> bool:
+    def handle_error(
+        self,
+        error: Union[Exception, ErrorInfo],
+        context: Optional[Dict[str, Any]] = None,
+        show_dialog: bool = True,
+        allow_retry: bool = False,
+    ) -> bool:
         """
         エラーを処理し、適切なフィードバックを提供
 
@@ -111,26 +117,27 @@ class ErrorHandler(QObject):
             suggestions = [
                 "ファイルが存在することを確認してください",
                 "ファイルの権限を確認してください",
-                "ディスク容量が十分にあることを確認してください"
+                "ディスク容量が十分にあることを確認してください",
             ]
         elif isinstance(exception, (MemoryError, RuntimeError)):
             category = ErrorCategory.SYSTEM
             suggestions = [
                 "他のアプリケーションを終了してメモリを解放してください",
                 "より小さいファイルで試してください",
-                "システムを再起動してください"
+                "システムを再起動してください",
             ]
         elif isinstance(exception, (ValueError, TypeError)):
             category = ErrorCategory.VALIDATION
-            suggestions = [
-                "入力データの形式を確認してください",
-                "設定項目を見直してください"
-            ]
+            suggestions = ["入力データの形式を確認してください", "設定項目を見直してください"]
         elif isinstance(exception, TimeoutError):
-            category = ErrorCategory.NETWORK if "network" in str(exception).lower() else ErrorCategory.SYSTEM
+            category = (
+                ErrorCategory.NETWORK
+                if "network" in str(exception).lower()
+                else ErrorCategory.SYSTEM
+            )
             suggestions = [
                 "インターネット接続を確認してください",
-                "しばらく時間をおいて再試行してください"
+                "しばらく時間をおいて再試行してください",
             ]
 
         # 重要度判定
@@ -145,7 +152,7 @@ class ErrorHandler(QObject):
             category=category,
             severity=severity,
             technical_details=f"{type(exception).__name__}: {str(exception)}",
-            suggestions=suggestions
+            suggestions=suggestions,
         )
 
     def _get_user_friendly_message(self, exception: Exception) -> str:
@@ -158,7 +165,7 @@ class ErrorHandler(QObject):
             TimeoutError: "処理がタイムアウトしました",
             ValueError: "入力データの形式が正しくありません",
             RuntimeError: "システムエラーが発生しました",
-            OSError: "システムリソースへのアクセスに失敗しました"
+            OSError: "システムリソースへのアクセスに失敗しました",
         }
 
         exception_type = type(exception)
@@ -187,7 +194,7 @@ class ErrorHandler(QObject):
             ErrorSeverity.INFO: logging.INFO,
             ErrorSeverity.WARNING: logging.WARNING,
             ErrorSeverity.ERROR: logging.ERROR,
-            ErrorSeverity.CRITICAL: logging.CRITICAL
+            ErrorSeverity.CRITICAL: logging.CRITICAL,
         }.get(error_info.severity, logging.ERROR)
 
         # ログメッセージ構築
@@ -202,10 +209,9 @@ class ErrorHandler(QObject):
         # シグナル送信
         self.error_logged.emit(error_info)
 
-    def _show_error_dialog(self,
-                          error_info: ErrorInfo,
-                          context: Dict[str, Any],
-                          allow_retry: bool) -> bool:
+    def _show_error_dialog(
+        self, error_info: ErrorInfo, context: Dict[str, Any], allow_retry: bool
+    ) -> bool:
         """エラーダイアログを表示"""
 
         # アイコン決定
@@ -213,7 +219,7 @@ class ErrorHandler(QObject):
             ErrorSeverity.INFO: QMessageBox.Information,
             ErrorSeverity.WARNING: QMessageBox.Warning,
             ErrorSeverity.ERROR: QMessageBox.Critical,
-            ErrorSeverity.CRITICAL: QMessageBox.Critical
+            ErrorSeverity.CRITICAL: QMessageBox.Critical,
         }
 
         # メッセージボックス作成
@@ -269,9 +275,9 @@ class ErrorHandler(QObject):
         # 再試行の場合
         return allow_retry and msg_box.buttonRole(clicked_button) == QMessageBox.AcceptRole
 
-    def create_progress_error_handler(self,
-                                    operation_name: str,
-                                    total_steps: int = 100) -> 'ProgressErrorHandler':
+    def create_progress_error_handler(
+        self, operation_name: str, total_steps: int = 100
+    ) -> "ProgressErrorHandler":
         """プログレス付きエラーハンドラーを作成"""
         return ProgressErrorHandler(self, operation_name, total_steps, self.parent_widget)
 
@@ -289,7 +295,7 @@ class ErrorHandler(QObject):
             "recent_errors": len(self.error_history[-10:]),
             "category_breakdown": category_counts,
             "severity_breakdown": severity_counts,
-            "last_error": self.error_history[-1] if self.error_history else None
+            "last_error": self.error_history[-1] if self.error_history else None,
         }
 
 
@@ -301,11 +307,13 @@ class ProgressErrorHandler(QObject):
     operation_cancelled = Signal()
     operation_failed = Signal(ErrorInfo)
 
-    def __init__(self,
-                 error_handler: ErrorHandler,
-                 operation_name: str,
-                 total_steps: int,
-                 parent_widget: Optional[QWidget] = None):
+    def __init__(
+        self,
+        error_handler: ErrorHandler,
+        operation_name: str,
+        total_steps: int,
+        parent_widget: Optional[QWidget] = None,
+    ):
         super().__init__()
 
         self.error_handler = error_handler
@@ -330,7 +338,7 @@ class ProgressErrorHandler(QObject):
                 "キャンセル",
                 0,
                 self.total_steps,
-                self.parent_widget
+                self.parent_widget,
             )
             self.progress_dialog.setWindowModality(2)  # Qt.ApplicationModal
             self.progress_dialog.canceled.connect(self.cancel_operation)
@@ -440,7 +448,7 @@ def create_file_operation_error(file_path: Union[str, Path],
     suggestions = [
         "ファイルが存在し、アクセス可能であることを確認してください",
         "他のアプリケーションでファイルが開かれていないか確認してください",
-        "ディスク容量が十分にあることを確認してください"
+        "ディスク容量が十分にあることを確認してください",
     ]
 
     recovery_options = {}
@@ -457,12 +465,13 @@ def create_file_operation_error(file_path: Union[str, Path],
         severity=ErrorSeverity.ERROR,
         technical_details=f"{type(original_error).__name__}: {str(original_error)}",
         suggestions=suggestions,
-        recovery_options=recovery_options
+        recovery_options=recovery_options,
     )
 
 
-def create_ocr_error(frame_number: Optional[int] = None,
-                    original_error: Optional[Exception] = None) -> ErrorInfo:
+def create_ocr_error(
+    frame_number: Optional[int] = None, original_error: Optional[Exception] = None
+) -> ErrorInfo:
     """OCR処理エラー用のErrorInfoを作成"""
 
     message = "OCR処理でエラーが発生しました"
@@ -472,7 +481,7 @@ def create_ocr_error(frame_number: Optional[int] = None,
     suggestions = [
         "画像の品質を確認してください（解像度・明度・コントラスト）",
         "OCRエンジンの設定を調整してみてください",
-        "別の画像範囲を選択してみてください"
+        "別の画像範囲を選択してみてください",
     ]
 
     technical_details = None
@@ -484,7 +493,7 @@ def create_ocr_error(frame_number: Optional[int] = None,
             suggestions = [
                 "他のアプリケーションを終了してメモリを解放してください",
                 "より小さい解像度でOCRを実行してみてください",
-                "システムを再起動してください"
+                "システムを再起動してください",
             ]
 
     return ErrorInfo(
@@ -492,5 +501,5 @@ def create_ocr_error(frame_number: Optional[int] = None,
         category=ErrorCategory.OCR_PROCESSING,
         severity=ErrorSeverity.WARNING,
         technical_details=technical_details,
-        suggestions=suggestions
+        suggestions=suggestions,
     )
