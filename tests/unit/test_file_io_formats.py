@@ -11,7 +11,7 @@ import cv2
 import numpy as np
 import pytest
 
-from app.core.extractor.sampler import VideoFrameSampler
+from app.core.extractor.sampler import VideoSampler
 from app.core.format.srt import SRTReader, SRTWriter
 from app.core.models import SubtitleItem
 

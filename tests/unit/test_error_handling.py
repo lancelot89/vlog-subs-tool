@@ -15,7 +15,7 @@ import pytest
 from app.core.csv.exporter import SubtitleCSVExporter
 from app.core.csv.importer import SubtitleCSVImporter
 from app.core.error_handler import ErrorHandler
-from app.core.extractor.sampler import VideoFrameSampler
+from app.core.extractor.sampler import VideoSampler
 from app.core.format.srt import SRTReader, SRTWriter
 from app.core.models import SubtitleItem
 from app.core.project_manager import ProjectManager
