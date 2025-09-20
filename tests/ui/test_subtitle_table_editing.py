@@ -146,7 +146,8 @@ class TestSubtitleTableEditing:
         table_view.table.setCurrentCell(1, 0)
         # Mock QMessageBox to avoid blocking dialog
         from unittest.mock import patch
-        with patch('PySide6.QtWidgets.QMessageBox.question', return_value=QMessageBox.Yes):
+
+        with patch("PySide6.QtWidgets.QMessageBox.question", return_value=QMessageBox.Yes):
             table_view.delete_subtitle()
 
         # 行数が減っていることを確認
@@ -185,6 +186,7 @@ class TestSubtitleTableEditing:
         table_view.table.setCurrentCell(0, 0)
         # Use setRangeSelected with proper QTableWidgetSelectionRange
         from PySide6.QtWidgets import QTableWidgetSelectionRange
+
         selection_range = QTableWidgetSelectionRange(0, 0, 1, 3)
         table_view.table.setRangeSelected(selection_range, True)
 
@@ -303,7 +305,8 @@ class TestSubtitleTableEditing:
         original_count = table_view.table.rowCount()
         # 複数回削除を実行
         from unittest.mock import patch
-        with patch('PySide6.QtWidgets.QMessageBox.question', return_value=QMessageBox.Yes):
+
+        with patch("PySide6.QtWidgets.QMessageBox.question", return_value=QMessageBox.Yes):
             for _ in range(3):
                 table_view.delete_subtitle()
 
