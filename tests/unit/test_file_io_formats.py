@@ -169,7 +169,9 @@ class TestSRTFormatSupport:
         """SRT文字エンコーディング対応テスト"""
         srt_path = None
         try:
-            with tempfile.NamedTemporaryFile(mode="w", suffix=".srt", delete=False, encoding=encoding) as f:
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".srt", delete=False, encoding=encoding
+            ) as f:
                 srt_path = Path(f.name)
 
             # 指定エンコーディングでSRTファイルを書き出し

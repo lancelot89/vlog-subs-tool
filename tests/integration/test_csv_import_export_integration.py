@@ -273,7 +273,7 @@ class TestCSVExportImportIntegration:
             assert len(lines) >= 3, "CSVファイルの行数が不足"
             header_line = None
             for line in lines:
-                if not line.strip().startswith('#') and '字幕番号' in line:
+                if not line.strip().startswith("#") and "字幕番号" in line:
                     header_line = line.strip()
                     break
 
