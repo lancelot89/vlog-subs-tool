@@ -138,7 +138,12 @@ class TestSubtitleCSVImporter:
         modified_lines = []
         for line in lines:
             if "こんにちは世界" in line:
-                line = line.replace('""', '"Hello World"', 1)  # 翻訳文列に追加
+                # CSVの構造: 字幕番号,開始時間,終了時間,表示時間(秒),原文(ja),翻訳文,翻訳ステータス,翻訳者コメント,品質確認
+                # 翻訳文フィールド（6番目）を埋める
+                parts = line.split(',')
+                if len(parts) >= 6:
+                    parts[5] = '"Hello World"'  # 翻訳文フィールド
+                    line = ','.join(parts)
             modified_lines.append(line)
 
         with open(csv_path, "w", encoding="utf-8-sig") as f:
