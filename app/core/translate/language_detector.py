@@ -69,7 +69,7 @@ class LanguageDetector:
         "vi": "vi",
     }
 
-    def __init__(self):
+    def __init__(self) -> None:
         if not LANGDETECT_AVAILABLE:
             raise LanguageDetectionError("langdetectパッケージがインストールされていません")
 

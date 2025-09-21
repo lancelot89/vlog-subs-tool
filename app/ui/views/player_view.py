@@ -59,7 +59,7 @@ class PlayerView(QWidget):
         self.video_label = QLabel()
         self.video_label.setMinimumSize(400, 300)
         self.video_label.setStyleSheet("border: 1px solid gray; background-color: black;")
-        self.video_label.setAlignment(Qt.AlignCenter)
+        self.video_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.video_label.setText(
             "動画をドラッグ&ドロップするか、\\n「動画を開く」ボタンから読み込んでください"
         )
@@ -87,7 +87,7 @@ class PlayerView(QWidget):
         layout.addLayout(control_layout)
 
         # シークバー
-        self.seek_slider = QSlider(Qt.Horizontal)
+        self.seek_slider = QSlider(Qt.Orientation.Horizontal)
         self.seek_slider.setEnabled(False)
         self.seek_slider.valueChanged.connect(self.seek_to_frame)
         layout.addWidget(self.seek_slider)

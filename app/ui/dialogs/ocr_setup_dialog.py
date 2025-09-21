@@ -80,7 +80,7 @@ class OCRSetupDialog(QDialog):
         title_font.setPointSize(14)
         title_font.setBold(True)
         title_label.setFont(title_font)
-        title_label.setAlignment(Qt.AlignCenter)
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title_label)
 
         # 説明文（組み込みモデル優先）
@@ -94,7 +94,7 @@ class OCRSetupDialog(QDialog):
             "• Tesseractエンジンの使用（軽量・高速）"
         )
         description.setWordWrap(True)
-        description.setAlignment(Qt.AlignLeft)
+        description.setAlignment(Qt.AlignmentFlag.AlignLeft)
         layout.addWidget(description)
 
         # 区切り線
@@ -116,7 +116,7 @@ class OCRSetupDialog(QDialog):
 
         # プログレスメッセージ
         self.progress_message = QLabel("")
-        self.progress_message.setAlignment(Qt.AlignCenter)
+        self.progress_message.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.progress_message.setVisible(False)
         layout.addWidget(self.progress_message)
 
@@ -205,10 +205,10 @@ class OCRSetupDialog(QDialog):
                 "- 所要時間: 1-5分程度\n"
                 "- 3回まで自動リトライします\n\n"
                 "続行しますか？",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.Yes,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes,
             )
-            if reply != QMessageBox.Yes:
+            if reply != QMessageBox.StandardButton.Yes:
                 return
             self._setup_confirmed = True
 
@@ -242,11 +242,11 @@ class OCRSetupDialog(QDialog):
             "・Tesseractエンジンが使用されます\n"
             "・OCR精度がPaddleOCRより劣る場合があります\n"
             "・後で設定画面からPaddleOCRを有効化できます",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
         )
 
-        if reply == QMessageBox.Yes:
+        if reply == QMessageBox.StandardButton.Yes:
             self.reject()
 
     def on_progress_updated(self, message: str, progress: int):
@@ -285,11 +285,11 @@ class OCRSetupDialog(QDialog):
         detailed_message = self._format_error_message(error_message)
 
         error_dialog = QMessageBox(self)
-        error_dialog.setIcon(QMessageBox.Critical)
+        error_dialog.setIcon(QMessageBox.Icon.Critical)
         error_dialog.setWindowTitle("PaddleOCRセットアップエラー")
         error_dialog.setText("PaddleOCRのセットアップに失敗しました")
         error_dialog.setDetailedText(detailed_message)
-        error_dialog.setStandardButtons(QMessageBox.Ok)
+        error_dialog.setStandardButtons(QMessageBox.StandardButton.Ok)
         error_dialog.exec()
 
     def _format_error_message(self, error_message: str) -> str:
@@ -341,11 +341,11 @@ class OCRSetupDialog(QDialog):
                 self,
                 "確認",
                 "ダウンロード中です。中断しますか？",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
             )
 
-            if reply == QMessageBox.Yes:
+            if reply == QMessageBox.StandardButton.Yes:
                 self.worker.terminate()
                 self.worker.wait()
                 event.accept()

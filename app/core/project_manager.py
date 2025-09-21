@@ -25,7 +25,7 @@ class ProjectMetadata:
     version: str = "1.0.0"
     description: str = ""
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """メタデータの初期化後処理"""
         if not self.id:
             self.id = str(uuid.uuid4())
@@ -81,7 +81,7 @@ class ProjectData:
 class ProjectManager:
     """プロジェクトファイル管理クラス"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.logger = logging.getLogger(__name__)
         self.current_project: Optional[ProjectData] = None
         self.current_file_path: Optional[Path] = None
@@ -197,7 +197,7 @@ class ProjectManager:
         """プロジェクトを別名で保存"""
         return self.save_project(project_data, file_path)
 
-    def update_subtitles(self, subtitles: List[SubtitleItem]):
+    def update_subtitles(self, subtitles: List[SubtitleItem]) -> None:
         """字幕データを更新"""
         if self.current_project is None:
             raise RuntimeError("プロジェクトが開かれていません")
@@ -213,7 +213,7 @@ class ProjectManager:
 
         self.logger.info(f"字幕データ更新: {len(subtitles)}件")
 
-    def update_translations(self, language: str, subtitles: List[SubtitleItem]):
+    def update_translations(self, language: str, subtitles: List[SubtitleItem]) -> None:
         """翻訳データを更新"""
         if self.current_project is None:
             raise RuntimeError("プロジェクトが開かれていません")
@@ -229,7 +229,7 @@ class ProjectManager:
 
         self.logger.info(f"翻訳データ更新 ({language}): {len(subtitles)}件")
 
-    def update_qc_results(self, qc_results: List[Dict[str, Any]]):
+    def update_qc_results(self, qc_results: List[Dict[str, Any]]) -> None:
         """QCチェック結果を更新"""
         if self.current_project is None:
             raise RuntimeError("プロジェクトが開かれていません")
@@ -257,7 +257,7 @@ class ProjectManager:
         # 現在は簡易的に modified_at を確認
         return True
 
-    def close_project(self):
+    def close_project(self) -> None:
         """プロジェクトを閉じる"""
         if self.current_project:
             self.logger.info(f"プロジェクト終了: {self.current_project.metadata.name}")
@@ -299,7 +299,7 @@ class ProjectManager:
             self.logger.error(f"プロジェクトデータ変換エラー: {e}")
             raise ValueError(f"プロジェクトファイルの形式が正しくありません: {e}")
 
-    def _create_backup(self, file_path: Path):
+    def _create_backup(self, file_path: Path) -> None:
         """バックアップファイルを作成"""
         if file_path.exists():
             backup_path = file_path.with_suffix(f".subproj.backup")

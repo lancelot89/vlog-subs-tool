@@ -226,10 +226,10 @@ class MultiLanguageExportDialog(QDialog):
                 self,
                 "確認",
                 f"出力先ディレクトリが存在しません。作成しますか？\n{output_dir}",
-                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             )
 
-            if reply == QMessageBox.Yes:
+            if reply == QMessageBox.StandardButton.Yes:
                 try:
                     output_dir.mkdir(parents=True, exist_ok=True)
                 except Exception as e:
@@ -248,9 +248,11 @@ class MultiLanguageExportDialog(QDialog):
             f"出力先: {output_dir}"
         )
 
-        reply = QMessageBox.question(self, "確認", message, QMessageBox.Yes | QMessageBox.No)
+        reply = QMessageBox.question(
+            self, "確認", message, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
 
-        if reply == QMessageBox.Yes:
+        if reply == QMessageBox.StandardButton.Yes:
             # エクスポート実行のシグナルを送信
             self.export_requested.emit(selected_languages, str(output_dir))
             self.accept()

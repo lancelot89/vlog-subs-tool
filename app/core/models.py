@@ -69,14 +69,17 @@ class Project:
     subtitles: List[SubtitleItem]
     version: str = "1.0"
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """初期化後の処理"""
         if isinstance(self.settings, dict):
             self.settings = ProjectSettings.from_dict(self.settings)
 
         # subtitlesが辞書のリストの場合、SubtitleItemに変換
         if self.subtitles and isinstance(self.subtitles[0], dict):
-            self.subtitles = [SubtitleItem.from_dict(item) for item in self.subtitles]
+            self.subtitles = [
+                SubtitleItem.from_dict(item) if isinstance(item, dict) else item
+                for item in self.subtitles
+            ]
 
     def add_subtitle(self, subtitle: SubtitleItem) -> None:
         """字幕を追加"""

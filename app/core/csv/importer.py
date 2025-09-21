@@ -407,7 +407,7 @@ class CSVWorkflowValidator:
         source_file: Path, translated_files: List[Path]
     ) -> Dict[str, Any]:
         """翻訳ワークフロー全体の検証"""
-        result = {
+        result: Dict[str, Any] = {
             "valid": True,
             "errors": [],
             "warnings": [],

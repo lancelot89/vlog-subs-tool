@@ -73,7 +73,7 @@ class AppSettings:
     ui: UISettings
     version: str = "1.0.0"
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """設定の初期化後処理"""
         # デフォルトの出力フォルダ設定
         if not self.output.output_folder:
@@ -104,7 +104,7 @@ class AppSettings:
 class SettingsManager:
     """設定管理クラス"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.logger = logging.getLogger(__name__)
         self._settings_path = self._get_settings_path()
         self._settings: Optional[AppSettings] = None
@@ -248,7 +248,7 @@ class SettingsManager:
             self.logger.error(f"設定変換エラー: {e}")
             return self._create_default_settings()
 
-    def _create_backup(self):
+    def _create_backup(self) -> None:
         """設定ファイルのバックアップを作成"""
         if self._settings_path.exists():
             backup_path = self._settings_path.with_suffix(".json.backup")
@@ -279,13 +279,14 @@ class SettingsManager:
             if recent_files_path.exists():
                 with open(recent_files_path, "r", encoding="utf-8") as f:
                     recent_files = json.load(f)
-                return recent_files.get("files", [])
+                files_list = recent_files.get("files", [])
+                return files_list if isinstance(files_list, list) else []
         except Exception as e:
             self.logger.error(f"最近使用したファイル読み込みエラー: {e}")
 
         return []
 
-    def save_recent_files(self, files: List[str]):
+    def save_recent_files(self, files: List[str]) -> None:
         """最近使用したファイルを保存"""
         recent_files_path = self.get_recent_files_path()
         try:
@@ -298,7 +299,7 @@ class SettingsManager:
         except Exception as e:
             self.logger.error(f"最近使用したファイル保存エラー: {e}")
 
-    def add_recent_file(self, file_path: str):
+    def add_recent_file(self, file_path: str) -> None:
         """最近使用したファイルに追加"""
         settings = self.load_settings()
         max_files = settings.ui.recent_files_count
