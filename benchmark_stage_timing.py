@@ -96,7 +96,7 @@ def run_stage_benchmark() -> None:
         else:
             logger.warning("  No timing data available for run %d", i + 1)
 
-    # Calculate averages
+    # Calculate averages and determine measurement type
     if all_timings:
         logger.info("=" * 60)
         logger.info("AVERAGE STAGE TIMINGS (%d runs):", len(all_timings))
@@ -107,18 +107,62 @@ def run_stage_benchmark() -> None:
         avg_recognition = sum(t.recognition_time for t in all_timings) / len(all_timings)
         avg_total = sum(t.total_time for t in all_timings) / len(all_timings)
 
+        # Determine if we have actual stage measurements
+        has_actual_stages = avg_detection > 0 and avg_classification >= 0
+        measurement_type = "Actual Measurements" if has_actual_stages else "Fallback (Total Time Only)"
+
+        logger.info("Measurement Type: %s", measurement_type)
         logger.info("  Decode/Preprocess: %.3f ms", avg_decode * 1000)
-        logger.info("  Text Detection:    %.3f ms", avg_detection * 1000)
-        logger.info("  Text Classification: %.3f ms", avg_classification * 1000)
-        logger.info("  Text Recognition:  %.3f ms", avg_recognition * 1000)
+
+        if has_actual_stages:
+            logger.info("  Text Detection:    %.3f ms (measured)", avg_detection * 1000)
+            logger.info("  Text Classification: %.3f ms (measured)", avg_classification * 1000)
+            logger.info("  Text Recognition:  %.3f ms (measured)", avg_recognition * 1000)
+        else:
+            logger.info("  Text Detection:    %.3f ms (not measured)", avg_detection * 1000)
+            logger.info("  Text Classification: %.3f ms (not measured)", avg_classification * 1000)
+            logger.info("  Text Recognition:  %.3f ms (total OCR fallback)", avg_recognition * 1000)
+
         logger.info("  Total OCR Time:    %.3f ms", avg_total * 1000)
 
-        if avg_total > 0:
+        if avg_total > 0 and has_actual_stages:
             logger.info("STAGE BREAKDOWN:")
             logger.info("  Decode:    %.1f%%", (avg_decode / avg_total) * 100)
             logger.info("  Detection: %.1f%%", (avg_detection / avg_total) * 100)
             logger.info("  Classification: %.1f%%", (avg_classification / avg_total) * 100)
             logger.info("  Recognition: %.1f%%", (avg_recognition / avg_total) * 100)
+        elif not has_actual_stages:
+            logger.info("Stage breakdown not available (using fallback measurement)")
+
+        # Performance analysis specific to Issue #170
+        if has_actual_stages:
+            logger.info("=" * 60)
+            logger.info("PERFORMANCE ANALYSIS FOR WINDOWS/WSL COMPARISON:")
+
+            # Identify potential bottlenecks
+            stage_times = {
+                'Detection': avg_detection,
+                'Classification': avg_classification,
+                'Recognition': avg_recognition
+            }
+
+            slowest_stage = max(stage_times, key=stage_times.get)
+            slowest_time = stage_times[slowest_stage]
+
+            logger.info("  Slowest Stage: %s (%.3f ms)", slowest_stage, slowest_time * 1000)
+
+            if slowest_time > 0.1:  # > 100ms
+                logger.info("  ⚠️  Potential bottleneck detected in %s stage", slowest_stage)
+
+            # WSL/Windows specific recommendations
+            if platform.system() == "Linux" and "microsoft" in platform.release().lower():
+                logger.info("  💡 WSL Detected: Compare these timings with native Windows")
+            elif platform.system() == "Windows":
+                logger.info("  💡 Native Windows: Compare these timings with WSL")
+        else:
+            logger.info("=" * 60)
+            logger.info("Note: Stage-by-stage analysis not available with current PaddleOCR version")
+            logger.info("Only total timing measurement is possible.")
 
     logger.info("=" * 60)
     logger.info("Benchmark completed!")

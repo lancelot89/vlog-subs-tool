@@ -108,14 +108,26 @@ class OCRStageTimings:
     def log_summary(self, platform_info: str = "") -> None:
         """Log a summary of timing measurements."""
         platform_suffix = f" on {platform_info}" if platform_info else ""
-        logger.info("OCR Stage Timings%s:", platform_suffix)
+
+        # Determine if we have actual stage measurements or fallback data
+        has_actual_stages = self.detection_time > 0 and self.classification_time >= 0
+        measurement_type = "Actual" if has_actual_stages else "Fallback"
+
+        logger.info("OCR Stage Timings (%s)%s:", measurement_type, platform_suffix)
         logger.info("  Decode/Preprocess: %.3f ms", self.decode_time * 1000)
-        logger.info("  Text Detection:    %.3f ms", self.detection_time * 1000)
-        logger.info("  Text Classification: %.3f ms", self.classification_time * 1000)
-        logger.info("  Text Recognition:  %.3f ms", self.recognition_time * 1000)
+
+        if has_actual_stages:
+            logger.info("  Text Detection:    %.3f ms (measured)", self.detection_time * 1000)
+            logger.info("  Text Classification: %.3f ms (measured)", self.classification_time * 1000)
+            logger.info("  Text Recognition:  %.3f ms (measured)", self.recognition_time * 1000)
+        else:
+            logger.info("  Text Detection:    %.3f ms (not measured)", self.detection_time * 1000)
+            logger.info("  Text Classification: %.3f ms (not measured)", self.classification_time * 1000)
+            logger.info("  Text Recognition:  %.3f ms (total OCR fallback)", self.recognition_time * 1000)
+
         logger.info("  Total OCR Time:    %.3f ms", self.total_time * 1000)
 
-        if self.total_time > 0:
+        if self.total_time > 0 and has_actual_stages:
             logger.info("Stage Breakdown:")
             logger.info("  Decode:    %.1f%%", (self.decode_time / self.total_time) * 100)
             logger.info("  Detection: %.1f%%", (self.detection_time / self.total_time) * 100)
@@ -123,6 +135,8 @@ class OCRStageTimings:
                 "  Classification: %.1f%%", (self.classification_time / self.total_time) * 100
             )
             logger.info("  Recognition: %.1f%%", (self.recognition_time / self.total_time) * 100)
+        elif not has_actual_stages:
+            logger.info("Stage breakdown not available (using fallback measurement)")
 
 
 # ---------------------------------------------------------------------------
@@ -846,28 +860,120 @@ class SimplePaddleOCREngine:
             # Fallback to normal execution without timing
             return self._run_ocr_with_timeout(image, timeout_seconds)
 
-        # For detailed timing, we need direct access to PaddleOCR components
-        # Since PaddleOCR doesn't expose stage-level timing directly,
-        # we'll time the overall OCR process and estimate stages
+        # Attempt to measure actual stage timings through PaddleX pipeline access
+        try:
+            return self._run_ocr_with_actual_timing(image, timing, timeout_seconds)
+        except Exception as e:
+            logger.warning("Failed to measure actual OCR stage timings: %s", e)
+            # Fallback to total time measurement only
+            return self._run_ocr_with_total_timing_only(image, timing, timeout_seconds)
 
+    def _run_ocr_with_actual_timing(
+        self, image: np.ndarray, timing: OCRStageTimings, timeout_seconds: int = 30
+    ) -> Any:
+        """Execute OCR with actual stage-by-stage timing measurements."""
+        # Access PaddleX pipeline for individual model timing
+        pipeline = self._ocr._create_paddlex_pipeline()
+
+        if not hasattr(pipeline, 'text_det_model') or not hasattr(pipeline, 'text_rec_model'):
+            raise RuntimeError("PaddleX pipeline does not expose individual models")
+
+        # Stage 1: Text Detection
         det_start_time = time.perf_counter()
+        try:
+            det_results = pipeline.text_det_model.predict([image])
+            # Handle generator result if needed
+            if hasattr(det_results, '__iter__') and not isinstance(det_results, (list, tuple)):
+                det_results = list(det_results)
+        except Exception as e:
+            raise RuntimeError(f"Text detection failed: {e}")
+        timing.detection_time = time.perf_counter() - det_start_time
 
-        # Execute OCR and measure total time
+        # Check if detection found any text regions
+        if not det_results or len(det_results) == 0:
+            # No text detected, set remaining stages to zero
+            timing.classification_time = 0.0
+            timing.recognition_time = 0.0
+            return [[]]  # Return empty result in expected format
+
+        # Handle the case where det_results is a generator or has different structure
+        first_result = det_results[0] if isinstance(det_results, (list, tuple)) else det_results
+        if not hasattr(first_result, 'get') or not first_result.get('dt_polys'):
+            # No text regions found, skip remaining stages
+            timing.classification_time = 0.0
+            timing.recognition_time = 0.0
+            return [[]]
+
+        # Stage 2: Text Line Orientation (Classification) - if enabled
+        cls_start_time = time.perf_counter()
+        if hasattr(pipeline, 'text_cls_model') and pipeline.text_cls_model is not None:
+            try:
+                # Extract text regions for classification
+                text_regions = first_result['dt_polys']
+                # Run classification on detected regions
+                cls_results = pipeline.text_cls_model.predict(text_regions)
+                if hasattr(cls_results, '__iter__') and not isinstance(cls_results, (list, tuple)):
+                    cls_results = list(cls_results)
+            except Exception as e:
+                logger.warning("Text classification failed: %s", e)
+                # Continue without classification
+        timing.classification_time = time.perf_counter() - cls_start_time
+
+        # Stage 3: Text Recognition
+        rec_start_time = time.perf_counter()
+        try:
+            rec_results = pipeline.text_rec_model.predict(det_results)
+            # Handle generator result if needed
+            if hasattr(rec_results, '__iter__') and not isinstance(rec_results, (list, tuple)):
+                rec_results = list(rec_results)
+        except Exception as e:
+            raise RuntimeError(f"Text recognition failed: {e}")
+        timing.recognition_time = time.perf_counter() - rec_start_time
+
+        # Combine results in expected format
+        final_results = self._combine_detection_recognition_results(det_results, rec_results)
+        return [final_results]
+
+    def _run_ocr_with_total_timing_only(
+        self, image: np.ndarray, timing: OCRStageTimings, timeout_seconds: int = 30
+    ) -> Any:
+        """Fallback: measure only total OCR time without stage breakdown."""
+        logger.info("Using fallback timing measurement (total time only)")
+
+        ocr_start_time = time.perf_counter()
         raw_results = self._run_ocr_with_timeout(image, timeout_seconds)
+        total_ocr_time = time.perf_counter() - ocr_start_time
 
-        ocr_end_time = time.perf_counter()
-        total_ocr_time = ocr_end_time - det_start_time
-
-        # Estimate stage times based on typical PaddleOCR behavior
-        # These estimates are based on common PaddleOCR performance characteristics:
-        # - Detection: ~40-60% of total time
-        # - Classification: ~5-15% of total time
-        # - Recognition: ~30-50% of total time
-        timing.detection_time = total_ocr_time * 0.5  # ~50% for detection
-        timing.classification_time = total_ocr_time * 0.1  # ~10% for classification
-        timing.recognition_time = total_ocr_time * 0.4  # ~40% for recognition
+        # Set individual stage times to zero to indicate they were not measured
+        timing.detection_time = 0.0
+        timing.classification_time = 0.0
+        timing.recognition_time = total_ocr_time  # Put all time in recognition as fallback
 
         return raw_results
+
+    def _combine_detection_recognition_results(self, det_results: Any, rec_results: Any) -> List[Any]:
+        """Combine detection and recognition results into the expected OCR format."""
+        combined = []
+        if not det_results or not rec_results:
+            return combined
+
+        # This is a simplified combination - the actual implementation
+        # would depend on the specific format returned by PaddleX models
+        try:
+            polys = det_results[0].get('dt_polys', [])
+            texts = rec_results[0].get('rec_texts', []) if rec_results else []
+            scores = rec_results[0].get('rec_scores', []) if rec_results else []
+
+            for i, poly in enumerate(polys):
+                text = texts[i] if i < len(texts) else ""
+                score = scores[i] if i < len(scores) else 0.0
+                combined.append([poly, (text, score)])
+
+        except (IndexError, KeyError, TypeError) as e:
+            logger.warning("Failed to combine detection/recognition results: %s", e)
+            return []
+
+        return combined
 
     def _run_ocr_with_timeout(self, image: np.ndarray, timeout_seconds: int = 30) -> Any:
         """Apple Siliconでのフリーズ対策: プロセスベースのタイムアウト付きOCR実行"""
