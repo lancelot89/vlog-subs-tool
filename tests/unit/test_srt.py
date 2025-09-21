@@ -13,31 +13,36 @@ from app.core.models import SubtitleItem
 class TestSRTFormatter:
     """SRTFormatterクラスのテスト"""
 
+    def setup_method(self):
+        """テストメソッド前の初期化"""
+        self.formatter = SRTFormatter()
+
     def test_format_time(self):
         """時間フォーマットのテスト"""
         # 1秒
-        assert SRTFormatter.format_time(1000) == "00:00:01,000"
+        assert self.formatter.format_time(1000) == "00:00:01,000"
 
         # 1分30秒500ミリ秒
-        assert SRTFormatter.format_time(90500) == "00:01:30,500"
+        assert self.formatter.format_time(90500) == "00:01:30,500"
 
         # 1時間2分3秒4ミリ秒
-        assert SRTFormatter.format_time(3723004) == "01:02:03,004"
+        assert self.formatter.format_time(3723004) == "01:02:03,004"
 
     def test_format_single_subtitle(self):
         """単一字幕フォーマットのテスト"""
         subtitle = SubtitleItem(1, 1000, 3000, "テストテキスト")
-        formatted = SRTFormatter.format_subtitle(subtitle)
+        formatted = self.formatter.format_subtitle_entry(1, subtitle)
 
         expected = """1
 00:00:01,000 --> 00:00:03,000
-テストテキスト"""
+テストテキスト
+"""
 
         assert formatted == expected
 
     def test_format_multiple_subtitles(self, sample_subtitles):
         """複数字幕フォーマットのテスト"""
-        formatted = SRTFormatter.format_subtitles(sample_subtitles)
+        formatted = self.formatter.subtitles_to_srt(sample_subtitles)
 
         lines = formatted.strip().split("\n\n")
         assert len(lines) == 3
@@ -52,7 +57,7 @@ class TestSRTFormatter:
         """SRTファイル保存のテスト"""
         output_path = temp_dir / "test.srt"
 
-        success = SRTFormatter.save_srt(sample_subtitles, output_path)
+        success = self.formatter.save_srt_file(sample_subtitles, output_path)
         assert success
         assert output_path.exists()
 
@@ -65,12 +70,17 @@ class TestSRTFormatter:
 class TestSRTParser:
     """SRTParserクラスのテスト"""
 
+    def setup_method(self):
+        """テストメソッド前の初期化"""
+        self.parser = SRTParser()
+        self.formatter = SRTFormatter()  # parse_time is in formatter
+
     def test_parse_time(self):
         """時間パースのテスト"""
         # 基本的な時間
-        assert SRTParser.parse_time("00:00:01,000") == 1000
-        assert SRTParser.parse_time("00:01:30,500") == 90500
-        assert SRTParser.parse_time("01:02:03,004") == 3723004
+        assert self.formatter.parse_time("00:00:01,000") == 1000
+        assert self.formatter.parse_time("00:01:30,500") == 90500
+        assert self.formatter.parse_time("01:02:03,004") == 3723004
 
     def test_parse_srt_content(self):
         """SRT内容パースのテスト"""
@@ -86,7 +96,7 @@ class TestSRTParser:
 00:00:07,000 --> 00:00:09,000
 最後の字幕"""
 
-        subtitles = SRTParser.parse_srt_content(srt_content)
+        subtitles = self.parser.parse_srt_content(srt_content)
 
         assert len(subtitles) == 3
         assert subtitles[0].index == 1
@@ -107,7 +117,7 @@ class TestSRTParser:
 00:00:04,000 --> 00:00:06,000
 単一行"""
 
-        subtitles = SRTParser.parse_srt_content(srt_content)
+        subtitles = self.parser.parse_srt_content(srt_content)
 
         assert len(subtitles) == 2
         assert subtitles[0].text == "行1\n行2"
@@ -122,7 +132,7 @@ class TestSRTParser:
 
         srt_path.write_text(srt_content, encoding="utf-8")
 
-        subtitles = SRTParser.load_srt(srt_path)
+        subtitles = self.parser.parse_srt_file(srt_path)
 
         assert len(subtitles) == 1
         assert subtitles[0].text == "テスト字幕"

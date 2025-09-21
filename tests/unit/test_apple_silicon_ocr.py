@@ -12,6 +12,7 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 
+from app.core.cpu_profiler import ThreadConfig
 from app.core.extractor.ocr import SimplePaddleOCREngine
 
 
@@ -25,13 +26,15 @@ class TestAppleSiliconOCR(unittest.TestCase):
 
     @patch("app.core.extractor.ocr.platform.system")
     @patch("app.core.extractor.ocr.platform.machine")
-    @patch("app.core.extractor.ocr.os.cpu_count")
-    def test_apple_silicon_environment_variables(self, mock_cpu_count, mock_machine, mock_system):
+    @patch("app.core.extractor.ocr.get_adaptive_thread_config")
+    def test_apple_silicon_environment_variables(
+        self, mock_thread_config, mock_machine, mock_system
+    ):
         """Test that Apple Silicon specific environment variables are set correctly."""
         # Setup mocks for Apple Silicon environment
         mock_system.return_value = "Darwin"
         mock_machine.return_value = "arm64"
-        mock_cpu_count.return_value = 8
+        mock_thread_config.return_value = ThreadConfig(omp_threads=4, openblas_threads=4)
 
         # Clear any existing environment variables that might interfere
         env_vars_to_test = [
@@ -63,9 +66,9 @@ class TestAppleSiliconOCR(unittest.TestCase):
             self.assertTrue(result)
 
             # Verify Apple Silicon specific environment variables are set
-            self.assertEqual(os.environ.get("VECLIB_MAXIMUM_THREADS"), "8")
-            self.assertEqual(os.environ.get("OPENBLAS_NUM_THREADS"), "1")
-            self.assertEqual(os.environ.get("MKL_NUM_THREADS"), "1")
+            self.assertEqual(os.environ.get("VECLIB_MAXIMUM_THREADS"), "4")
+            self.assertEqual(os.environ.get("OPENBLAS_NUM_THREADS"), "4")
+            self.assertEqual(os.environ.get("MKL_NUM_THREADS"), "4")
             self.assertEqual(os.environ.get("PADDLE_CPU_ONLY"), "1")
             self.assertEqual(os.environ.get("BLAS"), "Accelerate")
             self.assertEqual(os.environ.get("FLAGS_use_mkldnn"), "false")
@@ -73,11 +76,13 @@ class TestAppleSiliconOCR(unittest.TestCase):
 
     @patch("app.core.extractor.ocr.platform.system")
     @patch("app.core.extractor.ocr.platform.machine")
-    def test_non_apple_silicon_no_optimization(self, mock_machine, mock_system):
+    @patch("app.core.extractor.ocr.get_adaptive_thread_config")
+    def test_non_apple_silicon_no_optimization(self, mock_thread_config, mock_machine, mock_system):
         """Test that non-Apple Silicon platforms don't get Apple Silicon optimizations."""
         # Setup mocks for non-Apple Silicon environment
         mock_system.return_value = "Linux"
         mock_machine.return_value = "x86_64"
+        mock_thread_config.return_value = ThreadConfig(omp_threads=2, openblas_threads=2)
 
         # Clear Apple Silicon specific environment variables
         apple_silicon_vars = ["VECLIB_MAXIMUM_THREADS", "BLAS", "FLAGS_use_mkldnn"]
@@ -96,10 +101,14 @@ class TestAppleSiliconOCR(unittest.TestCase):
             # Initialize the engine
             self.engine.initialize()
 
-            # Verify Apple Silicon specific variables are not set
-            self.assertNotIn("VECLIB_MAXIMUM_THREADS", os.environ)
-            self.assertNotIn("BLAS", os.environ)
-            self.assertNotIn("FLAGS_use_mkldnn", os.environ)
+            # Verify thread config variables are set but not Apple Silicon specific ones
+            self.assertEqual(os.environ.get("VECLIB_MAXIMUM_THREADS"), "2")  # From thread config
+            self.assertNotEqual(
+                os.environ.get("BLAS"), "Accelerate"
+            )  # Should not be Apple Accelerate
+            self.assertNotEqual(
+                os.environ.get("FLAGS_use_mkldnn"), "false"
+            )  # Should not be disabled
 
     @patch("app.core.extractor.ocr.platform.system")
     @patch("app.core.extractor.ocr.platform.machine")
@@ -164,11 +173,12 @@ class TestAppleSiliconOCR(unittest.TestCase):
         with (
             patch("app.core.extractor.ocr.platform.system", return_value="Darwin"),
             patch("app.core.extractor.ocr.platform.machine", return_value="arm64"),
-            patch("app.core.extractor.ocr.os.cpu_count", return_value=None),
+            patch("app.core.extractor.ocr.get_adaptive_thread_config") as mock_thread_config,
             patch("app.core.extractor.ocr.PaddleOCR") as mock_paddle,
             patch("app.core.extractor.ocr.PADDLEOCR_AVAILABLE", True),
         ):
-
+            # Mock fallback configuration when CPU count can't be determined
+            mock_thread_config.return_value = ThreadConfig(omp_threads=1, openblas_threads=1)
             mock_paddle.return_value = Mock()
 
             # Clear the environment variable
@@ -178,8 +188,8 @@ class TestAppleSiliconOCR(unittest.TestCase):
             # Initialize the engine
             self.engine.initialize()
 
-            # Verify fallback value is used when cpu_count() returns None
-            self.assertEqual(os.environ.get("VECLIB_MAXIMUM_THREADS"), "4")
+            # Verify fallback value is used when adaptive config returns minimal threads
+            self.assertEqual(os.environ.get("VECLIB_MAXIMUM_THREADS"), "1")
 
     @patch("app.core.extractor.ocr.platform.system")
     @patch("app.core.extractor.ocr.platform.machine")

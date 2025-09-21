@@ -72,20 +72,29 @@ class SubtitleCSVImporter:
                 result.errors.append("CSVファイルの読み込みに失敗しました")
                 return result
 
-            # ヘッダー解析
-            headers = content[0] if content else []
-            if not self._validate_headers(headers):
+            # ヘッダー行を検出（メタデータ行をスキップ）
+            headers = []
+            header_row_index = 0
+            for i, row in enumerate(content):
+                if not self._is_metadata_row(row):
+                    headers = row
+                    header_row_index = i
+                    break
+
+            if not headers or not self._validate_headers(headers):
                 result.errors.append("CSVファイルの形式が正しくありません")
                 return result
 
             # 言語コード検出
             result.language = self._detect_language_from_filename(filepath)
 
-            # データ行処理
-            data_rows = content[1:]  # ヘッダーを除く
+            # データ行処理（ヘッダー行以降）
+            data_rows = content[header_row_index + 1 :]  # ヘッダー行を除く
             translated_subtitles = []
 
-            for row_index, row in enumerate(data_rows, start=2):  # 行番号は1ベース + ヘッダー
+            for row_index, row in enumerate(
+                data_rows, start=header_row_index + 2
+            ):  # 行番号は1ベース + ヘッダー行
                 try:
                     # メタデータ行やコメント行をスキップ
                     if self._is_metadata_row(row):
@@ -216,21 +225,53 @@ class SubtitleCSVImporter:
 
     def _detect_language_from_filename(self, filepath: Path) -> str:
         """ファイル名から言語コードを検出"""
+        import re
+
         name = filepath.stem.lower()
 
-        # 言語コードマッピング
+        # 言語コードマッピング（より精密なパターンマッチング）
         lang_patterns = {
-            "en": ["en", "english", "英語"],
-            "zh": ["zh", "chinese", "中文", "中国語"],
-            "ko": ["ko", "korean", "한국어", "韓国語"],
-            "es": ["es", "spanish", "español", "スペイン語"],
-            "fr": ["fr", "french", "français", "フランス語"],
-            "de": ["de", "german", "deutsch", "ドイツ語"],
-            "ar": ["ar", "arabic", "عربي", "アラビア語"],
+            "en": [r"(?:^|[_\-\s])en(?:[_\-\s]|$)", r"(?:^|[_\-\s])english(?:[_\-\s]|$)", r"英語"],
+            "zh": [
+                r"(?:^|[_\-\s])zh(?:[_\-\s]|$)",
+                r"(?:^|[_\-\s])chinese(?:[_\-\s]|$)",
+                r"中文",
+                r"中国語",
+            ],
+            "ko": [
+                r"(?:^|[_\-\s])ko(?:[_\-\s]|$)",
+                r"(?:^|[_\-\s])korean(?:[_\-\s]|$)",
+                r"한국어",
+                r"韓国語",
+            ],
+            "es": [
+                r"(?:^|[_\-\s])es(?:[_\-\s]|$)",
+                r"(?:^|[_\-\s])spanish(?:[_\-\s]|$)",
+                r"español",
+                r"スペイン語",
+            ],
+            "fr": [
+                r"(?:^|[_\-\s])fr(?:[_\-\s]|$)",
+                r"(?:^|[_\-\s])french(?:[_\-\s]|$)",
+                r"français",
+                r"フランス語",
+            ],
+            "de": [
+                r"(?:^|[_\-\s])de(?:[_\-\s]|$)",
+                r"(?:^|[_\-\s])german(?:[_\-\s]|$)",
+                r"deutsch",
+                r"ドイツ語",
+            ],
+            "ar": [
+                r"(?:^|[_\-\s])ar(?:[_\-\s]|$)",
+                r"(?:^|[_\-\s])arabic(?:[_\-\s]|$)",
+                r"عربي",
+                r"アラビア語",
+            ],
         }
 
         for lang_code, patterns in lang_patterns.items():
-            if any(pattern in name for pattern in patterns):
+            if any(re.search(pattern, name, re.IGNORECASE) for pattern in patterns):
                 return lang_code
 
         return "unknown"
