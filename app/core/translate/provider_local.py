@@ -313,13 +313,13 @@ class LocalTranslateProvider:
             source_tokens = []
             for text in batch_texts:
                 # テキストを直接トークン化
-                tokens = tokenizer.tokenize(text)
+                tokens = tokenizer.tokenize(text)  # type: ignore
                 if not tokens:
                     tokens = ["<unk>"]
                 source_tokens.append(tokens)
 
             # 翻訳実行
-            results = translator.translate_batch(
+            results = translator.translate_batch(  # type: ignore
                 source_tokens,
                 beam_size=self.settings.beam_size,
                 num_hypotheses=self.settings.num_hypotheses,
@@ -335,7 +335,7 @@ class LocalTranslateProvider:
             for result in results:
                 hypothesis = result.hypotheses[0]  # 最良の仮説を選択
                 # トークンを文字列に変換
-                translated_text = tokenizer.convert_tokens_to_string(hypothesis)
+                translated_text = tokenizer.convert_tokens_to_string(hypothesis)  # type: ignore
                 translated_text = self._postprocess_text(translated_text, tgt_lang)
                 translated_texts.append(translated_text)
 

@@ -6,7 +6,7 @@
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional, Union, cast
 
 from PySide6.QtCore import QObject, QThread, QTimer, Signal
 from PySide6.QtWidgets import QWidget
@@ -64,7 +64,7 @@ class ExtractionWorker(QThread):
         self.start_time: Optional[float] = None
 
         # パフォーマンス監視
-        self.performance_stats = {
+        self.performance_stats: Dict[str, Union[int, float]] = {
             "frames_processed": 0,
             "ocr_failures": 0,
             "memory_errors": 0,
@@ -539,9 +539,9 @@ class ExtractionWorker(QThread):
 
         if self.start_time:
             total_time = time.time() - self.start_time
-            stats["total_time"] = total_time
+            stats["total_time"] = float(total_time)
             if stats["frames_processed"] > 0 and total_time > 0:
-                stats["frames_per_second"] = stats["frames_processed"] / total_time
+                stats["frames_per_second"] = float(stats["frames_processed"]) / total_time
 
         self.logger.info(f"抽出完了統計: {stats}")
 

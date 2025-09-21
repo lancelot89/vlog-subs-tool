@@ -643,7 +643,7 @@ class SRTParser:
             )
 
             if not time_match:
-                return None
+                return None  # type: ignore[unreachable]
 
             start_time_str, end_time_str = time_match.groups()
             start_ms = self.formatter.parse_time(start_time_str)
