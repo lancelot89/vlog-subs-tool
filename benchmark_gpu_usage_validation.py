@@ -166,7 +166,11 @@ class GPUUsageValidator:
         return gpu_info
 
     def _parse_gpu_processes(self, nvidia_smi_output: str) -> List[Dict]:
-        """nvidia-smi pmonの出力をパース"""
+        """nvidia-smi pmonの出力をパース
+
+        nvidia-smi pmon -s um の出力形式:
+        gpu pid type sm mem enc dec jpg ofa fb ccpm command
+        """
         processes = []
         lines = nvidia_smi_output.strip().split("\n")
 
@@ -175,16 +179,23 @@ class GPUUsageValidator:
                 continue
 
             parts = line.split()
-            if len(parts) >= 6:
+            if len(parts) >= 11:  # 最低でもcommand列まで必要
                 try:
+                    # 正しいカラム順序に従って解析
                     process_info = {
                         "gpu_id": int(parts[0]),
-                        "pid": int(parts[1]),
-                        "process_name": parts[2],
-                        "memory_usage": int(parts[4]) if parts[4] != "-" else 0,
-                        "gpu_utilization": int(parts[5]) if parts[5] != "-" else 0,
+                        "pid": int(parts[1]) if parts[1] != "-" else 0,
+                        "type": parts[2],  # C/G (Compute/Graphics)
+                        "sm_utilization": int(parts[3]) if parts[3] != "-" else 0,  # SM使用率
+                        "memory_usage": int(parts[4]) if parts[4] != "-" else 0,  # メモリ使用率
+                        "process_name": parts[-1],  # コマンド名（最後の列）
+                        "gpu_utilization": (
+                            int(parts[3]) if parts[3] != "-" else 0
+                        ),  # 互換性のためSM使用率を使用
                     }
-                    processes.append(process_info)
+                    # プロセスが実際に存在する場合のみ追加
+                    if process_info["pid"] > 0:
+                        processes.append(process_info)
                 except (ValueError, IndexError):
                     continue
 
