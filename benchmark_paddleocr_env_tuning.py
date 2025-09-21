@@ -365,11 +365,23 @@ def analyze_results(results: List[BenchmarkResult]) -> Tuple[BenchmarkResult, Di
         raise ValueError("No results to analyze")
 
     # Find baseline (first result or a specific baseline configuration)
+    # Prefer: 1 thread, no MKLDNN, no affinity
     baseline = results[0]
     for result in results:
-        if result.config.omp_threads == 1 and not result.config.mkldnn_enabled:
+        if (
+            result.config.omp_threads == 1
+            and not result.config.mkldnn_enabled
+            and result.config.kmp_affinity is None
+        ):
             baseline = result
             break
+
+    # Fallback: any single-threaded configuration
+    if baseline.config.omp_threads != 1:
+        for result in results:
+            if result.config.omp_threads == 1:
+                baseline = result
+                break
 
     # Calculate improvements vs baseline
     for result in results:
@@ -542,10 +554,10 @@ def main() -> None:
         help="Comma-separated list of affinity modes (none,compact,scatter)",
     )
     parser.add_argument(
-        "--mkldnn-enabled",
+        "--disable-mkldnn",
         action="store_true",
-        default=True,
-        help="Enable Intel MKL-DNN optimization",
+        default=False,
+        help="Disable Intel MKL-DNN optimization (enabled by default)",
     )
     parser.add_argument(
         "--auto-detect-cores",
@@ -602,6 +614,8 @@ def main() -> None:
         # Use all available options for comprehensive testing
         thread_counts = [1, 2, 4, 8, 16]
         affinity_modes = list(affinity_mapping.values())
+        # For comprehensive testing, also test both MKLDNN enabled and disabled
+        # This will be handled by running the benchmark twice
 
     logger.info("=" * 80)
     logger.info("Issue #174: PaddleOCR Environment Variable Tuning")
@@ -614,12 +628,36 @@ def main() -> None:
     test_images = create_test_images(args.test_images)
 
     # Generate test configurations
-    configurations = generate_test_configurations(
-        thread_counts=thread_counts,
-        enable_mkldnn=args.mkldnn_enabled,
-        affinity_modes=affinity_modes,
-        auto_detect_cores=args.auto_detect_cores,
-    )
+    enable_mkldnn = not args.disable_mkldnn  # Invert the disable flag
+
+    configurations = []
+    if args.comprehensive:
+        # For comprehensive testing, test both MKLDNN enabled and disabled
+        logger.info("Comprehensive mode: testing both MKLDNN enabled and disabled")
+        configurations.extend(
+            generate_test_configurations(
+                thread_counts=thread_counts,
+                enable_mkldnn=True,
+                affinity_modes=affinity_modes,
+                auto_detect_cores=args.auto_detect_cores,
+            )
+        )
+        configurations.extend(
+            generate_test_configurations(
+                thread_counts=thread_counts,
+                enable_mkldnn=False,
+                affinity_modes=affinity_modes,
+                auto_detect_cores=args.auto_detect_cores,
+            )
+        )
+    else:
+        # Standard mode: use the specified MKLDNN setting
+        configurations = generate_test_configurations(
+            thread_counts=thread_counts,
+            enable_mkldnn=enable_mkldnn,
+            affinity_modes=affinity_modes,
+            auto_detect_cores=args.auto_detect_cores,
+        )
 
     # Run benchmarks
     logger.info("Starting environment variable tuning benchmarks...")
