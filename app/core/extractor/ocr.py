@@ -128,12 +128,18 @@ class OCRStageTimings:
 
         if has_actual_stages:
             logger.info("  Text Detection:    %.3f ms (measured)", self.detection_time * 1000)
-            logger.info("  Text Classification: %.3f ms (measured)", self.classification_time * 1000)
+            logger.info(
+                "  Text Classification: %.3f ms (measured)", self.classification_time * 1000
+            )
             logger.info("  Text Recognition:  %.3f ms (measured)", self.recognition_time * 1000)
         else:
             logger.info("  Text Detection:    %.3f ms (not measured)", self.detection_time * 1000)
-            logger.info("  Text Classification: %.3f ms (not measured)", self.classification_time * 1000)
-            logger.info("  Text Recognition:  %.3f ms (total OCR fallback)", self.recognition_time * 1000)
+            logger.info(
+                "  Text Classification: %.3f ms (not measured)", self.classification_time * 1000
+            )
+            logger.info(
+                "  Text Recognition:  %.3f ms (total OCR fallback)", self.recognition_time * 1000
+            )
 
         logger.info("  Total OCR Time:    %.3f ms", self.total_time * 1000)
 
@@ -885,7 +891,7 @@ class SimplePaddleOCREngine:
         # Access PaddleX pipeline for individual model timing
         pipeline = self._ocr._create_paddlex_pipeline()
 
-        if not hasattr(pipeline, 'text_det_model') or not hasattr(pipeline, 'text_rec_model'):
+        if not hasattr(pipeline, "text_det_model") or not hasattr(pipeline, "text_rec_model"):
             raise RuntimeError("PaddleX pipeline does not expose individual models")
 
         # Stage 1: Text Detection
@@ -893,7 +899,7 @@ class SimplePaddleOCREngine:
         try:
             det_results = pipeline.text_det_model.predict([image])
             # Handle generator result if needed
-            if hasattr(det_results, '__iter__') and not isinstance(det_results, (list, tuple)):
+            if hasattr(det_results, "__iter__") and not isinstance(det_results, (list, tuple)):
                 det_results = list(det_results)
         except Exception as e:
             raise RuntimeError(f"Text detection failed: {e}")
@@ -908,7 +914,7 @@ class SimplePaddleOCREngine:
 
         # Handle the case where det_results is a generator or has different structure
         first_result = det_results[0] if isinstance(det_results, (list, tuple)) else det_results
-        if not hasattr(first_result, 'get') or not first_result.get('dt_polys'):
+        if not hasattr(first_result, "get") or not first_result.get("dt_polys"):
             # No text regions found, skip remaining stages
             timing.classification_time = 0.0
             timing.recognition_time = 0.0
@@ -916,13 +922,13 @@ class SimplePaddleOCREngine:
 
         # Stage 2: Text Line Orientation (Classification) - if enabled
         cls_start_time = time.perf_counter()
-        if hasattr(pipeline, 'text_cls_model') and pipeline.text_cls_model is not None:
+        if hasattr(pipeline, "text_cls_model") and pipeline.text_cls_model is not None:
             try:
                 # Extract text regions for classification
-                text_regions = first_result['dt_polys']
+                text_regions = first_result["dt_polys"]
                 # Run classification on detected regions
                 cls_results = pipeline.text_cls_model.predict(text_regions)
-                if hasattr(cls_results, '__iter__') and not isinstance(cls_results, (list, tuple)):
+                if hasattr(cls_results, "__iter__") and not isinstance(cls_results, (list, tuple)):
                     cls_results = list(cls_results)
             except Exception as e:
                 logger.warning("Text classification failed: %s", e)
@@ -934,7 +940,7 @@ class SimplePaddleOCREngine:
         try:
             rec_results = pipeline.text_rec_model.predict(det_results)
             # Handle generator result if needed
-            if hasattr(rec_results, '__iter__') and not isinstance(rec_results, (list, tuple)):
+            if hasattr(rec_results, "__iter__") and not isinstance(rec_results, (list, tuple)):
                 rec_results = list(rec_results)
         except Exception as e:
             raise RuntimeError(f"Text recognition failed: {e}")
@@ -961,7 +967,9 @@ class SimplePaddleOCREngine:
 
         return raw_results
 
-    def _combine_detection_recognition_results(self, det_results: Any, rec_results: Any) -> List[Any]:
+    def _combine_detection_recognition_results(
+        self, det_results: Any, rec_results: Any
+    ) -> List[Any]:
         """Combine detection and recognition results into the expected OCR format."""
         combined = []
         if not det_results or not rec_results:
@@ -970,9 +978,9 @@ class SimplePaddleOCREngine:
         # This is a simplified combination - the actual implementation
         # would depend on the specific format returned by PaddleX models
         try:
-            polys = det_results[0].get('dt_polys', [])
-            texts = rec_results[0].get('rec_texts', []) if rec_results else []
-            scores = rec_results[0].get('rec_scores', []) if rec_results else []
+            polys = det_results[0].get("dt_polys", [])
+            texts = rec_results[0].get("rec_texts", []) if rec_results else []
+            scores = rec_results[0].get("rec_scores", []) if rec_results else []
 
             for i, poly in enumerate(polys):
                 text = texts[i] if i < len(texts) else ""
