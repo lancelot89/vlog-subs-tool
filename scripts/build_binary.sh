@@ -101,7 +101,7 @@ build_windows() {
             --hidden-import "PySide6.QtWidgets" \
             --hidden-import "paddleocr" \
             --hidden-import "paddle" \
-            --hidden-import "paddlex" \
+            --exclude-module "paddlex" \
             --hidden-import "cv2" \
             --hidden-import "numpy" \
             --hidden-import "psutil" \
@@ -147,7 +147,7 @@ build_macos() {
             --hidden-import "PySide6.QtWidgets" \
             --hidden-import "paddleocr" \
             --hidden-import "paddle" \
-            --hidden-import "paddlex" \
+            --exclude-module "paddlex" \
             --hidden-import "cv2" \
             --hidden-import "numpy" \
             --hidden-import "psutil" \
@@ -186,7 +186,7 @@ build_linux() {
             --hidden-import "PySide6.QtWidgets" \
             --hidden-import "paddleocr" \
             --hidden-import "paddle" \
-            --hidden-import "paddlex" \
+            --exclude-module "paddlex" \
             --hidden-import "cv2" \
             --hidden-import "numpy" \
             --hidden-import "psutil" \

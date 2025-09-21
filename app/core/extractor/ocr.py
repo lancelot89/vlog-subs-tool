@@ -903,8 +903,19 @@ class SimplePaddleOCREngine:
 
     def _run_ocr_stage_timing_direct(self, image: np.ndarray, timing: OCRStageTimings) -> Any:
         """Execute stage timing directly (non-Apple Silicon platforms)."""
+        # Check if PaddleX is available for stage timing
+        if not PADDLEX_AVAILABLE:
+            logger.warning("PaddleX not available for stage timing, falling back to standard OCR")
+            # Fall back to standard OCR without stage timing
+            return self._ocr.ocr(image)
+
         # Access PaddleX pipeline for individual model timing
-        pipeline = self._ocr._create_paddlex_pipeline()
+        try:
+            pipeline = self._ocr._create_paddlex_pipeline()
+        except (AttributeError, ImportError, RuntimeError) as e:
+            logger.warning("Failed to create PaddleX pipeline for stage timing: %s", e)
+            logger.warning("Falling back to standard OCR")
+            return self._ocr.ocr(image)
 
         if not hasattr(pipeline, "text_det_model") or not hasattr(pipeline, "text_rec_model"):
             raise RuntimeError("PaddleX pipeline does not expose individual models")

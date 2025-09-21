@@ -175,9 +175,15 @@ def test_imports(logger: Any) -> bool:
 
 def main() -> None:
     """メインエントリーポイント"""
+    # PyInstallerバイナリ実行時の安全対策（PaddleXエラー対策）
+    import multiprocessing
+
+    multiprocessing.freeze_support()
+
     setup_logging()
     logger = logging.getLogger(__name__)
     logger.info("メインエントリーポイント開始")
+    logger.info("multiprocessing.freeze_support() 実行完了")
 
     is_standalone = setup_paths()
     logger.info(f"実行環境: {'スタンドアロン' if is_standalone else 'ソースコード'}")
