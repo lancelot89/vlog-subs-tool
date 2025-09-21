@@ -99,11 +99,11 @@ class OCRResult:
 class OCRStageTimings:
     """Container for stage-by-stage OCR timing measurements."""
 
-    decode_time: float = 0.0      # Video frame decoding/preprocessing time
-    detection_time: float = 0.0   # Text detection time
+    decode_time: float = 0.0  # Video frame decoding/preprocessing time
+    detection_time: float = 0.0  # Text detection time
     classification_time: float = 0.0  # Text orientation classification time
-    recognition_time: float = 0.0     # Text recognition time
-    total_time: float = 0.0       # Total OCR processing time
+    recognition_time: float = 0.0  # Text recognition time
+    total_time: float = 0.0  # Total OCR processing time
 
     def log_summary(self, platform_info: str = "") -> None:
         """Log a summary of timing measurements."""
@@ -119,7 +119,9 @@ class OCRStageTimings:
             logger.info("Stage Breakdown:")
             logger.info("  Decode:    %.1f%%", (self.decode_time / self.total_time) * 100)
             logger.info("  Detection: %.1f%%", (self.detection_time / self.total_time) * 100)
-            logger.info("  Classification: %.1f%%", (self.classification_time / self.total_time) * 100)
+            logger.info(
+                "  Classification: %.1f%%", (self.classification_time / self.total_time) * 100
+            )
             logger.info("  Recognition: %.1f%%", (self.recognition_time / self.total_time) * 100)
 
 
@@ -836,7 +838,9 @@ class SimplePaddleOCREngine:
 
         return self._parse_ocr_results(raw_results)
 
-    def _run_ocr_with_timing(self, image: np.ndarray, timing: Optional[OCRStageTimings], timeout_seconds: int = 30) -> Any:
+    def _run_ocr_with_timing(
+        self, image: np.ndarray, timing: Optional[OCRStageTimings], timeout_seconds: int = 30
+    ) -> Any:
         """Execute OCR with detailed stage timing for Issue #170."""
         if timing is None:
             # Fallback to normal execution without timing
@@ -859,9 +863,9 @@ class SimplePaddleOCREngine:
         # - Detection: ~40-60% of total time
         # - Classification: ~5-15% of total time
         # - Recognition: ~30-50% of total time
-        timing.detection_time = total_ocr_time * 0.5      # ~50% for detection
+        timing.detection_time = total_ocr_time * 0.5  # ~50% for detection
         timing.classification_time = total_ocr_time * 0.1  # ~10% for classification
-        timing.recognition_time = total_ocr_time * 0.4     # ~40% for recognition
+        timing.recognition_time = total_ocr_time * 0.4  # ~40% for recognition
 
         return raw_results
 
