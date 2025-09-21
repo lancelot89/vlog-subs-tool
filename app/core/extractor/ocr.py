@@ -86,6 +86,7 @@ def _load_paddlex_module() -> Any:
         _PADDLEX_MODULE = importlib.import_module("paddlex")
     return _PADDLEX_MODULE
 
+
 # ---------------------------------------------------------------------------
 # Legacy helpers - now replaced by cpu_profiler module ---------------------
 # ---------------------------------------------------------------------------
