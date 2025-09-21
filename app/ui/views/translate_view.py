@@ -485,11 +485,11 @@ class TranslateView(QDialog):
         msg_box.setWindowTitle(title)
         msg_box.setText(guidance)
         msg_box.setDetailedText(f"詳細エラー情報:\\n{error_message}")
-        msg_box.setStandardButtons(QMessageBox.Ok | QMessageBox.Help)
+        msg_box.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Help)
 
         # ヘルプボタンで設定画面を開く
         result = msg_box.exec()
-        if result == QMessageBox.Help:
+        if result == QMessageBox.StandardButton.Help:
             self.open_settings_dialog()
 
     def export_csv(self):

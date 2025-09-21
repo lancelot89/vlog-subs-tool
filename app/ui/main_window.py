@@ -295,7 +295,7 @@ class MainWindow(QMainWindow):
     def create_toolbar(self):
         """ツールバーの作成"""
         toolbar = self.addToolBar("メイン")
-        toolbar.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
 
         # 動画を開く
         open_btn = QPushButton("動画を開く")
@@ -349,7 +349,7 @@ class MainWindow(QMainWindow):
         main_layout = QHBoxLayout(central_widget)
 
         # スプリッター
-        splitter = QSplitter(Qt.Horizontal)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
         main_layout.addWidget(splitter)
 
         # 左ペイン: 動画プレビュー
@@ -404,15 +404,15 @@ class MainWindow(QMainWindow):
     def setup_shortcuts(self):
         """ショートカットキーの設定"""
         # Space: 再生/一時停止
-        self.play_pause_shortcut = QShortcut(QKeySequence(Qt.Key_Space), self)
+        self.play_pause_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Space), self)
         self.play_pause_shortcut.activated.connect(self.toggle_playback)
 
         # S: 字幕分割
-        self.split_shortcut = QShortcut(QKeySequence(Qt.Key_S), self)
+        self.split_shortcut = QShortcut(QKeySequence(Qt.Key.Key_S), self)
         self.split_shortcut.activated.connect(self.table_view.split_subtitle)
 
         # M: 字幕結合
-        self.merge_shortcut = QShortcut(QKeySequence(Qt.Key_M), self)
+        self.merge_shortcut = QShortcut(QKeySequence(Qt.Key.Key_M), self)
         self.merge_shortcut.activated.connect(self.table_view.merge_subtitle)
 
         # Ctrl+Q: QCチェック
@@ -420,10 +420,10 @@ class MainWindow(QMainWindow):
         self.qc_shortcut.activated.connect(self.run_qc_check)
 
         # 左右矢印: フレーム移動
-        self.frame_back_shortcut = QShortcut(QKeySequence(Qt.Key_Left), self)
+        self.frame_back_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Left), self)
         self.frame_back_shortcut.activated.connect(self.seek_frame_back)
 
-        self.frame_forward_shortcut = QShortcut(QKeySequence(Qt.Key_Right), self)
+        self.frame_forward_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Right), self)
         self.frame_forward_shortcut.activated.connect(self.seek_frame_forward)
 
     def toggle_playback(self):
@@ -497,10 +497,10 @@ class MainWindow(QMainWindow):
                     f"ファイル形式 '{file_ext}' は推奨されていません。\n"
                     f"推奨形式: {', '.join(supported_formats)}\n\n"
                     f"続行しますか？",
-                    QMessageBox.Yes | QMessageBox.No,
-                    QMessageBox.No,
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
                 )
-                if reply == QMessageBox.No:
+                if reply == QMessageBox.StandardButton.No:
                     return
 
             self.current_video_path = file_path
@@ -533,7 +533,7 @@ class MainWindow(QMainWindow):
 
         error_dialog = QMessageBox(self)
         error_dialog.setWindowTitle("動画コーデックエラー")
-        error_dialog.setIcon(QMessageBox.Critical)
+        error_dialog.setIcon(QMessageBox.Icon.Critical)
 
         error_text = f"動画ファイルを開けませんでした。\n\n"
         error_text += f"ファイル: {Path(file_path).name}\n"
@@ -725,11 +725,11 @@ class MainWindow(QMainWindow):
             self,
             "キャンセル確認",
             "字幕抽出を中止しますか？\n\n" "進行中の処理が停止され、現在までの結果は破棄されます。",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
         )
 
-        if reply == QMessageBox.Yes:
+        if reply == QMessageBox.StandardButton.Yes:
             # キャンセル実行
             logging.info("ユーザーがキャンセルを確定しました")
             # 自動抽出ボタン（現在はキャンセルボタン）を「キャンセル中...」に変更
@@ -791,11 +791,11 @@ class MainWindow(QMainWindow):
             self,
             "字幕抽出の開始確認",
             message,
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.Yes,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
         )
 
-        return reply == QMessageBox.Yes
+        return reply == QMessageBox.StandardButton.Yes
 
     def _show_cancel_button_with_force(self):
         """キャンセルボタンを確実に表示する強化メソッド"""
@@ -1018,11 +1018,11 @@ class MainWindow(QMainWindow):
         msg_box.setText(message)
 
         if summary["error"] > 0:
-            msg_box.setIcon(QMessageBox.Critical)
+            msg_box.setIcon(QMessageBox.Icon.Critical)
         elif summary["warning"] > 0:
-            msg_box.setIcon(QMessageBox.Warning)
+            msg_box.setIcon(QMessageBox.Icon.Warning)
         else:
-            msg_box.setIcon(QMessageBox.Information)
+            msg_box.setIcon(QMessageBox.Icon.Information)
 
         msg_box.exec()
 
@@ -1644,11 +1644,11 @@ class MainWindow(QMainWindow):
                     self,
                     "プロジェクト読み込み警告",
                     error_msg,
-                    QMessageBox.Yes | QMessageBox.No,
-                    QMessageBox.No,
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
                 )
 
-                if reply == QMessageBox.No:
+                if reply == QMessageBox.StandardButton.No:
                     # ユーザーがキャンセルした場合、ProjectManagerの状態をロールバック
                     project_manager.current_project = previous_project
                     project_manager.current_file_path = previous_file_path
@@ -1667,11 +1667,11 @@ class MainWindow(QMainWindow):
                         self,
                         "動画ファイルが見つかりません",
                         f"動画ファイルが見つかりません:\n{video_path}\n\n新しい場所を指定しますか？",
-                        QMessageBox.Yes | QMessageBox.No,
-                        QMessageBox.Yes,
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                        QMessageBox.StandardButton.Yes,
                     )
 
-                    if reply == QMessageBox.Yes:
+                    if reply == QMessageBox.StandardButton.Yes:
                         new_video_path, _ = QFileDialog.getOpenFileName(
                             self,
                             "動画ファイルを選択",

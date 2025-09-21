@@ -216,15 +216,15 @@ class ErrorHandler(QObject):
 
         # アイコン決定
         icon_map = {
-            ErrorSeverity.INFO: QMessageBox.Information,
-            ErrorSeverity.WARNING: QMessageBox.Warning,
-            ErrorSeverity.ERROR: QMessageBox.Critical,
-            ErrorSeverity.CRITICAL: QMessageBox.Critical,
+            ErrorSeverity.INFO: QMessageBox.Icon.Information,
+            ErrorSeverity.WARNING: QMessageBox.Icon.Warning,
+            ErrorSeverity.ERROR: QMessageBox.Icon.Critical,
+            ErrorSeverity.CRITICAL: QMessageBox.Icon.Critical,
         }
 
         # メッセージボックス作成
         msg_box = QMessageBox(self.parent_widget)
-        msg_box.setIcon(icon_map.get(error_info.severity, QMessageBox.Critical))
+        msg_box.setIcon(icon_map.get(error_info.severity, QMessageBox.Icon.Critical))
         msg_box.setWindowTitle("エラーが発生しました")
         msg_box.setText(error_info.message)
 
@@ -246,15 +246,15 @@ class ErrorHandler(QObject):
 
         # ボタン設定
         if allow_retry:
-            msg_box.addButton("再試行", QMessageBox.AcceptRole)
-            msg_box.addButton("キャンセル", QMessageBox.RejectRole)
+            msg_box.addButton("再試行", QMessageBox.ButtonRole.AcceptRole)
+            msg_box.addButton("キャンセル", QMessageBox.ButtonRole.RejectRole)
         else:
-            msg_box.addButton("OK", QMessageBox.AcceptRole)
+            msg_box.addButton("OK", QMessageBox.ButtonRole.AcceptRole)
 
         # 復旧オプションがある場合
         recovery_buttons = {}
         for option_id, option_func in error_info.recovery_options.items():
-            button = msg_box.addButton(option_id, QMessageBox.ActionRole)
+            button = msg_box.addButton(option_id, QMessageBox.ButtonRole.ActionRole)
             recovery_buttons[button] = (option_id, option_func)
 
         # ダイアログ表示
@@ -273,7 +273,9 @@ class ErrorHandler(QObject):
                 return False
 
         # 再試行の場合
-        return allow_retry and msg_box.buttonRole(clicked_button) == QMessageBox.AcceptRole
+        return (
+            allow_retry and msg_box.buttonRole(clicked_button) == QMessageBox.ButtonRole.AcceptRole
+        )
 
     def create_progress_error_handler(
         self, operation_name: str, total_steps: int = 100

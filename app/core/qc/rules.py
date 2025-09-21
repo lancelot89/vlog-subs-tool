@@ -228,7 +228,7 @@ class DuplicateTextRule(QCRule):
 
     def check(self, subtitles: List[SubtitleItem]) -> List[QCResult]:
         results = []
-        seen_texts = {}
+        seen_texts: Dict[str, int] = {}
 
         for i, subtitle in enumerate(subtitles):
             text = subtitle.text.strip().lower()
@@ -291,11 +291,11 @@ class ReadingSpeedRule(QCRule):
 class QCChecker:
     """QCチェッカー統合クラス"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.rules: List[QCRule] = []
         self._init_default_rules()
 
-    def _init_default_rules(self):
+    def _init_default_rules(self) -> None:
         """デフォルトルールの初期化"""
         self.rules = [
             LineLengthRule(max_chars=42),
@@ -308,15 +308,15 @@ class QCChecker:
             ReadingSpeedRule(max_chars_per_second=20.0),
         ]
 
-    def add_rule(self, rule: QCRule):
+    def add_rule(self, rule: QCRule) -> None:
         """ルールを追加"""
         self.rules.append(rule)
 
-    def remove_rule(self, rule_name: str):
+    def remove_rule(self, rule_name: str) -> None:
         """ルールを削除"""
         self.rules = [rule for rule in self.rules if rule.name != rule_name]
 
-    def enable_rule(self, rule_name: str, enabled: bool = True):
+    def enable_rule(self, rule_name: str, enabled: bool = True) -> None:
         """ルールの有効/無効を設定"""
         for rule in self.rules:
             if rule.name == rule_name:

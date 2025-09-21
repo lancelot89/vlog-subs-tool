@@ -36,7 +36,7 @@ class MultilineTextDelegate(QStyledItemDelegate):
         """エディターを作成"""
         if index.column() == 3:  # 本文列の場合
             editor = QPlainTextEdit(parent)
-            editor.setWordWrapMode(QTextOption.WrapAtWordBoundaryOrAnywhere)
+            editor.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
             # イベントフィルターを設定
             editor.installEventFilter(self)
             return editor
@@ -45,7 +45,7 @@ class MultilineTextDelegate(QStyledItemDelegate):
     def setEditorData(self, editor, index):
         """エディターにデータを設定"""
         if isinstance(editor, QPlainTextEdit):
-            text = index.model().data(index, Qt.EditRole)
+            text = index.model().data(index, Qt.ItemDataRole.EditRole)
             editor.setPlainText(text or "")
         else:
             super().setEditorData(editor, index)
@@ -54,7 +54,7 @@ class MultilineTextDelegate(QStyledItemDelegate):
         """エディターからモデルにデータを設定"""
         if isinstance(editor, QPlainTextEdit):
             text = editor.toPlainText()
-            model.setData(index, text, Qt.EditRole)
+            model.setData(index, text, Qt.ItemDataRole.EditRole)
         else:
             super().setModelData(editor, model, index)
 
@@ -64,8 +64,8 @@ class MultilineTextDelegate(QStyledItemDelegate):
             key_event = event
 
             # Ctrl+Enter (Windows/Linux) または Cmd+Enter (Mac) で次の字幕に移動
-            if key_event.key() == Qt.Key_Return and key_event.modifiers() & (
-                Qt.ControlModifier | Qt.MetaModifier
+            if key_event.key() == Qt.Key.Key_Return and key_event.modifiers() & (
+                Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier
             ):
 
                 # エディターを閉じて次の字幕に移動
@@ -75,7 +75,7 @@ class MultilineTextDelegate(QStyledItemDelegate):
                 return True
 
             # 通常のEnterキーは改行として処理（デフォルト動作）
-            elif key_event.key() == Qt.Key_Return and not key_event.modifiers():
+            elif key_event.key() == Qt.Key.Key_Return and not key_event.modifiers():
                 return False  # デフォルトの改行動作を許可
 
         return super().eventFilter(editor, event)
@@ -165,10 +165,10 @@ class SubtitleTableView(QWidget):
 
         # テーブルの設定
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.Fixed)  # インデックス列
-        header.setSectionResizeMode(1, QHeaderView.Fixed)  # 開始時間列
-        header.setSectionResizeMode(2, QHeaderView.Fixed)  # 終了時間列
-        header.setSectionResizeMode(3, QHeaderView.Stretch)  # 本文列
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)  # インデックス列
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)  # 開始時間列
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)  # 終了時間列
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)  # 本文列
 
         self.table.setColumnWidth(0, 50)  # インデックス
         self.table.setColumnWidth(1, 100)  # 開始時間
@@ -176,20 +176,20 @@ class SubtitleTableView(QWidget):
 
         # 垂直ヘッダーの設定（行の高さを可変にする）
         vertical_header = self.table.verticalHeader()
-        vertical_header.setSectionResizeMode(QHeaderView.ResizeToContents)
+        vertical_header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
 
         # 改行表示のための設定
         self.table.setWordWrap(True)
 
         # 選択モード設定
-        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
 
         # イベント接続
         self.table.cellChanged.connect(self.on_cell_changed)
         self.table.itemSelectionChanged.connect(self.on_selection_changed)
         self.table.customContextMenuRequested.connect(self.show_context_menu)
-        self.table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.cellDoubleClicked.connect(self.on_cell_double_clicked)
 
         layout.addWidget(self.table)
@@ -224,8 +224,8 @@ class SubtitleTableView(QWidget):
         for row, subtitle in enumerate(self.subtitles):
             # インデックス
             index_item = QTableWidgetItem(str(subtitle.index))
-            index_item.setFlags(index_item.flags() & ~Qt.ItemIsEditable)
-            index_item.setTextAlignment(Qt.AlignCenter)
+            index_item.setFlags(index_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            index_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self.table.setItem(row, 0, index_item)
 
             # 開始時間
@@ -244,7 +244,7 @@ class SubtitleTableView(QWidget):
             # 改行が含まれている場合の特別処理
             if "\n" in subtitle.text:
                 # 改行を表示するためにWordWrapを有効化
-                text_item.setData(Qt.DisplayRole, subtitle.text)
+                text_item.setData(Qt.ItemDataRole.DisplayRole, subtitle.text)
 
                 # 行数に応じて行の高さを調整
                 line_count = subtitle.text.count("\n") + 1
@@ -361,7 +361,7 @@ class SubtitleTableView(QWidget):
                 item = self.table.item(self.current_highlight_row, col)
                 if item:
                     # システムのデフォルト背景色に戻す
-                    default_bg = QApplication.palette().color(QPalette.Base)
+                    default_bg = QApplication.palette().color(QPalette.ColorRole.Base)
                     item.setBackground(default_bg)
 
         # 現在時間に該当する字幕を検索
@@ -464,11 +464,11 @@ class SubtitleTableView(QWidget):
             self,
             "確認",
             "選択された字幕を削除しますか？",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
         )
 
-        if reply == QMessageBox.Yes:
+        if reply == QMessageBox.StandardButton.Yes:
             del self.subtitles[row]
             self.refresh_table()
             self.subtitles_reordered.emit()

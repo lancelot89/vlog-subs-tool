@@ -10,9 +10,10 @@ import sys
 import traceback
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 
-def is_console_available():
+def is_console_available() -> bool:
     """
     コンソールが利用可能かどうかを判定
     """
@@ -37,7 +38,7 @@ def is_console_available():
         return False
 
 
-def safe_input_prompt(message="Press Enter to continue..."):
+def safe_input_prompt(message: str = "Press Enter to continue...") -> None:
     """
     安全なinputプロンプト（コンソールが利用可能な場合のみ）
     """
@@ -48,7 +49,7 @@ def safe_input_prompt(message="Press Enter to continue..."):
             pass  # コンソールエラーは無視
 
 
-def setup_logging():
+def setup_logging() -> None:
     """
     デバッグ用ロギング設定
     """
@@ -82,10 +83,8 @@ def setup_logging():
         logger.info(f"_MEIPASS: {sys._MEIPASS}")
     logger.info(f"Log file: {log_file}")
 
-    return logger
 
-
-def setup_paths():
+def setup_paths() -> bool:
     """
     実行環境に応じてパスを設定
     PyInstallerでビルドされたバイナリとソースコード実行の両方に対応
@@ -112,7 +111,7 @@ def setup_paths():
         return False  # 開発環境実行
 
 
-def test_imports(logger):
+def test_imports(logger: Any) -> bool:
     """段階的インポートテスト"""
     logger.info("=== 段階的インポートテスト開始 ===")
 
@@ -174,9 +173,10 @@ def test_imports(logger):
         return False
 
 
-def main():
+def main() -> None:
     """メインエントリーポイント"""
-    logger = setup_logging()
+    setup_logging()
+    logger = logging.getLogger(__name__)
     logger.info("メインエントリーポイント開始")
 
     is_standalone = setup_paths()
@@ -248,7 +248,7 @@ def main():
         sys.exit(1)
 
 
-def show_standalone_error(error):
+def show_standalone_error(error: Exception) -> None:
     """スタンドアロンバイナリ実行時のエラー表示"""
     print("❌ エラー: バイナリファイルに問題があります")
     print()
@@ -264,7 +264,7 @@ def show_standalone_error(error):
     print(f"🐛 詳細エラー: {error}")
 
 
-def show_source_error(error):
+def show_source_error(error: Exception) -> None:
     """ソースコード実行時の依存関係エラー表示"""
     print("❌ エラー: 依存関係が不足しているか、実行方法に問題があります")
     print()
@@ -284,7 +284,7 @@ def show_source_error(error):
     print(f"🐛 元のエラー: {error}")
 
 
-def show_package_error(error):
+def show_package_error(error: Exception) -> None:
     """パッケージインストールエラー表示"""
     print("❌ エラー: 必要なパッケージがインストールされていません")
     print()

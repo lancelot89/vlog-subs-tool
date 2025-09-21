@@ -6,7 +6,7 @@ Basic CPU detection for OCR thread optimization, without complex profiling.
 import os
 import platform
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 
 @dataclass
@@ -48,11 +48,11 @@ def get_adaptive_thread_config() -> ThreadConfig:
 class CPUProfiler:
     """Simplified CPU profiler for basic detection."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.cpu_count = get_cpu_count()
         self.platform = platform.system()
 
-    def detect_cpu_profile(self):
+    def detect_cpu_profile(self) -> Dict[str, Any]:
         """Return basic CPU information."""
         cpu_name = platform.processor() or "Unknown"
         vendor = "Unknown"

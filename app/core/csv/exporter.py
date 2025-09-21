@@ -196,7 +196,7 @@ class SubtitleCSVExporter:
         seconds = total_seconds % 60
         return f"{minutes:02d}:{seconds:06.3f}"
 
-    def _write_csv_file(self, filepath: Path, rows: List[List[str]]):
+    def _write_csv_file(self, filepath: Path, rows: List[List[str]]) -> None:
         """CSVファイル書き込み"""
         # ディレクトリ作成
         filepath.parent.mkdir(parents=True, exist_ok=True)
