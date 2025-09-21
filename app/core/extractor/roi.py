@@ -4,7 +4,7 @@ ROI（関心領域）検出機能の実装
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -53,7 +53,11 @@ class ROIDetector:
         raise NotImplementedError
 
     def visualize_roi(
-        self, frame: np.ndarray, roi: ROIRegion, color=(0, 255, 0), thickness=2
+        self,
+        frame: np.ndarray,
+        roi: ROIRegion,
+        color: Tuple[int, int, int] = (0, 255, 0),
+        thickness: int = 2,
     ) -> np.ndarray:
         """ROI領域を可視化"""
         vis_frame = frame.copy()
@@ -126,14 +130,15 @@ class AutoROIDetector(ROIDetector):
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
         # MSERを使用してテキスト候補領域を検出
-        mser = cv2.MSER_create()
+        mser = cv2.MSER.create()
         regions, _ = mser.detectRegions(gray)
 
         text_regions = []
 
         for region in regions:
             # 領域の外接矩形を計算
-            x, y, w, h = cv2.boundingRect(region.reshape(-1, 1, 2))
+            region_array = np.array(region).reshape(-1, 1, 2)
+            x, y, w, h = cv2.boundingRect(region_array)
 
             # 字幕らしい領域をフィルタリング
             if self._is_subtitle_like_region(x, y, w, h, frame.shape):
@@ -183,7 +188,7 @@ class AutoROIDetector(ROIDetector):
         # 信頼度の計算（エッジ密度とコントラストの組み合わせ）
         confidence = min(edge_density * 2 + std_dev / 255, 1.0)
 
-        return confidence
+        return float(confidence)
 
     def _find_consistent_roi(self, text_regions: List[ROIRegion]) -> ROIRegion:
         """一貫性のあるROI領域を見つける"""
@@ -197,7 +202,7 @@ class AutoROIDetector(ROIDetector):
             )
 
         # Y座標でグルーピング（垂直位置が近い領域をまとめる）
-        y_groups = {}
+        y_groups: Dict[int, List[ROIRegion]] = {}
         group_threshold = self.frame_height * 0.1  # 10%の範囲内
 
         for region in text_regions:
@@ -261,7 +266,7 @@ class ROIManager:
         }
         self.manual_detector: Optional[ManualROIDetector] = None
 
-    def set_manual_roi(self, rect: Tuple[int, int, int, int]):
+    def set_manual_roi(self, rect: Tuple[int, int, int, int]) -> None:
         """手動ROI矩形を設定"""
         self.manual_detector = ManualROIDetector(self.frame_width, self.frame_height, rect)
 

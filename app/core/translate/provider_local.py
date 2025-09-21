@@ -8,7 +8,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 try:
     import ctranslate2
@@ -214,11 +214,11 @@ class ModelManager:
 class LocalTranslateProvider:
     """ローカル翻訳プロバイダ"""
 
-    def __init__(self, settings: LocalTranslateSettings):
+    def __init__(self, settings: LocalTranslateSettings) -> None:
         self.settings = settings
         self.model_manager = ModelManager(settings.models_dir)
-        self.language_detector = None
-        self.opencc_converter = None
+        self.language_detector: Optional[Any] = None
+        self.opencc_converter: Optional[Dict[str, Any]] = None
         self.is_initialized = False
 
     def initialize(self) -> bool:
@@ -284,6 +284,12 @@ class LocalTranslateProvider:
             return []
 
         translator, tokenizer = self.model_manager.load_model(src_lang, tgt_lang, self.settings)
+
+        # Null check for translator and tokenizer
+        if translator is None or tokenizer is None:
+            raise LocalTranslateError(
+                f"Failed to load model for {src_lang}->{tgt_lang}", "MODEL_LOAD_FAILED"
+            )
 
         # テキストの前処理
         processed_texts = [self._preprocess_text(text, src_lang) for text in texts]
@@ -359,6 +365,11 @@ class LocalTranslateProvider:
                 sample_texts = texts[: min(5, len(texts))]
                 sample_text = " ".join(sample_texts)
 
+                if self.language_detector is None:
+                    raise LocalTranslateError(
+                        "Language detector not initialized", "LANGUAGE_DETECTOR_NOT_INITIALIZED"
+                    )
+
                 detection_result = self.language_detector.detect_language(sample_text)
                 if detection_result is None:
                     raise LocalTranslateError(
@@ -389,7 +400,7 @@ class LocalTranslateProvider:
                 step_progress_start = current_progress
                 step_progress_end = current_progress + (80 // len(translation_route))
 
-                def step_progress_callback(message: str, progress: int):
+                def step_progress_callback(message: str, progress: int) -> None:
                     if progress_callback:
                         final_progress = step_progress_start + (
                             progress * (step_progress_end - step_progress_start) // 100

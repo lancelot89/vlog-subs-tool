@@ -628,7 +628,7 @@ class ExtractionProcessor:
 
         # 時間順にソート
         sorted_subtitles = sorted(subtitles, key=lambda x: x.start_ms)
-        merged = []
+        merged: List[SubtitleItem] = []
         calc = TextSimilarityCalculator()
 
         for subtitle in sorted_subtitles:

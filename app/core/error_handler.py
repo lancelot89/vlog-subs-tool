@@ -8,9 +8,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Union
 
-from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QMessageBox, QProgressDialog, QWidget
+from PySide6.QtWidgets import QAbstractButton, QMessageBox, QProgressDialog, QPushButton, QWidget
 
 
 class ErrorSeverity:
@@ -182,7 +182,7 @@ class ErrorHandler(QObject):
 
         return base_message
 
-    def _log_error(self, error_info: ErrorInfo, context: Dict[str, Any]):
+    def _log_error(self, error_info: ErrorInfo, context: Dict[str, Any]) -> None:
         """エラーをログに記録"""
 
         # 統計更新
@@ -252,7 +252,7 @@ class ErrorHandler(QObject):
             msg_box.addButton("OK", QMessageBox.ButtonRole.AcceptRole)
 
         # 復旧オプションがある場合
-        recovery_buttons = {}
+        recovery_buttons: Dict[QAbstractButton, tuple[str, Callable[..., Any]]] = {}
         for option_id, option_func in error_info.recovery_options.items():
             button = msg_box.addButton(option_id, QMessageBox.ButtonRole.ActionRole)
             recovery_buttons[button] = (option_id, option_func)
@@ -285,8 +285,8 @@ class ErrorHandler(QObject):
 
     def get_error_summary(self) -> Dict[str, Any]:
         """エラー統計のサマリーを取得"""
-        category_counts = {}
-        severity_counts = {}
+        category_counts: Dict[str, int] = {}
+        severity_counts: Dict[str, int] = {}
 
         for error in self.error_history[-50:]:  # 最新50件
             category_counts[error.category] = category_counts.get(error.category, 0) + 1
@@ -342,13 +342,13 @@ class ProgressErrorHandler(QObject):
                 self.total_steps,
                 self.parent_widget,
             )
-            self.progress_dialog.setWindowModality(2)  # Qt.ApplicationModal
+            self.progress_dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
             self.progress_dialog.canceled.connect(self.cancel_operation)
             self.progress_dialog.show()
 
         return True
 
-    def update_progress(self, step: int, message: str = ""):
+    def update_progress(self, step: int, message: str = "") -> bool:
         """プログレス更新"""
         self.current_step = step
 
@@ -421,7 +421,9 @@ class ProgressErrorHandler(QObject):
         self.complete_operation(success=False, error_info=error_info)
         return False
 
-    def complete_operation(self, success: bool = True, error_info: Optional[ErrorInfo] = None):
+    def complete_operation(
+        self, success: bool = True, error_info: Optional[ErrorInfo] = None
+    ) -> None:
         """操作完了"""
 
         if self.progress_dialog:
@@ -433,7 +435,7 @@ class ProgressErrorHandler(QObject):
         elif error_info:
             self.operation_failed.emit(error_info)
 
-    def cancel_operation(self):
+    def cancel_operation(self) -> None:
         """操作キャンセル"""
         self.is_cancelled = True
 

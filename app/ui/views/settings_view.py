@@ -2,6 +2,10 @@
 設定ビューの実装
 """
 
+import logging
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -26,7 +30,7 @@ from PySide6.QtWidgets import (
 class SettingsView(QDialog):
     """設定ダイアログ"""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("設定")
         self.setModal(True)
@@ -35,7 +39,7 @@ class SettingsView(QDialog):
         self.init_ui()
         self.load_settings()
 
-    def init_ui(self):
+    def init_ui(self) -> None:
         """UIの初期化"""
         layout = QVBoxLayout(self)
 
@@ -68,7 +72,7 @@ class SettingsView(QDialog):
 
         layout.addLayout(button_layout)
 
-    def create_extraction_tab(self):
+    def create_extraction_tab(self) -> None:
         """抽出設定タブ"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
@@ -135,7 +139,7 @@ class SettingsView(QDialog):
         layout.addStretch()
         self.tab_widget.addTab(tab, "抽出")
 
-    def create_formatting_tab(self):
+    def create_formatting_tab(self) -> None:
         """整形設定タブ"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
@@ -202,7 +206,7 @@ class SettingsView(QDialog):
         layout.addStretch()
         self.tab_widget.addTab(tab, "整形")
 
-    def create_output_tab(self):
+    def create_output_tab(self) -> None:
         """出力設定タブ"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
@@ -287,7 +291,7 @@ class SettingsView(QDialog):
         layout.addStretch()
         self.tab_widget.addTab(tab, "出力")
 
-    def create_ui_tab(self):
+    def create_ui_tab(self) -> None:
         """UI設定タブ"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
@@ -351,7 +355,7 @@ class SettingsView(QDialog):
         layout.addStretch()
         self.tab_widget.addTab(tab, "UI")
 
-    def browse_output_folder(self):
+    def browse_output_folder(self) -> None:
         """出力フォルダを参照"""
         folder = QFileDialog.getExistingDirectory(
             self, "出力フォルダを選択", self.output_folder_edit.text()
@@ -359,7 +363,7 @@ class SettingsView(QDialog):
         if folder:
             self.output_folder_edit.setText(folder)
 
-    def load_settings(self):
+    def load_settings(self) -> None:
         """設定を読み込み"""
         from app.core.settings_manager import get_settings_manager
 
@@ -425,7 +429,7 @@ class SettingsView(QDialog):
             # エラーが発生した場合はデフォルト設定を使用
             pass
 
-    def reset_settings(self):
+    def reset_settings(self) -> None:
         """設定をデフォルトに戻す"""
         # 抽出設定
         self.fps_sample_spin.setValue(3.0)
@@ -462,7 +466,7 @@ class SettingsView(QDialog):
         self.auto_save_interval_spin.setValue(5)
         self.recent_files_spin.setValue(10)
 
-    def accept_settings(self):
+    def accept_settings(self) -> None:
         """設定を適用して閉じる"""
         from app.core.settings_manager import (
             AppSettings,
@@ -545,7 +549,7 @@ class SettingsView(QDialog):
 
             QMessageBox.critical(self, "エラー", f"設定保存中にエラーが発生しました:\n{str(e)}")
 
-    def get_settings(self):
+    def get_settings(self) -> Dict[str, Any]:
         """現在の設定値を取得"""
         return {
             # 抽出設定
@@ -587,7 +591,7 @@ class SettingsView(QDialog):
             "recent_files_count": self.recent_files_spin.value(),
         }
 
-    def get_default_languages(self):
+    def get_default_languages(self) -> List[str]:
         """デフォルト選択言語を取得"""
         selection = self.default_languages_combo.currentText()
         if selection == "日本語のみ":
@@ -599,14 +603,14 @@ class SettingsView(QDialog):
         else:  # カスタム
             return ["ja"]  # デフォルトは日本語
 
-    def get_default_output_directory(self):
+    def get_default_output_directory(self) -> Optional[Path]:
         """デフォルト出力ディレクトリを取得"""
         output_dir = self.output_folder_edit.text().strip()
         if output_dir:
             return Path(output_dir)
         return None
 
-    def get_srt_format_settings(self):
+    def get_srt_format_settings(self) -> Any:
         """SRT出力設定を取得"""
         from pathlib import Path
 

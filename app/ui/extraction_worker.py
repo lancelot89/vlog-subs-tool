@@ -6,9 +6,10 @@
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from PySide6.QtCore import QObject, QThread, QTimer, Signal
+from PySide6.QtWidgets import QWidget
 
 from app.core.error_handler import (
     ErrorCategory,
@@ -37,7 +38,9 @@ class ExtractionWorker(QThread):
     operation_retrying = Signal(int, str)  # 再試行中 (attempt, reason)
     partial_success = Signal(list, list)  # 部分成功 (extracted_subtitles, failed_frames)
 
-    def __init__(self, video_path: str, settings: ProjectSettings, parent_widget=None):
+    def __init__(
+        self, video_path: str, settings: ProjectSettings, parent_widget: Optional[QObject] = None
+    ) -> None:
         super().__init__()
         self.video_path = video_path
         self.settings = settings
@@ -45,7 +48,9 @@ class ExtractionWorker(QThread):
         self._is_cancelled = False
 
         # エラーハンドリング
-        self.error_handler = ErrorHandler(parent_widget)
+        # QObjectをQWidgetにキャスト（parent_widgetはUI関連でQWidgetであることを想定）
+        widget_parent = cast(Optional[QWidget], parent_widget) if parent_widget else None
+        self.error_handler = ErrorHandler(widget_parent)
         self.logger = logging.getLogger(__name__)
 
         # 統計と復旧設定
@@ -66,7 +71,7 @@ class ExtractionWorker(QThread):
             "timeout_errors": 0,
         }
 
-    def run(self):
+    def run(self) -> None:
         """ワーカーメイン処理 - 強化されたエラーハンドリング付き"""
         self.start_time = time.time()
 
@@ -98,7 +103,7 @@ class ExtractionWorker(QThread):
         finally:
             self._cleanup_and_log_stats()
 
-    def _on_progress_with_monitoring(self, percentage: int, message: str):
+    def _on_progress_with_monitoring(self, percentage: int, message: str) -> None:
         """プログレスコールバック - 監視機能付き"""
         if self._is_cancelled:
             return
@@ -208,7 +213,7 @@ class ExtractionWorker(QThread):
 
         return False
 
-    def cancel(self):
+    def cancel(self) -> None:
         """
         抽出処理をキャンセル - 安全な終了処理付き
 
@@ -242,7 +247,7 @@ class ExtractionWorker(QThread):
         # 統計ログ
         self._log_cancellation_stats()
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         """リソースクリーンアップ - 強化版"""
         try:
             if self.detector:
@@ -411,7 +416,7 @@ class ExtractionWorker(QThread):
 
         return False
 
-    def _handle_extraction_results(self, subtitle_items: List[SubtitleItem]):
+    def _handle_extraction_results(self, subtitle_items: List[SubtitleItem]) -> None:
         """抽出結果の処理"""
         if not subtitle_items:
             # 結果が空の場合
@@ -441,7 +446,7 @@ class ExtractionWorker(QThread):
         else:
             self.subtitles_extracted.emit(subtitle_items)
 
-    def _handle_unexpected_error(self, exception: Exception):
+    def _handle_unexpected_error(self, exception: Exception) -> None:
         """予期しないエラーの処理"""
         if self._is_cancelled:
             self.cancelled.emit()
@@ -466,7 +471,7 @@ class ExtractionWorker(QThread):
         self.detailed_error_occurred.emit(error_info, context)
         self.error_occurred.emit(error_info.message)
 
-    def _handle_timeout_error(self):
+    def _handle_timeout_error(self) -> None:
         """タイムアウトエラーの処理"""
         error_info = ErrorInfo(
             message=f"処理が制限時間（{self.operation_timeout}秒）を超過しました",
@@ -490,7 +495,7 @@ class ExtractionWorker(QThread):
         # ワーカースレッド内でself.wait()を呼ぶとデッドロックするため
         self._request_cancel_from_main_thread()
 
-    def _request_cancel_from_main_thread(self):
+    def _request_cancel_from_main_thread(self) -> None:
         """メインスレッドにキャンセル要求をシグナル送信（デッドロック回避）"""
         # シグナルを使ってメインスレッドに安全にキャンセル要求を送る
         # ワーカースレッド内でself.wait()を呼ばないことでデッドロックを防ぐ
@@ -509,7 +514,7 @@ class ExtractionWorker(QThread):
             "cancel_from_timeout", {"reason": "timeout_deadlock_prevention"}
         )
 
-    def _cleanup_and_log_stats(self):
+    def _cleanup_and_log_stats(self) -> None:
         """クリーンアップと統計ログ"""
         try:
             if self.detector:
@@ -522,24 +527,24 @@ class ExtractionWorker(QThread):
             # 実行時間計算
             if self.start_time:
                 elapsed_time = time.time() - self.start_time
-                self.performance_stats["total_execution_time"] = elapsed_time
+                self.performance_stats["total_execution_time"] = int(elapsed_time)
 
             # 統計ログ
             self.logger.info(f"抽出処理統計: {self.performance_stats}")
 
-    def _log_performance_stats(self, result_count: int):
+    def _log_performance_stats(self, result_count: int) -> None:
         """パフォーマンス統計のログ"""
         stats = self.performance_stats.copy()
         stats["extracted_subtitles"] = result_count
 
         if self.start_time:
-            stats["total_time"] = time.time() - self.start_time
+            stats["total_time"] = int(time.time() - self.start_time)
             if stats["frames_processed"] > 0:
-                stats["frames_per_second"] = stats["frames_processed"] / stats["total_time"]
+                stats["frames_per_second"] = int(stats["frames_processed"] / stats["total_time"])
 
         self.logger.info(f"抽出完了統計: {stats}")
 
-    def _log_cancellation_stats(self):
+    def _log_cancellation_stats(self) -> None:
         """キャンセル統計のログ"""
         if self.start_time:
             elapsed = time.time() - self.start_time
@@ -548,7 +553,7 @@ class ExtractionWorker(QThread):
                 f"処理フレーム: {self.performance_stats['frames_processed']}"
             )
 
-    def _retry_with_lower_resolution(self):
+    def _retry_with_lower_resolution(self) -> None:
         """低解像度での再試行"""
         # この関数は recovery_options から呼び出される
         # 実装は main_window側で行う

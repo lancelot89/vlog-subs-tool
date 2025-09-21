@@ -3,7 +3,7 @@
 """
 
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QTextEdit,
     QVBoxLayout,
+    QWidget,
 )
 
 from app.core.csv import (
@@ -59,7 +60,7 @@ class TranslationWorker(QThread):
         self.target_languages = target_languages
         self.models_dir = models_dir
 
-    def run(self):
+    def run(self) -> None:
         """ローカル翻訳実行"""
         try:
             translations = {}
@@ -76,7 +77,7 @@ class TranslationWorker(QThread):
                 lang_progress = int((i * 100) / total_languages)
                 self.progress_updated.emit(f"{target_lang}への翻訳を開始...", lang_progress)
 
-                def progress_callback(message: str, progress: int):
+                def progress_callback(message: str, progress: int) -> None:
                     # 言語単位の進捗を全体進捗に変換
                     total_progress = lang_progress + int(progress / total_languages)
                     self.progress_updated.emit(f"{target_lang}: {message}", total_progress)
@@ -150,7 +151,7 @@ class TranslateView(QDialog):
     # シグナル定義
     translations_updated = Signal(dict)  # 翻訳データ更新
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("翻訳設定")
         self.setModal(True)
@@ -163,7 +164,9 @@ class TranslateView(QDialog):
 
         self.init_ui()
 
-    def set_subtitles(self, subtitles: List[SubtitleItem], project: Optional[Project] = None):
+    def set_subtitles(
+        self, subtitles: List[SubtitleItem], project: Optional[Project] = None
+    ) -> None:
         """字幕データを設定"""
         self.subtitles = subtitles
         self.project = project
@@ -174,7 +177,7 @@ class TranslateView(QDialog):
         self.translate_btn.setEnabled(has_subtitles)
         self.save_srt_btn.setEnabled(len(self.translated_subtitles) > 0)
 
-    def init_ui(self):
+    def init_ui(self) -> None:
         """UIの初期化"""
         layout = QVBoxLayout(self)
 
@@ -324,7 +327,7 @@ class TranslateView(QDialog):
         log_layout.addWidget(self.log_text)
         layout.addWidget(log_group)
 
-    def browse_glossary(self):
+    def browse_glossary(self) -> None:
         """用語集ファイルを参照"""
         file_path, _ = QFileDialog.getOpenFileName(
             self,
@@ -335,7 +338,7 @@ class TranslateView(QDialog):
         if file_path:
             self.glossary_path.setText(file_path)
 
-    def start_translation(self):
+    def start_translation(self) -> None:
         """翻訳を開始"""
         if self.none_radio.isChecked():
             QMessageBox.information(
@@ -402,12 +405,12 @@ class TranslateView(QDialog):
             selected.append("ar")
         return selected
 
-    def on_translation_progress(self, message: str, progress: int):
+    def on_translation_progress(self, message: str, progress: int) -> None:
         """翻訳進捗更新"""
         self.log_text.append(message)
         self.progress_bar.setValue(progress)
 
-    def on_translation_completed(self, translations: Dict[str, List]):
+    def on_translation_completed(self, translations: Dict[str, List[Any]]) -> None:
         """翻訳完了"""
         self.translated_subtitles = translations
         self.log_text.append("翻訳が正常に完了しました！")
@@ -425,7 +428,7 @@ class TranslateView(QDialog):
         # シグナルを発信
         self.translations_updated.emit(translations)
 
-    def on_translation_error(self, error_message: str):
+    def on_translation_error(self, error_message: str) -> None:
         """翻訳エラー処理"""
         self.log_text.append(f"エラー: {error_message}")
 
@@ -437,7 +440,7 @@ class TranslateView(QDialog):
         # 詳細なエラーダイアログを表示
         self.show_translation_error_dialog(error_message)
 
-    def show_translation_error_dialog(self, error_message: str):
+    def show_translation_error_dialog(self, error_message: str) -> None:
         """翻訳エラーダイアログ表示"""
         # エラータイプを判定してユーザー向けガイダンスを表示
         if "API" in error_message or "認証" in error_message:
@@ -490,9 +493,10 @@ class TranslateView(QDialog):
         # ヘルプボタンで設定画面を開く
         result = msg_box.exec()
         if result == QMessageBox.StandardButton.Help:
-            self.open_settings_dialog()
+            # TODO: Implement settings dialog
+            pass
 
-    def export_csv(self):
+    def export_csv(self) -> None:
         """CSVに書き出し"""
         if not self.subtitles:
             QMessageBox.warning(self, "警告", "字幕データがありません")
@@ -540,7 +544,7 @@ class TranslateView(QDialog):
             self.log_text.append(f"エクスポートエラー: {str(e)}")
             QMessageBox.critical(self, "エラー", f"CSVエクスポートに失敗しました:\\n{str(e)}")
 
-    def import_csv(self):
+    def import_csv(self) -> None:
         """翻訳済みCSVを取り込み"""
         if not self.subtitles:
             QMessageBox.warning(
@@ -610,7 +614,7 @@ class TranslateView(QDialog):
             self.log_text.append(f"インポートエラー: {str(e)}")
             QMessageBox.critical(self, "エラー", f"CSVインポートに失敗しました:\\n{str(e)}")
 
-    def save_all_srt(self):
+    def save_all_srt(self) -> None:
         """全言語のSRTファイルを保存"""
         if not self.translated_subtitles and not self.subtitles:
             QMessageBox.warning(self, "警告", "保存する字幕データがありません")
@@ -673,6 +677,6 @@ class TranslateView(QDialog):
 
     def _get_project_name(self) -> str:
         """プロジェクト名を取得"""
-        if self.project and self.project.settings.video_path:
-            return Path(self.project.settings.video_path).stem
+        if self.project and self.project.source_video:
+            return Path(self.project.source_video).stem
         return "subtitles"

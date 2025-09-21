@@ -6,7 +6,7 @@
 import logging
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union, cast
 
 from .provider_local import (
     LocalTranslateError,
@@ -52,7 +52,7 @@ class TranslationError(Exception):
 class MockTranslateProvider:
     """テスト用モック翻訳プロバイダー"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.is_initialized = True
 
     def initialize(self) -> bool:
@@ -106,7 +106,7 @@ class MockTranslateProvider:
 class TranslationProviderRouter:
     """翻訳プロバイダールーター"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.providers: Dict[TranslationProviderType, Any] = {}
         self.provider_settings: Dict[TranslationProviderType, Any] = {}
         self.default_provider: Optional[TranslationProviderType] = None
@@ -120,7 +120,7 @@ class TranslationProviderRouter:
             if provider_type == TranslationProviderType.LOCAL:
                 provider = LocalTranslateProvider(settings)
             elif provider_type == TranslationProviderType.MOCK:
-                provider = MockTranslateProvider()
+                provider = cast(LocalTranslateProvider, MockTranslateProvider())
             else:
                 raise ValueError(f"未対応のプロバイダータイプ: {provider_type}")
 
@@ -143,7 +143,7 @@ class TranslationProviderRouter:
             logging.error(f"翻訳プロバイダー登録エラー ({provider_type.value}): {e}")
             return False
 
-    def set_default_provider(self, provider_type: TranslationProviderType):
+    def set_default_provider(self, provider_type: TranslationProviderType) -> None:
         """デフォルト翻訳プロバイダーを設定"""
         if provider_type in self.providers:
             self.default_provider = provider_type
@@ -151,7 +151,7 @@ class TranslationProviderRouter:
         else:
             raise ValueError(f"未登録のプロバイダー: {provider_type.value}")
 
-    def set_fallback_providers(self, providers: List[TranslationProviderType]):
+    def set_fallback_providers(self, providers: List[TranslationProviderType]) -> None:
         """フォールバックプロバイダーを設定"""
         valid_providers = [p for p in providers if p in self.providers]
         self.fallback_providers = valid_providers
@@ -259,7 +259,9 @@ class TranslationProviderRouter:
     ) -> Dict[str, str]:
         """サポートされている言語一覧を取得"""
         if provider_type is not None and provider_type in self.providers:
-            return self.providers[provider_type].get_supported_languages()
+            provider = self.providers[provider_type]
+            result = provider.get_supported_languages()
+            return cast(Dict[str, str], result)
 
         # すべてのプロバイダーの共通言語を取得
         if not self.providers:
@@ -293,6 +295,7 @@ class TranslationProviderRouter:
 
         # プロバイダー固有のエラーガイダンスがある場合は使用
         if hasattr(provider, "get_error_guidance"):
-            return provider.get_error_guidance(error)
+            guidance = provider.get_error_guidance(error)
+            return str(guidance)
 
         return f"翻訳エラー ({provider_type.value}): {str(error)}"

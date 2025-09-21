@@ -24,6 +24,7 @@ repository.
 from __future__ import annotations
 
 import importlib
+import importlib.util
 import logging
 import multiprocessing
 import os
@@ -51,7 +52,7 @@ from typing import (
     Union,
 )
 
-import cv2  # type: ignore
+import cv2
 import numpy as np
 
 from app.core.cpu_profiler import get_adaptive_thread_config
@@ -62,12 +63,12 @@ logger = logging.getLogger(__name__)
 # Availability flags --------------------------------------------------------
 # ---------------------------------------------------------------------------
 try:  # pragma: no cover - availability detection
-    from paddleocr import PaddleOCR  # type: ignore
+    from paddleocr import PaddleOCR
 
     PADDLEOCR_AVAILABLE = True
     _PADDLE_IMPORT_ERROR: Optional[Exception] = None
 except Exception as _import_error:  # pragma: no cover - dependency missing
-    PaddleOCR = None  # type: ignore
+    PaddleOCR = None
     PADDLEOCR_AVAILABLE = False
     _PADDLE_IMPORT_ERROR = _import_error
 
@@ -525,7 +526,7 @@ class SimplePaddleOCREngine:
                         platform.system(),
                         kwargs,
                     )
-                    self._ocr = PaddleOCR(**kwargs)  # type: ignore[misc]
+                    self._ocr = PaddleOCR(**kwargs)
                     if self._ocr is None:
                         raise RuntimeError("PaddleOCR returned None instance")
 
@@ -668,16 +669,19 @@ class SimplePaddleOCREngine:
 
         if isinstance(image_like, Mapping):
             for key in ("image", "frame", "data", "array"):
-                value = image_like.get(key)  # type: ignore[index]
+                value = image_like.get(key)
                 if isinstance(value, np.ndarray):
                     return value
         return None
 
-    def _preprocess_image(self, image: np.ndarray) -> Optional[np.ndarray]:
-        if image is None or image.size == 0:
+    def _preprocess_image(self, image: Any) -> Optional[np.ndarray]:
+        if image is None:
             return None
 
         if not isinstance(image, np.ndarray):
+            return None
+
+        if image.size == 0:
             return None
 
         # 画像の基本的な形状チェック
@@ -804,9 +808,7 @@ class SimplePaddleOCREngine:
 
         # OCR実行前の最終検証
         try:
-            if not isinstance(processed, np.ndarray):
-                logger.warning("Processed image is not a numpy array")
-                return []
+            # processed is guaranteed to be np.ndarray here due to None check above
 
             if processed.size == 0:
                 logger.warning("Processed image is empty")
@@ -994,7 +996,7 @@ class SimplePaddleOCREngine:
         self, det_results: Any, rec_results: Any
     ) -> List[Any]:
         """Combine detection and recognition results into the expected OCR format."""
-        combined = []
+        combined: list[Any] = []
         if not det_results or not rec_results:
             return combined
 
@@ -1020,7 +1022,7 @@ class SimplePaddleOCREngine:
         """Apple Siliconでのフリーズ対策: プロセスベースのタイムアウト付きOCR実行"""
         if platform.system() != "Darwin" or platform.machine() != "arm64":
             # Apple Silicon以外では通常の実行
-            return self._ocr.ocr(image)  # type: ignore[operator]
+            return self._ocr.ocr(image)
 
         # Apple Siliconの場合はプロセスベースでタイムアウト付き実行
         # プロセスはタイムアウト時に強制終了可能でスレッドリークを防ぐ
@@ -1054,7 +1056,7 @@ class SimplePaddleOCREngine:
         }
 
         # マルチプロセシング用のキューで結果を受け取る
-        result_queue = multiprocessing.Queue()
+        result_queue: multiprocessing.Queue[Any] = multiprocessing.Queue()
 
         # 子プロセスでOCR実行
         process = multiprocessing.Process(
@@ -1135,20 +1137,22 @@ class SimplePaddleOCREngine:
                 if not isinstance(item, (list, tuple)) or len(item) != 2:
                     continue
                 box, text_conf = item
-                text: str
-                score: float
+                result_text: str
+                result_score: float
                 if isinstance(text_conf, (list, tuple)) and len(text_conf) == 2:
-                    text = str(text_conf[0])
-                    score = float(text_conf[1])
+                    result_text = str(text_conf[0])
+                    result_score = float(text_conf[1])
                 else:
-                    text = str(text_conf)
-                    score = 1.0
+                    result_text = str(text_conf)
+                    result_score = 1.0
 
-                if score < self.confidence_threshold or not text.strip():
+                if result_score < self.confidence_threshold or not result_text.strip():
                     continue
 
                 bbox = self._polygon_to_bbox(box)
-                parsed.append(OCRResult(text=text.strip(), confidence=score, bbox=bbox))
+                parsed.append(
+                    OCRResult(text=result_text.strip(), confidence=result_score, bbox=bbox)
+                )
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.warning("Failed to parse OCR result item: %s", exc)
 
@@ -1213,7 +1217,7 @@ def _ocr_worker_process(
             return
 
         # OCR実行
-        ocr_result = temp_engine._ocr.ocr(image)  # type: ignore[operator]
+        ocr_result = temp_engine._ocr.ocr(image)
         result_queue.put(ocr_result)
 
     except Exception as e:

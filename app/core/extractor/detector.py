@@ -54,11 +54,11 @@ class SubtitleDetector:
 
         self.logger.info("字幕検出器を初期化しました: SimplePaddleOCREngine")
 
-    def set_progress_callback(self, callback: Callable[[int, str], None]):
+    def set_progress_callback(self, callback: Callable[[int, str], None]) -> None:
         """プログレスコールバックを設定"""
         self.progress_callback = callback
 
-    def _emit_progress(self, percentage: int, message: str):
+    def _emit_progress(self, percentage: int, message: str) -> None:
         """プログレス通知を発信（ETA情報付き）"""
         # ETA計算
         eta_info = self._calculate_eta(percentage)
@@ -107,12 +107,12 @@ class SubtitleDetector:
             "completion_time": completion_time,
         }
 
-    def cancel(self):
+    def cancel(self) -> None:
         """字幕検出処理をキャンセル"""
         self._is_cancelled = True
         self.logger.info("字幕検出処理のキャンセルが要求されました")
 
-    def _check_cancelled(self):
+    def _check_cancelled(self) -> None:
         """キャンセル状態をチェックし、必要に応じて例外を発生"""
         if self._is_cancelled:
             raise InterruptedError("字幕検出処理がキャンセルされました")
@@ -196,7 +196,7 @@ class SubtitleDetector:
         finally:
             self._cleanup()
 
-    def _initialize_sampler(self, video_path: str):
+    def _initialize_sampler(self, video_path: str) -> None:
         """サンプラーの初期化"""
         # メモリ使用量を抑制するため、サンプリングレートを制限
         safe_fps_sample = min(self.settings.fps_sample, 0.5)  # 最大0.5fps（2秒間隔）
@@ -449,7 +449,7 @@ class SubtitleDetector:
         self.logger.info(f"グルーピング完了: {len(subtitle_items)}件の字幕")
         return subtitle_items
 
-    def _cleanup(self):
+    def _cleanup(self) -> None:
         """リソースの解放"""
         if self.sampler:
             self.sampler.close()
@@ -470,7 +470,7 @@ class SubtitleDetector:
         if self.sampler:
             info["video_info"] = self.sampler.video_info
 
-        info["ocr_info"] = "SimplePaddleOCREngine"
+        info["ocr_info"] = {"engine": "SimplePaddleOCREngine"}
 
         return info
 
@@ -478,14 +478,14 @@ class SubtitleDetector:
 class DetectionStatus:
     """検出状態の管理"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.is_running = False
         self.current_step = ""
         self.progress = 0
         self.start_time: Optional[float] = None
         self.error: Optional[str] = None
 
-    def start(self):
+    def start(self) -> None:
         """検出開始"""
         self.is_running = True
         self.progress = 0
@@ -493,18 +493,18 @@ class DetectionStatus:
         self.start_time = time.time()
         self.error = None
 
-    def update(self, progress: int, step: str):
+    def update(self, progress: int, step: str) -> None:
         """状態更新"""
         self.progress = progress
         self.current_step = step
 
-    def complete(self):
+    def complete(self) -> None:
         """検出完了"""
         self.is_running = False
         self.progress = 100
         self.current_step = "完了"
 
-    def fail(self, error: str):
+    def fail(self, error: str) -> None:
         """検出失敗"""
         self.is_running = False
         self.error = error
