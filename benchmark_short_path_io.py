@@ -422,11 +422,11 @@ def main() -> None:
         "--long-base",
         type=Path,
         default=(
-            Path("C:/Users/Documents/very_long_folder_name_for_io_testing/input")
+            Path.home() / "Documents" / "very_long_folder_name_for_io_testing" / "input"
             if platform.system() == "Windows"
             else Path("/tmp/very_long_folder_name_for_io_testing_on_linux_system")
         ),
-        help="Base directory for long/complex paths",
+        help="Base directory for long/complex paths (defaults to user's Documents folder on Windows)",
     )
     parser.add_argument("--runs", type=int, default=3, help="Number of benchmark runs")
     parser.add_argument(
