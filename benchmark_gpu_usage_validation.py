@@ -432,10 +432,15 @@ def main():
 
     if args.monitor_gpu:
         print(f"🔍 GPU使用状況を監視中... ({args.duration}秒)")
+
+        # 環境情報を取得
         env_info = validator.get_environment_info()
 
+        # 実際のGPU監視を実行
+        gpu_monitoring_samples = validator.monitor_gpu_during_ocr(duration_seconds=args.duration)
+
         print("\n" + "=" * 50)
-        print("📊 現在の環境情報")
+        print("📊 環境情報とGPU監視結果")
         print("=" * 50)
         print(f"プラットフォーム: {env_info.platform}")
         print(f"環境タイプ: {env_info.environment_type}")
@@ -443,10 +448,29 @@ def main():
         print(f"GPU数: {env_info.gpu_info.gpu_count}")
         print(f"CUDA利用可能: {env_info.gpu_info.cuda_available}")
         print(f"PaddleGPU有効: {env_info.gpu_info.paddle_gpu_enabled}")
+        print(f"監視サンプル数: {len(gpu_monitoring_samples)}")
+
+        # 監視結果の概要を表示
+        if gpu_monitoring_samples:
+            avg_utilization = sum(
+                sample.gpu_utilization for sample in gpu_monitoring_samples
+            ) / len(gpu_monitoring_samples)
+            avg_memory = sum(sample.gpu_memory_usage for sample in gpu_monitoring_samples) / len(
+                gpu_monitoring_samples
+            )
+            print(f"平均GPU使用率: {avg_utilization:.1f}%")
+            print(f"平均GPU メモリ使用量: {avg_memory:.1f}MB")
 
         if args.output:
+            # 環境情報と監視サンプルの両方を保存
+            output_data = {
+                "environment_info": asdict(env_info),
+                "gpu_monitoring_samples": [asdict(sample) for sample in gpu_monitoring_samples],
+                "monitoring_duration_seconds": args.duration,
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            }
             with open(args.output, "w", encoding="utf-8") as f:
-                json.dump(asdict(env_info), f, ensure_ascii=False, indent=2)
+                json.dump(output_data, f, ensure_ascii=False, indent=2)
             print(f"\n📁 結果を保存しました: {args.output}")
 
     elif args.compare_environments and args.detect_asymmetry:
