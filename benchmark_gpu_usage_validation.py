@@ -348,6 +348,22 @@ class GPUUsageValidator:
         return benchmark_result
 
 
+def load_environment_info_from_json(json_path: str) -> Optional[EnvironmentInfo]:
+    """JSONファイルからEnvironmentInfoを安全に読み込み"""
+    try:
+        with open(json_path, "r", encoding="utf-8") as f:
+            raw_data = json.load(f)
+
+        # ネストされたgpu_infoを正しくGPUUsageInfoに変換
+        if "gpu_info" in raw_data and isinstance(raw_data["gpu_info"], dict):
+            raw_data["gpu_info"] = GPUUsageInfo(**raw_data["gpu_info"])
+
+        return EnvironmentInfo(**raw_data)
+    except (FileNotFoundError, json.JSONDecodeError, TypeError) as e:
+        print(f"警告: {json_path}の読み込みに失敗しました: {e}")
+        return None
+
+
 def parse_arguments() -> argparse.Namespace:
     """コマンドライン引数を解析"""
     parser = argparse.ArgumentParser(
@@ -439,15 +455,11 @@ def main():
         windows_data = None
         wsl_data = None
 
-        if args.windows_data and Path(args.windows_data).exists():
-            with open(args.windows_data, "r", encoding="utf-8") as f:
-                windows_raw = json.load(f)
-                windows_data = EnvironmentInfo(**windows_raw)
+        if args.windows_data:
+            windows_data = load_environment_info_from_json(args.windows_data)
 
-        if args.wsl_data and Path(args.wsl_data).exists():
-            with open(args.wsl_data, "r", encoding="utf-8") as f:
-                wsl_raw = json.load(f)
-                wsl_data = EnvironmentInfo(**wsl_raw)
+        if args.wsl_data:
+            wsl_data = load_environment_info_from_json(args.wsl_data)
 
         report = validator.detect_asymmetry(windows_data, wsl_data)
 
