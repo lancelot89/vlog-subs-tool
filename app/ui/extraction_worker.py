@@ -538,9 +538,10 @@ class ExtractionWorker(QThread):
         stats["extracted_subtitles"] = result_count
 
         if self.start_time:
-            stats["total_time"] = int(time.time() - self.start_time)
-            if stats["frames_processed"] > 0:
-                stats["frames_per_second"] = int(stats["frames_processed"] / stats["total_time"])
+            total_time = time.time() - self.start_time
+            stats["total_time"] = total_time
+            if stats["frames_processed"] > 0 and total_time > 0:
+                stats["frames_per_second"] = stats["frames_processed"] / total_time
 
         self.logger.info(f"抽出完了統計: {stats}")
 
