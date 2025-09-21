@@ -927,7 +927,22 @@ class SimplePaddleOCREngine:
 
         # Handle the case where det_results is a generator or has different structure
         first_result = det_results[0] if isinstance(det_results, (list, tuple)) else det_results
-        if not hasattr(first_result, "get") or not first_result.get("dt_polys"):
+
+        # Safely check for text detection results
+        has_text_regions = False
+        try:
+            if hasattr(first_result, "get") and first_result.get("dt_polys") is not None:
+                dt_polys = first_result.get("dt_polys")
+                # Check if dt_polys contains actual detections
+                if isinstance(dt_polys, (list, tuple)) and len(dt_polys) > 0:
+                    has_text_regions = True
+                elif hasattr(dt_polys, "__len__") and len(dt_polys) > 0:
+                    has_text_regions = True
+        except Exception:
+            # If any error occurs in checking, assume no text regions
+            pass
+
+        if not has_text_regions:
             # No text regions found, skip remaining stages
             timing.classification_time = 0.0
             timing.recognition_time = 0.0
