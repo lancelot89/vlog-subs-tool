@@ -136,8 +136,8 @@ type-check:
 		exit 1; \
 	fi
 	@echo "mypyで型チェック中..."
-	$(PYTHON) -m mypy app/ --ignore-missing-imports --no-strict-optional || true
-	@echo "✓ 型チェック完了 (エラーは無視されます)"
+	$(PYTHON) -m mypy app/ --ignore-missing-imports --no-strict-optional
+	@echo "✓ 型チェック完了"
 
 # テスト実行 (GitHub Actions相当)
 test:
@@ -147,8 +147,8 @@ test:
 		exit 1; \
 	fi
 	@echo "単体テスト実行中..."
-	$(PYTHON) -m pytest tests/unit/ -v --tb=short || true
-	@echo "✓ テスト実行完了 (失敗は無視されます)"
+	$(PYTHON) -m pytest tests/unit/ -v --tb=short
+	@echo "✓ テスト実行完了"
 
 # 全Code Qualityチェック (GitHub Actions Code Quality Checks相当)
 quality: format-check type-check test
@@ -202,7 +202,7 @@ security:
 		exit 1; \
 	fi
 	@echo "依存関係のセキュリティ脆弱性チェック中..."
-	$(PYTHON) -m safety check --json || true
+	$(PYTHON) -m safety check --json
 	@echo "✓ セキュリティチェック完了"
 
 # 依存関係の更新確認

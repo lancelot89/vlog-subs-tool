@@ -23,6 +23,7 @@ repository.
 
 from __future__ import annotations
 
+import importlib
 import logging
 import multiprocessing
 import os
@@ -70,12 +71,21 @@ except Exception as _import_error:  # pragma: no cover - dependency missing
     PADDLEOCR_AVAILABLE = False
     _PADDLE_IMPORT_ERROR = _import_error
 
-try:  # pragma: no cover - optional dependency detection
-    import paddlex  # type: ignore
+PADDLEX_AVAILABLE = importlib.util.find_spec("paddlex") is not None
+_PADDLEX_MODULE: Optional[Any] = None
 
-    PADDLEX_AVAILABLE = True
-except Exception:  # pragma: no cover - paddlex is optional
-    PADDLEX_AVAILABLE = False
+
+def _load_paddlex_module() -> Any:
+    """Lazily import :mod:`paddlex` when it is actually required."""
+
+    if not PADDLEX_AVAILABLE:  # pragma: no cover - optional dependency missing
+        raise ModuleNotFoundError("paddlex is not available")
+
+    global _PADDLEX_MODULE
+    if _PADDLEX_MODULE is None:  # pragma: no cover - import happens on demand
+        _PADDLEX_MODULE = importlib.import_module("paddlex")
+    return _PADDLEX_MODULE
+
 
 # ---------------------------------------------------------------------------
 # Legacy helpers - now replaced by cpu_profiler module ---------------------

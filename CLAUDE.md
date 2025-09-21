@@ -49,7 +49,18 @@ ClaudeCodeは以下の順序で作業を行うこと：
    - 作業内容はIssueの受け入れ条件に沿って実施
    - コミットメッセージは意味のある単位で分割
 
-4. **📤 PR作成**
+4. **✅ Code Quality Checks実行（PR作成前必須）**
+   - **⚠️ 必須**: PR作成前に必ず `make quality` でローカルCIをパス
+   - Code Quality Checksに失敗している状態でのPR作成を禁止
+   - `make quality` は失敗時に適切にエラーコードを返すため、成功確認が確実
+   ```bash
+   # PR作成前に必ず実行
+   make quality
+   ```
+   - エラーが出た場合は `make format` で自動修正してから再実行
+   - 全てのチェックがパスしてからPR作成すること
+
+5. **📤 PR作成**
    - **必ず「Closes #XX」でIssueを紐づける**
    - PRテンプレートに従って詳細な説明を記載
 
@@ -67,6 +78,16 @@ ClaudeCodeは以下の順序で作業を行うこと：
   - 作業前に必ず `git checkout main && git pull origin main` で最新化。
 - 機能単位・目的ごとに小さなブランチを分けること。
 - **⚠️ 重要**: ClaudeCodeは修正作業を開始する前に**必ずIssue作成→mainブランチ最新化→ブランチ作成**の順序を遵守すること。
+
+### ✅ Code Quality Checks運用ルール（追加）
+- **PR作成前**: 必ず `make quality` でローカルCIチェックをパス
+- **失敗時の対応**: `make format` で自動修正 → 再度 `make quality` 実行
+- **PR作成禁止条件**: Code Quality Checksが失敗している状態
+- **CI相当チェック内容**:
+  - `make format-check`: blackフォーマットチェック
+  - `make type-check`: mypy型チェック
+  - `make test`: pytest単体テスト実行
+- **推奨ワークフロー**: 実装 → `make quality` → git commit・push → PR作成
 
 ### ✅ プルリクエスト（PR）運用ルール
 - PRは **意味のある単位で細かく作成**すること。
