@@ -354,11 +354,21 @@ def load_environment_info_from_json(json_path: str) -> Optional[EnvironmentInfo]
         with open(json_path, "r", encoding="utf-8") as f:
             raw_data = json.load(f)
 
-        # ネストされたgpu_infoを正しくGPUUsageInfoに変換
-        if "gpu_info" in raw_data and isinstance(raw_data["gpu_info"], dict):
-            raw_data["gpu_info"] = GPUUsageInfo(**raw_data["gpu_info"])
+        # このツールが生成するJSONファイルの形式を自動検出
+        env_data = raw_data
+        if "environment_info" in raw_data:
+            # --monitor-gpu や --comprehensive-benchmark が生成する形式
+            env_data = raw_data["environment_info"]
+        elif "platform" not in raw_data and "environment_type" not in raw_data:
+            # 予期しない形式の場合
+            print(f"警告: {json_path} は認識できないJSON形式です")
+            return None
 
-        return EnvironmentInfo(**raw_data)
+        # ネストされたgpu_infoを正しくGPUUsageInfoに変換
+        if "gpu_info" in env_data and isinstance(env_data["gpu_info"], dict):
+            env_data["gpu_info"] = GPUUsageInfo(**env_data["gpu_info"])
+
+        return EnvironmentInfo(**env_data)
     except (FileNotFoundError, json.JSONDecodeError, TypeError) as e:
         print(f"警告: {json_path}の読み込みに失敗しました: {e}")
         return None
