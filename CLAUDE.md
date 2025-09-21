@@ -52,6 +52,7 @@ ClaudeCodeは以下の順序で作業を行うこと：
 4. **✅ Code Quality Checks実行（PR作成前必須）**
    - **⚠️ 必須**: PR作成前に必ず `make quality` でローカルCIをパス
    - Code Quality Checksに失敗している状態でのPR作成を禁止
+   - `make quality` は失敗時に適切にエラーコードを返すため、成功確認が確実
    ```bash
    # PR作成前に必ず実行
    make quality
