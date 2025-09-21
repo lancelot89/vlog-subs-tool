@@ -2,9 +2,18 @@
 字幕テーブルビューの実装
 """
 
-from typing import List, Optional
+from typing import Any, List, Optional, Union
 
-from PySide6.QtCore import QModelIndex, QPoint, Qt, Signal
+from PySide6.QtCore import (
+    QAbstractItemModel,
+    QEvent,
+    QModelIndex,
+    QObject,
+    QPersistentModelIndex,
+    QPoint,
+    Qt,
+    Signal,
+)
 from PySide6.QtGui import QAction, QColor, QFont, QKeyEvent, QPalette, QTextOption
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -17,6 +26,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QStyledItemDelegate,
+    QStyleOptionViewItem,
     QTableWidget,
     QTableWidgetItem,
     QTextEdit,
@@ -32,7 +42,12 @@ class MultilineTextDelegate(QStyledItemDelegate):
 
     next_subtitle_requested = Signal()  # 次の字幕への移動シグナル
 
-    def createEditor(self, parent, option, index):
+    def createEditor(
+        self,
+        parent: QWidget,
+        option: QStyleOptionViewItem,
+        index: Union[QModelIndex, QPersistentModelIndex],
+    ) -> QWidget:
         """エディターを作成"""
         if index.column() == 3:  # 本文列の場合
             editor = QPlainTextEdit(parent)
@@ -42,7 +57,9 @@ class MultilineTextDelegate(QStyledItemDelegate):
             return editor
         return super().createEditor(parent, option, index)
 
-    def setEditorData(self, editor, index):
+    def setEditorData(
+        self, editor: QWidget, index: Union[QModelIndex, QPersistentModelIndex]
+    ) -> None:
         """エディターにデータを設定"""
         if isinstance(editor, QPlainTextEdit):
             text = index.model().data(index, Qt.ItemDataRole.EditRole)
@@ -50,7 +67,12 @@ class MultilineTextDelegate(QStyledItemDelegate):
         else:
             super().setEditorData(editor, index)
 
-    def setModelData(self, editor, model, index):
+    def setModelData(
+        self,
+        editor: QWidget,
+        model: QAbstractItemModel,
+        index: Union[QModelIndex, QPersistentModelIndex],
+    ) -> None:
         """エディターからモデルにデータを設定"""
         if isinstance(editor, QPlainTextEdit):
             text = editor.toPlainText()
@@ -58,25 +80,26 @@ class MultilineTextDelegate(QStyledItemDelegate):
         else:
             super().setModelData(editor, model, index)
 
-    def eventFilter(self, editor, event):
+    def eventFilter(self, editor: QObject, event: QEvent) -> bool:
         """キーイベントのフィルタリング"""
         if isinstance(editor, QPlainTextEdit) and event.type() == event.Type.KeyPress:
-            key_event = event
+            if isinstance(event, QKeyEvent):  # 型ガードで安全にキャスト
+                key_event = event
 
-            # Ctrl+Enter (Windows/Linux) または Cmd+Enter (Mac) で次の字幕に移動
-            if key_event.key() == Qt.Key.Key_Return and key_event.modifiers() & (
-                Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier
-            ):
+                # Ctrl+Enter (Windows/Linux) または Cmd+Enter (Mac) で次の字幕に移動
+                if key_event.key() == Qt.Key.Key_Return and key_event.modifiers() & (
+                    Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier
+                ):
 
-                # エディターを閉じて次の字幕に移動
-                self.commitData.emit(editor)
-                self.closeEditor.emit(editor)
-                self.next_subtitle_requested.emit()
-                return True
+                    # エディターを閉じて次の字幕に移動
+                    self.commitData.emit(editor)
+                    self.closeEditor.emit(editor)
+                    self.next_subtitle_requested.emit()
+                    return True
 
-            # 通常のEnterキーは改行として処理（デフォルト動作）
-            elif key_event.key() == Qt.Key.Key_Return and not key_event.modifiers():
-                return False  # デフォルトの改行動作を許可
+                # 通常のEnterキーは改行として処理（デフォルト動作）
+                elif key_event.key() == Qt.Key.Key_Return and not key_event.modifiers():
+                    return False  # デフォルトの改行動作を許可
 
         return super().eventFilter(editor, event)
 
@@ -91,7 +114,7 @@ class SubtitleTableView(QWidget):
     seek_requested = Signal(int)  # プレイヤーへのシーク要求
     loop_region_set = Signal(int, int)  # ループ区間設定（開始ms, 終了ms）
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.subtitles: List[SubtitleItem] = []
         self.current_highlight_row = -1
@@ -99,7 +122,7 @@ class SubtitleTableView(QWidget):
         self.init_ui()
         self.setup_context_menu()
 
-    def init_ui(self):
+    def init_ui(self) -> None:
         """UIの初期化"""
         layout = QVBoxLayout(self)
 
@@ -194,7 +217,7 @@ class SubtitleTableView(QWidget):
 
         layout.addWidget(self.table)
 
-    def setup_context_menu(self):
+    def setup_context_menu(self) -> None:
         """コンテキストメニューの設定"""
         self.context_menu = QMenu(self)
 
@@ -212,12 +235,12 @@ class SubtitleTableView(QWidget):
         delete_action.triggered.connect(self.delete_subtitle)
         self.context_menu.addAction(delete_action)
 
-    def set_subtitles(self, subtitles: List[SubtitleItem]):
+    def set_subtitles(self, subtitles: List[SubtitleItem]) -> None:
         """字幕リストを設定"""
         self.subtitles = subtitles[:]
         self.refresh_table()
 
-    def refresh_table(self):
+    def refresh_table(self) -> None:
         """テーブルを更新"""
         self.table.setRowCount(len(self.subtitles))
 
@@ -272,7 +295,7 @@ class SubtitleTableView(QWidget):
             pass
         return 0
 
-    def on_cell_changed(self, row: int, column: int):
+    def on_cell_changed(self, row: int, column: int) -> None:
         """セル変更時の処理"""
         if row >= len(self.subtitles):
             return
@@ -310,7 +333,7 @@ class SubtitleTableView(QWidget):
             QMessageBox.warning(self, "エラー", f"値の変更に失敗しました: {str(e)}")
             self.refresh_table()
 
-    def on_selection_changed(self):
+    def on_selection_changed(self) -> None:
         """選択変更時の処理"""
         selected_rows = set()
         for item in self.table.selectedItems():
@@ -332,7 +355,7 @@ class SubtitleTableView(QWidget):
                 subtitle = self.subtitles[row]
                 self.subtitle_selected.emit(subtitle.start_ms)
 
-    def on_cell_double_clicked(self, row: int, column: int):
+    def on_cell_double_clicked(self, row: int, column: int) -> None:
         """セルダブルクリック時の処理"""
         if row < 0 or row >= len(self.subtitles):
             return
@@ -353,7 +376,7 @@ class SubtitleTableView(QWidget):
         # 開始時間・終了時間列の場合のみ該当位置にシーク
         self.seek_requested.emit(subtitle.start_ms)
 
-    def highlight_current_subtitle(self, time_ms: int):
+    def highlight_current_subtitle(self, time_ms: int) -> None:
         """現在時間の字幕をハイライト"""
         # 前のハイライトをクリア
         if self.current_highlight_row >= 0:
@@ -383,7 +406,7 @@ class SubtitleTableView(QWidget):
 
         self.current_highlight_row = current_row
 
-    def add_subtitle(self):
+    def add_subtitle(self) -> None:
         """字幕を追加"""
         # 現在選択されている行の後に追加
         current_row = self.table.currentRow()
@@ -398,7 +421,7 @@ class SubtitleTableView(QWidget):
         self.refresh_table()
         self.subtitles_reordered.emit()
 
-    def split_subtitle(self):
+    def split_subtitle(self) -> None:
         """字幕を分割"""
         row = self.table.currentRow()
         if row < 0 or row >= len(self.subtitles):
@@ -429,7 +452,7 @@ class SubtitleTableView(QWidget):
         self.refresh_table()
         self.subtitles_reordered.emit()
 
-    def merge_subtitle(self):
+    def merge_subtitle(self) -> None:
         """選択された2つの字幕を結合"""
         selected_rows = sorted(set(item.row() for item in self.table.selectedItems()))
         if len(selected_rows) != 2:
@@ -454,7 +477,7 @@ class SubtitleTableView(QWidget):
         self.refresh_table()
         self.subtitles_reordered.emit()
 
-    def delete_subtitle(self):
+    def delete_subtitle(self) -> None:
         """字幕を削除"""
         row = self.table.currentRow()
         if row < 0 or row >= len(self.subtitles):
@@ -473,7 +496,7 @@ class SubtitleTableView(QWidget):
             self.refresh_table()
             self.subtitles_reordered.emit()
 
-    def move_up(self):
+    def move_up(self) -> None:
         """字幕を上に移動"""
         row = self.table.currentRow()
         if row <= 0 or row >= len(self.subtitles):
@@ -489,7 +512,7 @@ class SubtitleTableView(QWidget):
         self.table.selectRow(row - 1)
         self.subtitles_reordered.emit()
 
-    def move_down(self):
+    def move_down(self) -> None:
         """字幕を下に移動"""
         row = self.table.currentRow()
         if row < 0 or row >= len(self.subtitles) - 1:
@@ -505,13 +528,13 @@ class SubtitleTableView(QWidget):
         self.table.selectRow(row + 1)
         self.subtitles_reordered.emit()
 
-    def show_context_menu(self, position: QPoint):
+    def show_context_menu(self, position: QPoint) -> None:
         """コンテキストメニューを表示"""
         item = self.table.itemAt(position)
         if item:
             self.context_menu.exec(self.table.mapToGlobal(position))
 
-    def preview_selected(self):
+    def preview_selected(self) -> None:
         """選択された字幕をプレビュー"""
         row = self.table.currentRow()
         if row < 0 or row >= len(self.subtitles):
@@ -521,7 +544,7 @@ class SubtitleTableView(QWidget):
         # プレイヤーに開始時間でのシークを要求
         self.seek_requested.emit(subtitle.start_ms)
 
-    def set_loop_region(self):
+    def set_loop_region(self) -> None:
         """選択された字幕の区間をループ設定"""
         row = self.table.currentRow()
         if row < 0 or row >= len(self.subtitles):
@@ -571,7 +594,7 @@ class SubtitleTableView(QWidget):
 
         return True
 
-    def auto_adjust_timing(self, row: int):
+    def auto_adjust_timing(self, row: int) -> None:
         """字幕タイミングの自動調整"""
         if row < 0 or row >= len(self.subtitles):
             return
@@ -603,7 +626,7 @@ class SubtitleTableView(QWidget):
         # テーブル更新
         self.refresh_table()
 
-    def move_to_next_subtitle(self):
+    def move_to_next_subtitle(self) -> None:
         """次の字幕に移動してテキスト編集を開始"""
         current_row = self.table.currentRow()
         if current_row >= 0 and current_row < len(self.subtitles) - 1:

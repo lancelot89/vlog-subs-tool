@@ -3,9 +3,11 @@
 """
 
 from pathlib import Path
+from typing import Any, List, Optional, Union
 
 import cv2
 import numpy as np
+from cv2 import VideoCapture
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
@@ -28,16 +30,16 @@ class PlayerView(QWidget):
     frame_changed = Signal(int)  # フレーム変更
     subtitle_sync_request = Signal(int)  # 字幕同期要求
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
-        self.cap = None
+        self.cap: Optional[VideoCapture] = None
         self.current_frame = 0
         self.total_frames = 0
         self.fps = 30.0
         self.current_time_ms = 0
 
         # 字幕関連
-        self.current_subtitles = []
+        self.current_subtitles: List[Any] = []
         self.current_subtitle_text = ""
 
         # ループ再生関連
@@ -51,7 +53,7 @@ class PlayerView(QWidget):
 
         self.init_ui()
 
-    def init_ui(self):
+    def init_ui(self) -> None:
         """UIの初期化"""
         layout = QVBoxLayout(self)
 
@@ -134,7 +136,7 @@ class PlayerView(QWidget):
 
         layout.addWidget(loop_group)
 
-    def load_video(self, file_path: str):
+    def load_video(self, file_path: str) -> None:
         """動画を読み込む"""
         try:
             if self.cap:
@@ -162,7 +164,7 @@ class PlayerView(QWidget):
         except Exception as e:
             print(f"動画読み込みエラー: {e}")
 
-    def toggle_play(self):
+    def toggle_play(self) -> None:
         """再生/一時停止の切り替え"""
         if self.timer.isActive():
             self.timer.stop()
@@ -173,13 +175,13 @@ class PlayerView(QWidget):
                 self.timer.start(interval)
                 self.play_btn.setText("一時停止")
 
-    def stop(self):
+    def stop(self) -> None:
         """停止"""
         self.timer.stop()
         self.play_btn.setText("再生")
         self.seek_to_frame(0)
 
-    def seek_to_frame(self, frame_num: int):
+    def seek_to_frame(self, frame_num: int) -> None:
         """指定フレームにシーク"""
         if not self.cap or not self.cap.isOpened():
             return
@@ -205,14 +207,14 @@ class PlayerView(QWidget):
         # 時間表示の更新
         self.update_time_display()
 
-    def seek_to_time(self, time_ms: int):
+    def seek_to_time(self, time_ms: int) -> None:
         """指定時間にシーク"""
         frame_num = int(time_ms * self.fps / 1000)
         if 0 <= frame_num < self.total_frames:
             self.seek_slider.setValue(frame_num)
             self.seek_to_frame(frame_num)
 
-    def update_frame(self):
+    def update_frame(self) -> None:
         """フレーム更新（再生時）"""
         if not self.cap or not self.cap.isOpened():
             return
@@ -238,7 +240,7 @@ class PlayerView(QWidget):
         self.seek_to_frame(next_frame)
         self.seek_slider.setValue(next_frame)
 
-    def display_frame(self, frame):
+    def display_frame(self, frame: Any) -> None:
         """フレームを表示"""
         if frame is None:
             return
@@ -258,17 +260,19 @@ class PlayerView(QWidget):
         height, width, channel = rgb_frame.shape
         bytes_per_line = 3 * width
         q_image = QPixmap.fromImage(
-            QImage(rgb_frame.data, width, height, bytes_per_line, QImage.Format_RGB888)
+            QImage(rgb_frame.data, width, height, bytes_per_line, QImage.Format.Format_RGB888)
         )
 
         # ラベルのサイズに合わせてスケール
         scaled_pixmap = q_image.scaled(
-            self.video_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
+            self.video_label.size(),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
         )
 
         self.video_label.setPixmap(scaled_pixmap)
 
-    def draw_roi(self, frame):
+    def draw_roi(self, frame: Any) -> Any:
         """ROI（抽出領域）を描画"""
         height, width = frame.shape[:2]
 
@@ -291,7 +295,7 @@ class PlayerView(QWidget):
 
         return frame
 
-    def update_display(self):
+    def update_display(self) -> None:
         """表示の更新"""
         if self.cap and self.cap.isOpened():
             ret, frame = self.cap.read()
@@ -299,7 +303,7 @@ class PlayerView(QWidget):
                 self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame)
                 self.display_frame(frame)
 
-    def update_time_display(self):
+    def update_time_display(self) -> None:
         """時間表示の更新"""
         current_time = self.format_time(self.current_time_ms)
         total_time = self.format_time(int(self.total_frames * 1000 / self.fps))
@@ -313,18 +317,18 @@ class PlayerView(QWidget):
         seconds = seconds % 60
         return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
-    def closeEvent(self, event):
+    def closeEvent(self, event: Any) -> None:
         """ウィンドウクローズ時の処理"""
         if self.cap:
             self.cap.release()
         event.accept()
 
-    def set_subtitles(self, subtitles):
+    def set_subtitles(self, subtitles: List[Any]) -> None:
         """字幕リストを設定"""
         self.current_subtitles = subtitles
         self.update_current_subtitle()
 
-    def update_current_subtitle(self):
+    def update_current_subtitle(self) -> None:
         """現在時間の字幕テキストを更新"""
         self.current_subtitle_text = ""
 
@@ -333,7 +337,7 @@ class PlayerView(QWidget):
                 self.current_subtitle_text = subtitle.text
                 break
 
-    def draw_subtitle_overlay(self, frame):
+    def draw_subtitle_overlay(self, frame: Any) -> Any:
         """字幕オーバーレイを描画"""
         if not self.current_subtitle_text:
             return frame
@@ -401,13 +405,13 @@ class PlayerView(QWidget):
 
         return frame
 
-    def set_loop_start(self):
+    def set_loop_start(self) -> None:
         """ループ開始点を現在時間に設定"""
         self.loop_start_ms = self.current_time_ms
         self.clear_loop_btn.setEnabled(True)
         self.update_loop_display()
 
-    def set_loop_end(self):
+    def set_loop_end(self) -> None:
         """ループ終了点を現在時間に設定"""
         self.loop_end_ms = self.current_time_ms
         if self.loop_end_ms <= self.loop_start_ms:
@@ -415,7 +419,7 @@ class PlayerView(QWidget):
         self.clear_loop_btn.setEnabled(True)
         self.update_loop_display()
 
-    def set_loop_region(self, start_ms: int, end_ms: int):
+    def set_loop_region(self, start_ms: int, end_ms: int) -> None:
         """ループ区間を設定（外部から）"""
         self.loop_start_ms = start_ms
         self.loop_end_ms = end_ms
@@ -423,7 +427,7 @@ class PlayerView(QWidget):
         self.clear_loop_btn.setEnabled(True)
         self.update_loop_display()
 
-    def clear_loop(self):
+    def clear_loop(self) -> None:
         """ループ設定をクリア"""
         self.loop_start_ms = 0
         self.loop_end_ms = 0
@@ -431,7 +435,7 @@ class PlayerView(QWidget):
         self.clear_loop_btn.setEnabled(False)
         self.update_loop_display()
 
-    def update_loop_display(self):
+    def update_loop_display(self) -> None:
         """ループ表示を更新"""
         if self.loop_start_ms > 0 and self.loop_end_ms > 0:
             start_time = self.format_time(self.loop_start_ms)

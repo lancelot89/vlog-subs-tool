@@ -4,7 +4,7 @@ OCR初回セットアップダイアログ
 
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QFont, QPainter, QPixmap
@@ -35,7 +35,7 @@ class OCRSetupWorker(QThread):
         super().__init__()
         self.language = language
 
-    def run(self):
+    def run(self) -> None:
         """セットアップ実行（SimplePaddleOCREngine使用）"""
         try:
             # SimplePaddleOCREngineの初期化テスト
@@ -56,10 +56,10 @@ class OCRSetupWorker(QThread):
 class OCRSetupDialog(QDialog):
     """OCR初回セットアップダイアログ"""
 
-    def __init__(self, parent=None, language: str = "ja"):
+    def __init__(self, parent: Any = None, language: str = "ja") -> None:
         super().__init__(parent)
         self.language = language
-        self.worker = None
+        self.worker: Optional[OCRSetupWorker] = None
         self.setup_success = False
 
         self.setWindowTitle("OCRエンジン初期セットアップ")
@@ -69,7 +69,7 @@ class OCRSetupDialog(QDialog):
         self.init_ui()
         self.check_current_status()
 
-    def init_ui(self):
+    def init_ui(self) -> None:
         """UI初期化"""
         layout = QVBoxLayout(self)
         layout.setSpacing(15)
@@ -99,8 +99,8 @@ class OCRSetupDialog(QDialog):
 
         # 区切り線
         line = QFrame()
-        line.setFrameShape(QFrame.HLine)
-        line.setFrameShadow(QFrame.Sunken)
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setFrameShadow(QFrame.Shadow.Sunken)
         layout.addWidget(line)
 
         # ステータス表示
@@ -152,11 +152,11 @@ class OCRSetupDialog(QDialog):
         # ストレッチでレイアウト調整
         layout.addStretch()
 
-    def check_current_status(self):
+    def check_current_status(self) -> None:
         """現在のOCRステータス確認"""
         QTimer.singleShot(500, self._check_status)
 
-    def _check_status(self):
+    def _check_status(self) -> None:
         """ステータス確認実行（SimplePaddleOCREngine使用）"""
         try:
             # SimplePaddleOCREngineで利用可能性をチェック
@@ -183,7 +183,7 @@ class OCRSetupDialog(QDialog):
             self.status_label.setStyleSheet("color: red;")
             self.add_log(f"ステータス確認エラー: {str(e)}")
 
-    def start_setup(self):
+    def start_setup(self) -> None:
         """セットアップ開始"""
         if self.setup_success:
             self.accept()
@@ -228,7 +228,7 @@ class OCRSetupDialog(QDialog):
 
         self.add_log("PaddleOCRモデルのダウンロードを開始します（リトライ機能付き）...")
 
-    def skip_setup(self):
+    def skip_setup(self) -> None:
         """セットアップをスキップ"""
         if self.setup_success:
             self.accept()
@@ -249,13 +249,13 @@ class OCRSetupDialog(QDialog):
         if reply == QMessageBox.StandardButton.Yes:
             self.reject()
 
-    def on_progress_updated(self, message: str, progress: int):
+    def on_progress_updated(self, message: str, progress: int) -> None:
         """プログレス更新"""
         self.progress_message.setText(message)
         self.progress_bar.setValue(progress)
         self.add_log(f"[{progress}%] {message}")
 
-    def on_setup_completed(self, success: bool):
+    def on_setup_completed(self, success: bool) -> None:
         """セットアップ完了"""
         self.progress_bar.setVisible(False)
         self.progress_message.setVisible(False)
@@ -277,7 +277,7 @@ class OCRSetupDialog(QDialog):
             self.skip_btn.setEnabled(True)
             self.close_btn.setEnabled(True)
 
-    def on_error_occurred(self, error_message: str):
+    def on_error_occurred(self, error_message: str) -> None:
         """エラー発生"""
         self.add_log(f"エラー: {error_message}")
 
@@ -315,12 +315,12 @@ class OCRSetupDialog(QDialog):
 
         return formatted_msg
 
-    def add_log(self, message: str):
+    def add_log(self, message: str) -> None:
         """ログ追加"""
         self.log_text.append(f"[{self._get_timestamp()}] {message}")
         logging.info(f"OCRSetup: {message}")
 
-    def toggle_log_display(self, checked: bool):
+    def toggle_log_display(self, checked: bool) -> None:
         """ログ表示切り替え"""
         self.log_text.setVisible(checked)
         if checked:
@@ -328,13 +328,13 @@ class OCRSetupDialog(QDialog):
         else:
             self.setFixedSize(500, 400)
 
-    def _get_timestamp(self):
+    def _get_timestamp(self) -> str:
         """タイムスタンプ取得"""
         from datetime import datetime
 
         return datetime.now().strftime("%H:%M:%S")
 
-    def closeEvent(self, event):
+    def closeEvent(self, event: Any) -> None:
         """ダイアログクローズ時"""
         if self.worker and self.worker.isRunning():
             reply = QMessageBox.question(

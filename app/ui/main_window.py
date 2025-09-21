@@ -6,7 +6,7 @@ DESIGN.mdの画面仕様に基づくGUIレイアウト
 import logging
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union, cast
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QIcon, QKeySequence, QShortcut
@@ -51,7 +51,7 @@ from .views.table_view import SubtitleTableView
 from .views.translate_view import TranslateView
 
 
-def setup_japanese_support(app):
+def setup_japanese_support(app: QApplication) -> None:
     """日本語表示サポート設定"""
     import locale
     import os
@@ -68,7 +68,7 @@ def setup_japanese_support(app):
                 os.environ["LC_ALL"] = "ja_JP.UTF-8"
 
         # Qt ロケール設定
-        QLocale.setDefault(QLocale(QLocale.Japanese))
+        QLocale.setDefault(QLocale(QLocale.Language.Japanese))
 
         # フォント設定
         font_database = QFontDatabase()
@@ -132,8 +132,8 @@ def setup_japanese_support(app):
         # アプリケーション全体のフォント設定
         font = QFont(selected_font, 10)
         # 日本語表示に最適なヒント設定
-        font.setStyleHint(QFont.SansSerif, QFont.PreferDefault)
-        font.setStyleStrategy(QFont.PreferAntialias)
+        font.setStyleHint(QFont.StyleHint.SansSerif, QFont.StyleStrategy.PreferDefault)
+        font.setStyleStrategy(QFont.StyleStrategy.PreferAntialias)
         app.setFont(font)
 
         import logging
@@ -162,7 +162,7 @@ class MainWindow(QMainWindow):
     extraction_started = Signal()  # 抽出開始
     extraction_completed = Signal()  # 抽出完了
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.current_project: Optional[Project] = None
         self.current_video_path: Optional[str] = None
@@ -179,7 +179,7 @@ class MainWindow(QMainWindow):
         self.status_timer.timeout.connect(self.update_status)
         self.status_timer.start(1000)  # 1秒ごと
 
-    def init_ui(self):
+    def init_ui(self) -> None:
         """UIの初期化"""
         self.setWindowTitle("VLog字幕ツール v1.0")
         self.setGeometry(100, 100, 1200, 800)
@@ -199,7 +199,7 @@ class MainWindow(QMainWindow):
         # ドラッグ&ドロップを有効化
         self.setAcceptDrops(True)
 
-    def create_menu_bar(self):
+    def create_menu_bar(self) -> None:
         """メニューバーの作成"""
         menubar = self.menuBar()
 
@@ -292,7 +292,7 @@ class MainWindow(QMainWindow):
         about_action.triggered.connect(self.show_about)
         help_menu.addAction(about_action)
 
-    def create_toolbar(self):
+    def create_toolbar(self) -> None:
         """ツールバーの作成"""
         toolbar = self.addToolBar("メイン")
         toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
@@ -340,7 +340,7 @@ class MainWindow(QMainWindow):
         self.export_srt_btn.setEnabled(False)
         toolbar.addWidget(self.export_srt_btn)
 
-    def create_central_widget(self):
+    def create_central_widget(self) -> None:
         """中央ウィジェットの作成"""
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -363,7 +363,7 @@ class MainWindow(QMainWindow):
         # 分割比率の設定
         splitter.setSizes([600, 600])
 
-    def create_status_bar(self):
+    def create_status_bar(self) -> None:
         """ステータスバーの作成"""
         self.status_bar = self.statusBar()
 
@@ -382,7 +382,7 @@ class MainWindow(QMainWindow):
         self.file_info_label = QLabel("")
         self.status_bar.addPermanentWidget(self.file_info_label)
 
-    def connect_signals(self):
+    def connect_signals(self) -> None:
         """シグナルの接続"""
         # 動画読み込み時
         self.video_loaded.connect(self.on_video_loaded)
@@ -401,7 +401,7 @@ class MainWindow(QMainWindow):
         self.table_view.subtitle_changed.connect(self.on_subtitle_changed)
         self.table_view.subtitles_reordered.connect(self.on_subtitles_reordered)
 
-    def setup_shortcuts(self):
+    def setup_shortcuts(self) -> None:
         """ショートカットキーの設定"""
         # Space: 再生/一時停止
         self.play_pause_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Space), self)
@@ -426,17 +426,17 @@ class MainWindow(QMainWindow):
         self.frame_forward_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Right), self)
         self.frame_forward_shortcut.activated.connect(self.seek_frame_forward)
 
-    def toggle_playback(self):
+    def toggle_playback(self) -> None:
         """再生/一時停止の切り替え（ショートカット用）"""
         if hasattr(self.player_view, "toggle_play"):
             self.player_view.toggle_play()
 
-    def seek_frame_back(self):
+    def seek_frame_back(self) -> None:
         """1フレーム戻る"""
         if hasattr(self.player_view, "current_frame") and self.player_view.current_frame > 0:
             self.player_view.seek_to_frame(self.player_view.current_frame - 1)
 
-    def seek_frame_forward(self):
+    def seek_frame_forward(self) -> None:
         """1フレーム進む"""
         if (
             hasattr(self.player_view, "current_frame")
@@ -445,7 +445,7 @@ class MainWindow(QMainWindow):
         ):
             self.player_view.seek_to_frame(self.player_view.current_frame + 1)
 
-    def open_video(self):
+    def open_video(self) -> None:
         """動画ファイルを開く"""
         file_path, _ = QFileDialog.getOpenFileName(
             self,
@@ -457,7 +457,7 @@ class MainWindow(QMainWindow):
         if file_path:
             self.load_video(file_path)
 
-    def load_video(self, file_path: str):
+    def load_video(self, file_path: str) -> None:
         """動画を読み込む（エラーハンドリング強化版）"""
         try:
             # ファイルの存在確認
@@ -522,12 +522,14 @@ class MainWindow(QMainWindow):
             self.video_loaded.emit(file_path)
             self.status_label.setText("動画を読み込みました")
 
-        except cv2.error as e:
-            self.handle_video_codec_error(file_path, str(e))
-        except Exception as e:
-            self.handle_general_video_error(file_path, str(e))
+        except Exception as e:  # cv2.error is handled here
+            # Check if it's a cv2 error by checking the module name
+            if hasattr(e, "__module__") and e.__module__ and "cv2" in e.__module__:
+                self.handle_video_codec_error(file_path, str(e))
+            else:
+                self.handle_general_video_error(file_path, str(e))
 
-    def handle_video_codec_error(self, file_path: str, error_msg: str):
+    def handle_video_codec_error(self, file_path: str, error_msg: str) -> None:
         """動画コーデック関連エラーの処理"""
         file_ext = Path(file_path).suffix.lower()
 
@@ -550,7 +552,7 @@ class MainWindow(QMainWindow):
         error_dialog.setText(error_text)
         error_dialog.exec()
 
-    def handle_general_video_error(self, file_path: str, error_msg: str):
+    def handle_general_video_error(self, file_path: str, error_msg: str) -> None:
         """一般的な動画読み込みエラーの処理"""
         QMessageBox.critical(
             self,
@@ -562,17 +564,17 @@ class MainWindow(QMainWindow):
             f"• ファイル形式が対応しているか確認してください",
         )
 
-    def on_video_loaded(self, file_path: str):
+    def on_video_loaded(self, file_path: str) -> None:
         """動画読み込み完了時の処理"""
         self.setWindowTitle(f"VLog字幕ツール v1.0 - {Path(file_path).name}")
 
-    def stop_extraction(self):
+    def stop_extraction(self) -> None:
         """抽出処理を停止"""
         if self.extraction_worker and self.extraction_worker.isRunning():
             self.extraction_worker.cancel()
             self.extraction_worker.wait()
 
-    def on_extraction_progress(self, percentage: int, message: str):
+    def on_extraction_progress(self, percentage: int, message: str) -> None:
         """抽出プログレス更新（ETA情報付き）"""
         self.progress_bar.setValue(percentage)
 
@@ -585,7 +587,7 @@ class MainWindow(QMainWindow):
         # ステータスラベルにメッセージ（ETA情報含む）を表示
         self.status_label.setText(message)
 
-    def on_extraction_completed(self, subtitle_items: List[SubtitleItem]):
+    def on_extraction_completed(self, subtitle_items: List[SubtitleItem]) -> None:
         """抽出完了処理"""
         # プロジェクトに字幕を設定
         self.current_project.subtitles = subtitle_items
@@ -614,7 +616,7 @@ class MainWindow(QMainWindow):
         self.status_label.setText(f"字幕の抽出が完了しました ({len(subtitle_items)}件)")
         self.extraction_completed.emit()
 
-    def on_extraction_error(self, error_message: str):
+    def on_extraction_error(self, error_message: str) -> None:
         """抽出エラー処理"""
         # プログレスバーを非表示
         self.progress_bar.setVisible(False)
@@ -629,7 +631,7 @@ class MainWindow(QMainWindow):
         self.extract_btn.setEnabled(True)
         self.status_label.setText("字幕の抽出に失敗しました")
 
-    def on_extraction_cancelled(self):
+    def on_extraction_cancelled(self) -> None:
         """抽出キャンセル処理"""
         # プログレスバーを非表示
         self.progress_bar.setVisible(False)
@@ -642,7 +644,7 @@ class MainWindow(QMainWindow):
         self.extract_btn.setEnabled(True)
         self.status_label.setText("字幕抽出がキャンセルされました")
 
-    def on_extraction_finished(self):
+    def on_extraction_finished(self) -> None:
         """抽出処理終了時の共通処理"""
         self.progress_bar.setVisible(False)
 
@@ -655,7 +657,7 @@ class MainWindow(QMainWindow):
             self.extraction_worker.cleanup()
             self.extraction_worker = None
 
-    def start_extraction(self):
+    def start_extraction(self) -> None:
         """字幕抽出を開始"""
         if not self.current_project or not self.current_project.source_video:
             QMessageBox.warning(self, "警告", "動画ファイルが選択されていません。")
@@ -711,11 +713,11 @@ class MainWindow(QMainWindow):
         # 抽出開始
         self.extraction_worker.start()
 
-    def re_extract(self):
+    def re_extract(self) -> None:
         """再抽出"""
         self.start_extraction()
 
-    def cancel_extraction(self):
+    def cancel_extraction(self) -> None:
         """抽出処理をキャンセル"""
         if not self.extraction_worker or not self.extraction_worker.isRunning():
             return
@@ -797,7 +799,7 @@ class MainWindow(QMainWindow):
 
         return reply == QMessageBox.StandardButton.Yes
 
-    def _show_cancel_button_with_force(self):
+    def _show_cancel_button_with_force(self) -> None:
         """キャンセルボタンを確実に表示する強化メソッド"""
         # 複数のアプローチで確実に表示
         self.cancel_btn.setVisible(True)
@@ -848,9 +850,9 @@ class MainWindow(QMainWindow):
         logging.info("段階2: ツールバー更新")
         toolbar = self.cancel_btn.parent()
         if toolbar:
-            toolbar.show()
-            toolbar.repaint()
-            toolbar.update()
+            cast(QWidget, toolbar).show()
+            cast(QWidget, toolbar).repaint()
+            cast(QWidget, toolbar).update()
             # ツールバー内のウィジェット数をログ出力
             toolbar_children = toolbar.children()
             logging.info(f"ツールバー子要素数: {len(toolbar_children)}")
@@ -884,7 +886,7 @@ class MainWindow(QMainWindow):
         if not final_visible:
             logging.error("⚠️ 警告: すべての処理を実行してもキャンセルボタンが表示されていません")
 
-    def _restore_extract_button(self):
+    def _restore_extract_button(self) -> None:
         """自動抽出ボタンを元の状態に戻す"""
         logging.info("🔄 自動抽出ボタンを元の状態に復元開始")
 
@@ -904,7 +906,7 @@ class MainWindow(QMainWindow):
 
         logging.info("🔄 自動抽出ボタンの復元完了")
 
-    def _verify_cancel_button_visibility(self):
+    def _verify_cancel_button_visibility(self) -> None:
         """キャンセルボタンの表示を検証"""
         if not self.cancel_btn.isVisible():
             logging.warning("キャンセルボタンがまだ表示されていません。再試行します。")
@@ -915,7 +917,7 @@ class MainWindow(QMainWindow):
 
             # 親ウィジェットの更新も試行
             if self.cancel_btn.parent():
-                self.cancel_btn.parent().update()
+                cast(QWidget, self.cancel_btn.parent()).update()
         else:
             logging.info("キャンセルボタンの表示が確認されました")
 
@@ -960,7 +962,7 @@ class MainWindow(QMainWindow):
             )
             return False
 
-    def run_qc_check(self):
+    def run_qc_check(self) -> None:
         """QCチェックを実行"""
         if not self.current_project or not self.current_project.subtitles:
             QMessageBox.information(
@@ -986,7 +988,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "エラー", f"QCチェックでエラーが発生しました:\\n{str(e)}")
 
-    def show_qc_results(self, qc_results, summary):
+    def show_qc_results(self, qc_results: List[Any], summary: Dict[str, int]) -> None:
         """QC結果を表示"""
         if not qc_results:
             QMessageBox.information(
@@ -1026,7 +1028,7 @@ class MainWindow(QMainWindow):
 
         msg_box.exec()
 
-    def save_project(self):
+    def save_project(self) -> None:
         """プロジェクトを保存"""
         if not self.current_project:
             QMessageBox.information(self, "保存エラー", "保存するプロジェクトがありません。")
@@ -1066,7 +1068,7 @@ class MainWindow(QMainWindow):
                 self, "エラー", f"プロジェクト保存中にエラーが発生しました:\n{str(e)}"
             )
 
-    def save_project_as(self):
+    def save_project_as(self) -> None:
         """名前を付けてプロジェクトを保存"""
         if not self.current_project:
             QMessageBox.information(self, "保存エラー", "保存するプロジェクトがありません。")
@@ -1125,12 +1127,12 @@ class MainWindow(QMainWindow):
                     f"プロジェクト保存中にエラーが発生しました:\n{str(e)}",
                 )
 
-    def show_settings(self):
+    def show_settings(self) -> None:
         """設定画面を表示"""
         settings_dialog = SettingsView(self)
         settings_dialog.exec()
 
-    def show_about(self):
+    def show_about(self) -> None:
         """アプリについて画面を表示"""
         QMessageBox.about(
             self,
@@ -1140,7 +1142,7 @@ class MainWindow(QMainWindow):
             "技術スタック: Python + PySide6 + OpenCV + PaddleOCR",
         )
 
-    def export_japanese_srt(self):
+    def export_japanese_srt(self) -> None:
         """日本語SRTファイルを出力"""
         if not self.current_project or not self.current_project.subtitles:
             QMessageBox.information(
@@ -1194,12 +1196,12 @@ class MainWindow(QMainWindow):
                 self, "エラー", f"SRTファイルの保存でエラーが発生しました:\\n{str(e)}"
             )
 
-    def export_all_srt(self):
+    def export_all_srt(self) -> None:
         """全言語のSRTファイルを出力（現在は日本語のみ）"""
         # 将来的に多言語対応する際のプレースホルダー
         self.export_japanese_srt()
 
-    def show_multilang_export_dialog(self):
+    def show_multilang_export_dialog(self) -> None:
         """多言語SRTエクスポートダイアログを表示"""
         if not self.current_project or not self.current_project.subtitles:
             QMessageBox.information(
@@ -1223,7 +1225,7 @@ class MainWindow(QMainWindow):
             selected_languages, output_dir = result
             self.export_multilang_srt(selected_languages, Path(output_dir))
 
-    def export_multilang_srt(self, selected_languages: list, output_dir: Path):
+    def export_multilang_srt(self, selected_languages: List[str], output_dir: Path) -> None:
         """複数言語のSRTファイルをエクスポート"""
         try:
             # ベースファイル名を決定
@@ -1419,7 +1421,7 @@ class MainWindow(QMainWindow):
         try:
             # 設定ビューの作成とデフォルト値の取得
             settings_view = SettingsView()
-            return settings_view.get_srt_format_settings()
+            return cast(SRTFormatSettings, settings_view.get_srt_format_settings())
         except Exception:
             # フォールバック: デフォルト値を使用
             return SRTFormatSettings(
@@ -1430,7 +1432,7 @@ class MainWindow(QMainWindow):
                 max_lines=2,
             )
 
-    def export_original_csv(self):
+    def export_original_csv(self) -> None:
         """元データのCSVをエクスポート"""
         if not self.table_view.subtitles:
             QMessageBox.warning(self, "警告", "エクスポートする字幕データがありません")
@@ -1469,7 +1471,7 @@ class MainWindow(QMainWindow):
             logging.exception("CSVエクスポートでエラーが発生しました")
             QMessageBox.critical(self, "エラー", f"CSVエクスポートに失敗しました\n{str(e)}")
 
-    def show_translate_view(self):
+    def show_translate_view(self) -> None:
         """翻訳設定画面を表示"""
         if not self.table_view.subtitles:
             QMessageBox.warning(
@@ -1482,7 +1484,7 @@ class MainWindow(QMainWindow):
         translate_dialog.translations_updated.connect(self.on_translations_updated)
         translate_dialog.exec()
 
-    def export_translation_csv(self):
+    def export_translation_csv(self) -> None:
         """翻訳用CSVエクスポート"""
         if not self.table_view.subtitles:
             QMessageBox.warning(self, "警告", "字幕データがありません")
@@ -1491,7 +1493,7 @@ class MainWindow(QMainWindow):
         # 翻訳設定画面を開く
         self.show_translate_view()
 
-    def import_translation_csv(self):
+    def import_translation_csv(self) -> None:
         """翻訳済みCSVインポート"""
         if not self.table_view.subtitles:
             QMessageBox.warning(self, "警告", "元の字幕データがありません")
@@ -1500,7 +1502,7 @@ class MainWindow(QMainWindow):
         # 翻訳設定画面を開く
         self.show_translate_view()
 
-    def on_translations_updated(self, translations_dict):
+    def on_translations_updated(self, translations_dict: Dict[str, Any]) -> None:
         """翻訳データ更新時の処理"""
         # 現在のプロジェクトに翻訳データを保存
         if self.current_project:
@@ -1546,11 +1548,11 @@ class MainWindow(QMainWindow):
                 max_lines=2,
             )
 
-    def update_status(self):
+    def update_status(self) -> None:
         """ステータスの定期更新"""
         pass
 
-    def on_subtitle_changed(self, row: int, subtitle_item: SubtitleItem):
+    def on_subtitle_changed(self, row: int, subtitle_item: SubtitleItem) -> None:
         """字幕変更時の処理"""
         if self.current_project and 0 <= row < len(self.current_project.subtitles):
             # プロジェクトの字幕を更新
@@ -1559,7 +1561,7 @@ class MainWindow(QMainWindow):
             # プレイヤーの字幕リストも更新
             self.player_view.set_subtitles(self.current_project.subtitles)
 
-    def on_subtitles_reordered(self):
+    def on_subtitles_reordered(self) -> None:
         """字幕順序変更時の処理"""
         if self.current_project:
             # テーブルから最新の字幕リストを取得
@@ -1568,7 +1570,7 @@ class MainWindow(QMainWindow):
             # プレイヤーの字幕リストも更新
             self.player_view.set_subtitles(self.current_project.subtitles)
 
-    def dragEnterEvent(self, event):
+    def dragEnterEvent(self, event: Any) -> None:
         """ドラッグ開始イベント（強化版）"""
         if event.mimeData().hasUrls():
             urls = event.mimeData().urls()
@@ -1592,7 +1594,7 @@ class MainWindow(QMainWindow):
                     event.acceptProposedAction()
                     self.status_label.setText(f"ドロップして {file_ext} ファイルを開く")
 
-    def dropEvent(self, event):
+    def dropEvent(self, event: Any) -> None:
         """ドロップイベント（強化版）"""
         urls = event.mimeData().urls()
         if not urls:
@@ -1618,7 +1620,7 @@ class MainWindow(QMainWindow):
         finally:
             self.status_label.setText("準備完了")
 
-    def load_project(self, file_path: str):
+    def load_project(self, file_path: str) -> None:
         """プロジェクトファイルを読み込む"""
         try:
             project_manager = get_project_manager()
@@ -1765,7 +1767,7 @@ class MainWindow(QMainWindow):
             )
 
 
-def main():
+def main() -> None:
     """メイン関数"""
     try:
         import logging
@@ -1779,7 +1781,7 @@ def main():
         # Qt のメッセージハンドラ設定
         from PySide6.QtCore import QtMsgType, qInstallMessageHandler
 
-        def qt_message_handler(mode, context, message):
+        def qt_message_handler(mode: Any, context: Any, message: str) -> None:
             if mode == QtMsgType.QtCriticalMsg or mode == QtMsgType.QtFatalMsg:
                 logging.error(f"Qt Error: {message}")
             elif mode == QtMsgType.QtWarningMsg:

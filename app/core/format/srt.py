@@ -410,7 +410,7 @@ class SRTFormatter:
 
     def _restore_backup_on_error(
         self, filepath: Path, backup_path: Optional[Path], backup_created: bool
-    ):
+    ) -> None:
         """エラー時のバックアップファイル復元"""
         if backup_created and backup_path and backup_path.exists():
             try:
@@ -582,7 +582,7 @@ class SRTParser:
                 continue
             except Exception as e:
                 attempted_encodings.append(encoding)
-                last_error = e
+                last_error = UnicodeDecodeError("encoding", b"", 0, 1, str(e))
                 self.logger.warning(f"エンコーディング {encoding} で読み込みエラー: {e}")
                 continue
 
@@ -671,7 +671,7 @@ class MultiLanguageSRTManager:
         self.base_filepath = base_filepath
         self.formatters: Dict[str, SRTFormatter] = {}
 
-    def add_language(self, lang_code: str, settings: Optional[SRTFormatSettings] = None):
+    def add_language(self, lang_code: str, settings: Optional[SRTFormatSettings] = None) -> None:
         """言語フォーマッタを追加"""
         self.formatters[lang_code] = SRTFormatter(settings or SRTFormatSettings())
 

@@ -4,10 +4,11 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Generator, List, Tuple
+from typing import Any, Dict, Generator, List, Optional, Tuple
 
 import cv2
 import numpy as np
+from cv2 import VideoCapture
 
 
 @dataclass
@@ -35,12 +36,12 @@ class VideoSampler:
         """
         self.video_path = Path(video_path)
         self.sample_fps = sample_fps
-        self.cap = None
-        self._video_info = None
+        self.cap: Optional[VideoCapture] = None
+        self._video_info: Optional[Dict[str, Any]] = None
 
         self._initialize_capture()
 
-    def _initialize_capture(self):
+    def _initialize_capture(self) -> None:
         """VideoCapture の初期化"""
         if not self.video_path.exists():
             raise FileNotFoundError(f"動画ファイルが見つかりません: {self.video_path}")
@@ -60,7 +61,7 @@ class VideoSampler:
         }
 
     @property
-    def video_info(self) -> dict:
+    def video_info(self) -> Dict[str, Any]:
         """動画情報を取得"""
         return self._video_info.copy() if self._video_info else {}
 
@@ -71,7 +72,7 @@ class VideoSampler:
         Yields:
             VideoFrame: サンプリングされたフレーム
         """
-        if not self.cap or not self.cap.isOpened():
+        if not self.cap or not self.cap.isOpened() or not self._video_info:
             return
 
         original_fps = self._video_info["fps"]
@@ -105,7 +106,7 @@ class VideoSampler:
         Returns:
             VideoFrame: 指定時間のフレーム
         """
-        if not self.cap or not self.cap.isOpened():
+        if not self.cap or not self.cap.isOpened() or not self._video_info:
             raise RuntimeError("動画が開かれていません")
 
         # フレーム番号を計算
@@ -131,6 +132,9 @@ class VideoSampler:
         Returns:
             List[VideoFrame]: 指定範囲のフレーム一覧
         """
+        if not self.cap or not self.cap.isOpened() or not self._video_info:
+            raise RuntimeError("動画が開かれていません")
+
         frames = []
 
         original_fps = self._video_info["fps"]
@@ -182,17 +186,17 @@ class VideoSampler:
                 image=roi_image,
             )
 
-    def close(self):
+    def close(self) -> None:
         """リソースの解放"""
         if self.cap:
             self.cap.release()
             self.cap = None
 
-    def __enter__(self):
+    def __enter__(self) -> "VideoSampler":
         """コンテキストマネージャーの開始"""
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """コンテキストマネージャーの終了"""
         self.close()
 
@@ -211,6 +215,9 @@ class BottomROISampler(VideoSampler):
         self.bottom_ratio = bottom_ratio
 
         # 下段ROI矩形を計算
+        if not self._video_info:
+            raise RuntimeError("動画情報が初期化されていません")
+
         height = self._video_info["height"]
         width = self._video_info["width"]
 
