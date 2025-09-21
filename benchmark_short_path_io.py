@@ -236,7 +236,9 @@ def benchmark_path_performance(file_paths: List[Path], path_type: str, num_runs:
             avg_classification = sum(float(t["classification_time"]) for t in all_timings) / len(
                 all_timings
             )
-            avg_recognition = sum(float(t["recognition_time"]) for t in all_timings) / len(all_timings)
+            avg_recognition = sum(float(t["recognition_time"]) for t in all_timings) / len(
+                all_timings
+            )
             avg_total = sum(float(t["total_time"]) for t in all_timings) / len(all_timings)
             avg_path_length = total_path_length / len(all_timings)
 
@@ -374,14 +376,33 @@ def save_benchmark_results(results: Dict, output_file: Path) -> None:
     logger.info("Results saved to: %s", output_file)
 
 
-def cleanup_test_files(short_dir: Path, long_dir: Path) -> None:
+def cleanup_test_files(short_paths: List[Path], long_paths: List[Path]) -> None:
     """Clean up test files after benchmarking."""
     try:
-        if short_dir.exists():
-            shutil.rmtree(short_dir)
-        if long_dir.exists():
-            shutil.rmtree(long_dir)
-        logger.info("Test files cleaned up")
+        files_removed = 0
+
+        # Remove only the specific files we created
+        for file_path in short_paths + long_paths:
+            if file_path.exists():
+                file_path.unlink()
+                files_removed += 1
+
+        logger.info("Test files cleaned up: %d files removed", files_removed)
+
+        # Only remove directories if they are empty (to avoid data loss)
+        for dir_path in [
+            short_paths[0].parent if short_paths else None,
+            long_paths[0].parent if long_paths else None,
+        ]:
+            if dir_path and dir_path.exists():
+                try:
+                    # Only remove if directory is empty
+                    dir_path.rmdir()
+                    logger.info("Removed empty directory: %s", dir_path)
+                except OSError:
+                    # Directory not empty or other error - leave it alone
+                    logger.debug("Directory not empty or cannot be removed: %s", dir_path)
+
     except Exception as e:
         logger.warning("Failed to clean up test files: %s", e)
 
@@ -442,6 +463,10 @@ def main() -> None:
     logger.info("Long path base: %s", args.long_base)
     logger.info("=" * 70)
 
+    # Initialize path variables for cleanup
+    short_paths: List[Path] = []
+    long_paths: List[Path] = []
+
     try:
         # Setup test files in both locations
         logger.info("Setting up test files...")
@@ -470,7 +495,7 @@ def main() -> None:
     finally:
         # Cleanup test files
         if not args.skip_cleanup:
-            cleanup_test_files(args.short_base, args.long_base)
+            cleanup_test_files(short_paths, long_paths)
 
     logger.info("Issue #172 benchmark completed!")
 
