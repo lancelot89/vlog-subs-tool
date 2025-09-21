@@ -12,8 +12,8 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 
-from app.core.extractor.ocr import SimplePaddleOCREngine
 from app.core.cpu_profiler import ThreadConfig
+from app.core.extractor.ocr import SimplePaddleOCREngine
 
 
 class TestAppleSiliconOCR(unittest.TestCase):
@@ -27,7 +27,9 @@ class TestAppleSiliconOCR(unittest.TestCase):
     @patch("app.core.extractor.ocr.platform.system")
     @patch("app.core.extractor.ocr.platform.machine")
     @patch("app.core.extractor.ocr.get_adaptive_thread_config")
-    def test_apple_silicon_environment_variables(self, mock_thread_config, mock_machine, mock_system):
+    def test_apple_silicon_environment_variables(
+        self, mock_thread_config, mock_machine, mock_system
+    ):
         """Test that Apple Silicon specific environment variables are set correctly."""
         # Setup mocks for Apple Silicon environment
         mock_system.return_value = "Darwin"
@@ -101,8 +103,12 @@ class TestAppleSiliconOCR(unittest.TestCase):
 
             # Verify thread config variables are set but not Apple Silicon specific ones
             self.assertEqual(os.environ.get("VECLIB_MAXIMUM_THREADS"), "2")  # From thread config
-            self.assertNotEqual(os.environ.get("BLAS"), "Accelerate")  # Should not be Apple Accelerate
-            self.assertNotEqual(os.environ.get("FLAGS_use_mkldnn"), "false")  # Should not be disabled
+            self.assertNotEqual(
+                os.environ.get("BLAS"), "Accelerate"
+            )  # Should not be Apple Accelerate
+            self.assertNotEqual(
+                os.environ.get("FLAGS_use_mkldnn"), "false"
+            )  # Should not be disabled
 
     @patch("app.core.extractor.ocr.platform.system")
     @patch("app.core.extractor.ocr.platform.machine")
