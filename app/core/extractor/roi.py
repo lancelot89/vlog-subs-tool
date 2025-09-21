@@ -130,7 +130,7 @@ class AutoROIDetector(ROIDetector):
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
         # MSERを使用してテキスト候補領域を検出
-        mser = cv2.MSER.create()
+        mser = cv2.MSER_create()  # type: ignore
         regions, _ = mser.detectRegions(gray)
 
         text_regions = []
