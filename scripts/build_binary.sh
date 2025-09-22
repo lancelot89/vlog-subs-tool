@@ -48,10 +48,17 @@ check_environment() {
         log_warn "Python 3.12以降を推奨します（現在: $python_version）"
     fi
 
-    # PyInstaller確認（venv環境優先）
+    # PyInstaller確認（venv環境優先、Windows対応）
     if [[ "$VIRTUAL_ENV" != "" ]]; then
-        # venv環境内のPyInstallerを使用
-        PYINSTALLER_CMD="$VIRTUAL_ENV/bin/pyinstaller"
+        # venv環境内のPyInstallerを使用（OS別パス対応）
+        if [[ "$OS" == "Windows_NT" ]] || [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "cygwin" ]]; then
+            # Windows環境
+            PYINSTALLER_CMD="$VIRTUAL_ENV/Scripts/pyinstaller.exe"
+        else
+            # Linux/macOS環境
+            PYINSTALLER_CMD="$VIRTUAL_ENV/bin/pyinstaller"
+        fi
+
         if [[ ! -f "$PYINSTALLER_CMD" ]]; then
             log_warn "venv環境にPyInstallerがインストールされていません。インストール中..."
             pip install 'pyinstaller>=6.15.0'
