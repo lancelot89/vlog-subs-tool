@@ -185,24 +185,24 @@ def main() -> None:
     logger.info("メインエントリーポイント開始")
     logger.info("multiprocessing.freeze_support() 実行完了")
 
-    # Issue #200 対応: PaddleX重複初期化エラーの防止
-    # バイナリ実行時のPaddleX環境設定のみを事前に適用
-    # 実際の初期化はOCRエンジン初期化時に行う
+    # Issue #207 対応: PaddleOCRのcpp_extension問題を防止（PaddleX不使用）
+    # バイナリ実行時のPaddleOCR環境設定のみを事前に適用
     try:
         from app.core.paddlex_init_guard import (
-            get_paddlex_init_status,
-            setup_paddlex_environment_for_binary,
+            complete_binary_initialization,
+            get_paddleocr_init_status,
+            setup_paddleocr_environment_for_binary,
         )
 
-        # バイナリ実行時の環境設定を適用（初期化はしない）
-        setup_paddlex_environment_for_binary()
+        # バイナリ実行時の環境設定を適用
+        setup_paddleocr_environment_for_binary()
 
         # 初期化状態をログ出力
-        init_status = get_paddlex_init_status()
-        logger.info(f"PaddleX environment setup status: {init_status}")
+        init_status = get_paddleocr_init_status()
+        logger.info(f"PaddleOCR environment setup status: {init_status}")
 
     except Exception as e:
-        logger.warning(f"PaddleX environment setup failed: {e}")
+        logger.warning(f"PaddleOCR environment setup failed: {e}")
         # 環境設定が失敗してもアプリは継続実行
 
     is_standalone = setup_paths()

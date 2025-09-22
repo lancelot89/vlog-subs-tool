@@ -1,7 +1,7 @@
 """
-PaddleX初期化ガード - バイナリ実行時の重複初期化を防止
+PaddleOCR初期化ガード - バイナリ実行時の重複初期化を防止
 
-Issue #200 対応: PaddleXの「PDX has already been initialized」エラーを解決
+Issue #207 対応: PaddleOCRのcpp_extension問題を解決（PaddleXは使用しない）
 """
 
 import functools
@@ -14,195 +14,197 @@ from typing import Any, Callable, Optional
 logger = logging.getLogger(__name__)
 
 # グローバル状態管理
-_paddlex_initialized = False
-_paddlex_init_lock = threading.Lock()
-_paddlex_module: Optional[Any] = None
+_paddleocr_initialized = False
+_paddleocr_init_lock = threading.Lock()
+_binary_init_complete = False  # バイナリ実行時の初期化完了フラグ
 
 
-def is_paddlex_available() -> bool:
-    """PaddleXが利用可能かどうかを確認"""
+def is_paddleocr_available() -> bool:
+    """PaddleOCRが利用可能かどうかを確認"""
     try:
         import importlib.util
 
-        return importlib.util.find_spec("paddlex") is not None
+        return importlib.util.find_spec("paddleocr") is not None
     except ImportError:
         return False
 
 
-def get_paddlex_init_status() -> dict:
-    """PaddleX初期化状態を取得（デバッグ用）"""
+def get_paddleocr_init_status() -> dict:
+    """PaddleOCR初期化状態を取得（デバッグ用）"""
     return {
-        "paddlex_available": is_paddlex_available(),
-        "paddlex_initialized": _paddlex_initialized,
+        "paddleocr_available": is_paddleocr_available(),
+        "paddleocr_initialized": _paddleocr_initialized,
         "is_frozen": getattr(sys, "frozen", False),
         "is_binary": hasattr(sys, "_MEIPASS"),
+        "binary_init_complete": _binary_init_complete,
     }
 
 
-def ensure_paddlex_single_init() -> None:
-    """PaddleXの単一初期化を保証（環境変数設定後に呼び出すこと）"""
-    global _paddlex_initialized, _paddlex_module
+def ensure_paddleocr_cpp_extension_safe() -> None:
+    """PaddleOCRのcpp_extension問題を解決（Issue #207対応）"""
+    global _paddleocr_initialized
 
-    if not is_paddlex_available():
-        logger.debug("PaddleX not available, skipping initialization guard")
+    if not is_paddleocr_available():
+        logger.debug("PaddleOCR not available, skipping cpp_extension guard")
         return
 
-    with _paddlex_init_lock:
-        if _paddlex_initialized:
-            logger.debug("PaddleX already initialized, skipping")
+    with _paddleocr_init_lock:
+        if _paddleocr_initialized:
+            logger.debug("PaddleOCR cpp_extension already patched, skipping")
             return
 
         try:
-            # 既存の環境変数を尊重し、設定されていない場合のみデフォルト値を設定
-            os.environ.setdefault("PADDLEX_DISABLE_AUTO_INIT", "1")
-            os.environ.setdefault("PADDLEX_INIT_MODE", "manual")
-
-            # バイナリ実行時の特別な設定（既に設定済みの場合は変更しない）
+            # バイナリ実行時の追加設定
             if getattr(sys, "frozen", False):
-                logger.info("Binary execution detected, respecting pre-configured environment")
-                os.environ.setdefault("PADDLEX_BINARY_MODE", "1")
-                os.environ.setdefault("PADDLEX_CACHE_DISABLED", "1")
+                logger.info(
+                    "Binary execution detected - applying Issue #207 cpp_extension workaround"
+                )
+                # cpp_extension問題を回避
+                os.environ.setdefault("PADDLE_SKIP_CUDA_COMPILER_CHECK", "1")
+                os.environ.setdefault("PADDLE_DISABLE_CPP_EXTENSION", "1")
 
-            # PaddleXを遅延インポート
-            import paddlex
+            # PaddleX初期化制御（Issue #207: 重複初期化エラー防止）
+            os.environ.setdefault("PADDLEX_DISABLE_AUTO_INIT", "1")
+            os.environ.setdefault("PADDLEX_INIT_DISABLED", "1")
 
-            _paddlex_module = paddlex
+            # バイナリ実行時のPaddleX完全無効化
+            if getattr(sys, "frozen", False):
+                os.environ.setdefault("PADDLEX_DISABLE", "1")
+                os.environ.setdefault("DISABLE_PADDLEX", "1")
 
-            # 初期化フラグをチェック
-            if hasattr(paddlex, "_initialized") and paddlex._initialized:
-                logger.warning("PaddleX was already initialized by another module")
-                _paddlex_initialized = True
-                return
+                # PaddleXモジュールの初期化を阻止
+                paddlex_modules = [mod for mod in sys.modules.keys() if mod.startswith("paddlex")]
+                for mod in paddlex_modules:
+                    del sys.modules[mod]
+                    logger.info(f"Removed PaddleX module from sys.modules: {mod}")
 
-            # 環境変数の状態をログ出力（デバッグ用）
+                # PaddleXインポートを阻止するモンキーパッチ（バイナリ実行時のみ）
+                def stub_paddlex_import(name: str, *args: Any, **kwargs: Any) -> Any:
+                    if name.startswith("paddlex"):
+                        logger.warning(f"PaddleX import blocked in binary: {name}")
+                        # ダミーモジュールを返して重複初期化を防止
+                        from unittest.mock import Mock
+
+                        return Mock()
+                    return original_import(name, *args, **kwargs)
+
+                # importをパッチ
+                import builtins
+
+                original_import = builtins.__import__
+                builtins.__import__ = stub_paddlex_import
+
+            # cpp_extension.load のモンキーパッチ
+            def stub_cpp_extension_load(*args: Any, **kwargs: Any) -> Any:
+                logger.warning("cpp_extension.load() called - returning stub to prevent crash")
+                from unittest.mock import Mock
+
+                return Mock()
+
+            # PaddleOCRインポート前にcpp_extensionをパッチ
+            try:
+                import paddle.utils.cpp_extension
+
+                original_load = getattr(paddle.utils.cpp_extension, "load", None)
+                if original_load:
+                    paddle.utils.cpp_extension.load = stub_cpp_extension_load
+                    logger.info("Applied cpp_extension.load patch for Issue #207")
+            except ImportError:
+                logger.debug("paddle.utils.cpp_extension not available for patching")
+
+            # 環境変数の状態をログ出力
             env_status = {
                 "CUDA_VISIBLE_DEVICES": os.environ.get("CUDA_VISIBLE_DEVICES"),
                 "PADDLE_CPU_ONLY": os.environ.get("PADDLE_CPU_ONLY"),
-                "PADDLEX_DISABLE_AUTO_INIT": os.environ.get("PADDLEX_DISABLE_AUTO_INIT"),
+                "PADDLE_DISABLE_CPP_EXTENSION": os.environ.get("PADDLE_DISABLE_CPP_EXTENSION"),
+                "PADDLEX_DISABLE": os.environ.get("PADDLEX_DISABLE"),
             }
-            logger.info(f"Initializing PaddleX with environment: {env_status}")
+            logger.info(f"PaddleOCR cpp_extension guard applied with environment: {env_status}")
 
-            # 手動初期化（必要な場合のみ）
-            if hasattr(paddlex, "initialize") and not _paddlex_initialized:
-                logger.info("Initializing PaddleX manually with pre-configured environment")
-                paddlex.initialize()
+            _paddleocr_initialized = True
 
-            _paddlex_initialized = True
-            logger.info("PaddleX initialization guard successful")
-
-        except ImportError as e:
-            logger.error(f"PaddleX import failed: {e}")
-            logger.info("This may be a temporary issue if PaddleX is being installed")
-            logger.warning("PaddleX initialization failed, retry will be allowed on next attempt")
-            raise
         except Exception as e:
             error_type = type(e).__name__
-            logger.error(f"PaddleX initialization guard failed ({error_type}): {e}")
+            logger.error(f"PaddleOCR cpp_extension guard failed ({error_type}): {e}")
 
             # 環境変数の状態を診断情報として出力
             env_diagnosis = {
                 "CUDA_VISIBLE_DEVICES": os.environ.get("CUDA_VISIBLE_DEVICES", "NOT_SET"),
                 "PADDLE_CPU_ONLY": os.environ.get("PADDLE_CPU_ONLY", "NOT_SET"),
-                "PADDLEX_DISABLE_AUTO_INIT": os.environ.get("PADDLEX_DISABLE_AUTO_INIT", "NOT_SET"),
+                "PADDLE_DISABLE_CPP_EXTENSION": os.environ.get(
+                    "PADDLE_DISABLE_CPP_EXTENSION", "NOT_SET"
+                ),
+                "PADDLEX_DISABLE": os.environ.get("PADDLEX_DISABLE", "NOT_SET"),
             }
             logger.error(f"Environment at failure: {env_diagnosis}")
-
-            # 初期化に失敗した場合はフラグをFalseのままにして再試行を許可
-            logger.warning("PaddleX initialization failed, retry will be allowed on next attempt")
-            logger.info(
-                "Possible solutions: 1) Ensure environment variables are set properly, "
-                "2) Call force_paddlex_retry() to reset state, 3) Check PaddleX installation"
-            )
             raise
 
 
-def safe_paddlex_import() -> Optional[Any]:
-    """安全なPaddleXインポート（重複初期化防止付き）"""
-    if not is_paddlex_available():
-        return None
+def safe_paddleocr_import() -> None:
+    """安全なPaddleOCRインポート（cpp_extension問題回避付き）"""
+    if not is_paddleocr_available():
+        logger.warning("PaddleOCR not available")
+        return
 
-    ensure_paddlex_single_init()
-    return _paddlex_module
-
-
-def reset_paddlex_state() -> None:
-    """PaddleX状態をリセット（テスト用および失敗後の再試行用）"""
-    global _paddlex_initialized, _paddlex_module
-    with _paddlex_init_lock:
-        _paddlex_initialized = False
-        _paddlex_module = None
-        logger.debug("PaddleX state reset - retry will be allowed")
+    ensure_paddleocr_cpp_extension_safe()
 
 
-def force_paddlex_retry() -> None:
-    """PaddleX初期化の再試行を強制的に許可（失敗後のリカバリ用）"""
-    global _paddlex_initialized
-    with _paddlex_init_lock:
-        if _paddlex_initialized:
-            logger.info("Forcing PaddleX initialization retry after previous failure")
-            _paddlex_initialized = False
+def reset_paddleocr_state() -> None:
+    """PaddleOCR状態をリセット（テスト用および失敗後の再試行用）"""
+    global _paddleocr_initialized
+    with _paddleocr_init_lock:
+        _paddleocr_initialized = False
+        logger.debug("PaddleOCR state reset - retry will be allowed")
 
 
-def prevent_paddlex_autoinit(func: Callable[..., Any]) -> Callable[..., Any]:
+def prevent_cpp_extension_crash(func: Callable[..., Any]) -> Callable[..., Any]:
     """
-    デコレータ: PaddleXの自動初期化を防止
-    PaddleOCR使用前に適用することで重複初期化を防ぐ
+    デコレータ: cpp_extensionクラッシュを防止
+    PaddleOCR使用前に適用することでcpp_extension問題を回避
     """
 
     @functools.wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
-        # 環境変数で自動初期化を無効化
-        old_env = os.environ.get("PADDLEX_DISABLE_AUTO_INIT")
-        os.environ["PADDLEX_DISABLE_AUTO_INIT"] = "1"
+        # 事前にcpp_extension安全化を実行
+        if is_paddleocr_available():
+            ensure_paddleocr_cpp_extension_safe()
 
-        try:
-            # 事前にPaddleX初期化ガードを実行
-            if is_paddlex_available():
-                ensure_paddlex_single_init()
-
-            result = func(*args, **kwargs)
-            return result
-        finally:
-            # 環境変数を元に戻す
-            if old_env is None:
-                os.environ.pop("PADDLEX_DISABLE_AUTO_INIT", None)
-            else:
-                os.environ["PADDLEX_DISABLE_AUTO_INIT"] = old_env
+        result = func(*args, **kwargs)
+        return result
 
     return wrapper
 
 
 # バイナリ実行時の環境設定を main.py から呼び出す関数
-def setup_paddlex_environment_for_binary() -> None:
-    """バイナリ実行時用の環境設定関数（初期化は行わない）"""
+def setup_paddleocr_environment_for_binary() -> None:
+    """バイナリ実行時用のPaddleOCR環境設定関数"""
     if not getattr(sys, "frozen", False):
         logger.debug("Not a binary execution, skipping binary environment setup")
         return
 
-    logger.info("Setting up PaddleX environment for binary execution")
+    logger.info("Setting up PaddleOCR environment for binary execution")
 
-    # バイナリ実行時のPaddleX環境設定を適用（初期化はしない）
+    # Issue #207対応: cpp_extension問題を回避
+    os.environ.setdefault("PADDLE_SKIP_CUDA_COMPILER_CHECK", "1")
+    os.environ.setdefault("PADDLE_DISABLE_CPP_EXTENSION", "1")
+
+    # PaddleX初期化制御（バイナリ実行時の重複初期化防止）
     os.environ.setdefault("PADDLEX_DISABLE_AUTO_INIT", "1")
-    os.environ.setdefault("PADDLEX_BINARY_MODE", "1")
-    os.environ.setdefault("PADDLEX_CACHE_DISABLED", "1")
+    os.environ.setdefault("PADDLEX_INIT_DISABLED", "1")
+    os.environ.setdefault("PADDLEX_DISABLE", "1")
+    os.environ.setdefault("DISABLE_PADDLEX", "1")
 
     # 基本的なCPU専用設定も事前に適用
     os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
     os.environ.setdefault("PADDLE_CPU_ONLY", "1")
     os.environ.setdefault("PADDLE_SKIP_GPU_MEMORY_INIT", "1")
 
-    logger.info("PaddleX binary environment setup completed (initialization deferred)")
+    logger.info("PaddleOCR binary environment setup completed")
 
 
-def initialize_for_binary() -> None:
-    """バイナリ実行時用の初期化関数（後方互換性のため残す）"""
-    logger.warning(
-        "initialize_for_binary() is deprecated, use setup_paddlex_environment_for_binary() instead"
-    )
-    setup_paddlex_environment_for_binary()
-
-    if is_paddlex_available():
-        ensure_paddlex_single_init()
-        logger.info("PaddleX binary initialization completed")
-    else:
-        logger.debug("PaddleX not available in binary, initialization skipped")
+def complete_binary_initialization() -> None:
+    """バイナリ初期化完了をマーク"""
+    global _binary_init_complete
+    if getattr(sys, "frozen", False):
+        _binary_init_complete = True
+        logger.info("Binary initialization marked as complete")

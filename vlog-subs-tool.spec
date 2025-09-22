@@ -27,10 +27,12 @@ hidden_imports = [
     'PySide6.QtMultimedia',
     'PySide6.QtMultimediaWidgets',
 
-    # PaddleOCR関連（コア機能のみ）
+    # PaddleOCR関連（コア機能のみ、PaddleX除外）
     'paddleocr',
     'paddlepaddle',
     'paddle',
+    'paddle.utils',
+    'paddle.utils.cpp_extension',
 
     # OpenCV関連（必須）
     'cv2',
@@ -96,7 +98,7 @@ excludes = [
     'matplotlib',
     'wx',
 
-    # データサイエンス・ML（不要）
+    # データサイエンス・ML（不要、Issue #207対応でサイズ削減）
     'IPython',
     'jupyter',
     'notebook',
@@ -105,11 +107,19 @@ excludes = [
     'tensorflow',
     'torch',
     'torchvision',
+    'torchaudio',  # 音声処理（字幕ツールには不要）
     'transformers',
     'ctranslate2',
     'sentencepiece',
     'langdetect',
     'opencc',
+
+    # ModelScope関連（重い、字幕処理には不要）
+    'modelscope',
+    'aistudio_sdk',
+
+    # HuggingFace関連（重い）
+    'huggingface_hub',
 
     # 削除された機能
     'app.core.benchmark',
@@ -130,6 +140,17 @@ excludes = [
     'xlrd',
     'seaborn',
     'plotly',
+
+    # PaddleX大型モジュール除外（Issue #207対応：コア機能は保持）
+    'paddlex.deploy',
+    'paddlex.pipelines.auto_compress',
+    'paddlex.models.llm',
+    'paddlex.models.speech',
+
+    # 音声・動画処理（字幕抽出には不要）
+    'ffmpeg',
+    'av',
+    'imageio_ffmpeg',
 
     # ネットワーク関連（OCRローカル実行のため）
     'requests_oauthlib',
@@ -161,7 +182,7 @@ a = Analysis(
     hiddenimports=hidden_imports,
     hookspath=hookspath_list,
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=['hooks/rthook-paddlex.py'],  # Issue #207: PaddleXスタブ化でPaddleOCRインポートエラーを回避
     excludes=excludes,
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -171,12 +192,17 @@ a = Analysis(
     collect_all=[
         'app',
     ],
-    # PaddleOCR収集（最小限）
+    # PaddleOCR収集（PaddleXコア機能含む）
     collect_data=[
         'paddleocr',
+        'paddle',
+        'paddlex',
     ],
     collect_submodules=[
         'paddleocr',
+        'paddle.utils',
+        'paddlex.inference',
+        'paddlex.utils',
     ],
 )
 
