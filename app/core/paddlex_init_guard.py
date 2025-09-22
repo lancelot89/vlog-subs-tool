@@ -40,7 +40,7 @@ def get_paddlex_init_status() -> dict:
 
 
 def ensure_paddlex_single_init() -> None:
-    """PaddleXの単一初期化を保証"""
+    """PaddleXの単一初期化を保証（環境変数設定後に呼び出すこと）"""
     global _paddlex_initialized, _paddlex_module
 
     if not is_paddlex_available():
@@ -53,13 +53,13 @@ def ensure_paddlex_single_init() -> None:
             return
 
         try:
-            # 環境変数でPaddleXの動作を制御
+            # 既存の環境変数を尊重し、設定されていない場合のみデフォルト値を設定
             os.environ.setdefault("PADDLEX_DISABLE_AUTO_INIT", "1")
             os.environ.setdefault("PADDLEX_INIT_MODE", "manual")
 
-            # バイナリ実行時の特別な設定
+            # バイナリ実行時の特別な設定（既に設定済みの場合は変更しない）
             if getattr(sys, "frozen", False):
-                logger.info("Binary execution detected, applying PaddleX binary-safe settings")
+                logger.info("Binary execution detected, respecting pre-configured environment")
                 os.environ.setdefault("PADDLEX_BINARY_MODE", "1")
                 os.environ.setdefault("PADDLEX_CACHE_DISABLED", "1")
 
@@ -74,9 +74,17 @@ def ensure_paddlex_single_init() -> None:
                 _paddlex_initialized = True
                 return
 
+            # 環境変数の状態をログ出力（デバッグ用）
+            env_status = {
+                "CUDA_VISIBLE_DEVICES": os.environ.get("CUDA_VISIBLE_DEVICES"),
+                "PADDLE_CPU_ONLY": os.environ.get("PADDLE_CPU_ONLY"),
+                "PADDLEX_DISABLE_AUTO_INIT": os.environ.get("PADDLEX_DISABLE_AUTO_INIT"),
+            }
+            logger.info(f"Initializing PaddleX with environment: {env_status}")
+
             # 手動初期化（必要な場合のみ）
             if hasattr(paddlex, "initialize") and not _paddlex_initialized:
-                logger.info("Initializing PaddleX manually")
+                logger.info("Initializing PaddleX manually with pre-configured environment")
                 paddlex.initialize()
 
             _paddlex_initialized = True
@@ -136,19 +144,34 @@ def prevent_paddlex_autoinit(func: Callable[..., Any]) -> Callable[..., Any]:
     return wrapper
 
 
-# バイナリ実行時の初期化を main.py から呼び出す関数
-def initialize_for_binary() -> None:
-    """バイナリ実行時用の初期化関数"""
+# バイナリ実行時の環境設定を main.py から呼び出す関数
+def setup_paddlex_environment_for_binary() -> None:
+    """バイナリ実行時用の環境設定関数（初期化は行わない）"""
     if not getattr(sys, "frozen", False):
-        logger.debug("Not a binary execution, skipping binary initialization")
+        logger.debug("Not a binary execution, skipping binary environment setup")
         return
 
-    logger.info("Initializing PaddleX guard for binary execution")
+    logger.info("Setting up PaddleX environment for binary execution")
 
-    # バイナリ実行時のPaddleX設定を適用
+    # バイナリ実行時のPaddleX環境設定を適用（初期化はしない）
     os.environ.setdefault("PADDLEX_DISABLE_AUTO_INIT", "1")
     os.environ.setdefault("PADDLEX_BINARY_MODE", "1")
     os.environ.setdefault("PADDLEX_CACHE_DISABLED", "1")
+
+    # 基本的なCPU専用設定も事前に適用
+    os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
+    os.environ.setdefault("PADDLE_CPU_ONLY", "1")
+    os.environ.setdefault("PADDLE_SKIP_GPU_MEMORY_INIT", "1")
+
+    logger.info("PaddleX binary environment setup completed (initialization deferred)")
+
+
+def initialize_for_binary() -> None:
+    """バイナリ実行時用の初期化関数（後方互換性のため残す）"""
+    logger.warning(
+        "initialize_for_binary() is deprecated, use setup_paddlex_environment_for_binary() instead"
+    )
+    setup_paddlex_environment_for_binary()
 
     if is_paddlex_available():
         ensure_paddlex_single_init()
