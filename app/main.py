@@ -4,13 +4,91 @@ VLog字幕ツール メインエントリーポイント
 PyInstaller バイナリとソースコード実行の両方に対応
 """
 
+# Block PaddleX imports at application startup to prevent binary execution errors
+import importlib.util
 import logging
 import os
 import sys
 import traceback
+import types
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+
+class PaddleXModuleInterceptor:
+    """Intercepts and blocks all PaddleX module imports."""
+
+    def __init__(self) -> None:
+        # Handle both dict and module forms of __builtins__
+        if isinstance(__builtins__, dict):
+            self.original_import = __builtins__["__import__"]
+        else:
+            self.original_import = __builtins__.__import__
+
+    def __call__(
+        self,
+        name: str,
+        globals: dict[str, Any] | None = None,
+        locals: dict[str, Any] | None = None,
+        fromlist: tuple[str, ...] = (),
+        level: int = 0,
+    ) -> Any:
+        # Intercept any paddlex imports
+        if name.startswith("paddlex"):
+            return self._create_dummy_module(name)
+
+        # For fromlist imports like "from paddlex.utils import device"
+        if fromlist:
+            for item in fromlist:
+                if globals and "paddlex" in str(globals.get("__name__", "")):
+                    return self._create_dummy_module(f"{name}.{item}")
+
+        return self.original_import(name, globals, locals, fromlist, level)
+
+    def _create_dummy_module(self, module_name: str) -> types.ModuleType:
+        """Create a dummy module with basic attributes."""
+        if module_name in sys.modules:
+            return sys.modules[module_name]
+
+        dummy = types.ModuleType(module_name)
+
+        # Add common attributes and submodules that might be expected
+        if "device" in module_name:
+            setattr(dummy, "get_device", lambda: "cpu")
+            setattr(dummy, "is_compiled_with_cuda", lambda: False)
+        elif "inference" in module_name:
+            setattr(dummy, "create_predictor", lambda *args, **kwargs: None)
+            setattr(dummy, "download_and_decompress", lambda *args, **kwargs: None)
+        elif "utils" in module_name:
+            # Create benchmark submodule
+            benchmark_module = types.ModuleType(f"{module_name}.benchmark")
+            setattr(benchmark_module, "benchmark", lambda *args, **kwargs: {})
+            setattr(dummy, "benchmark", benchmark_module)
+            sys.modules[f"{module_name}.benchmark"] = benchmark_module
+
+        # Add common dummy attributes that might be imported
+        setattr(dummy, "__version__", "1.0.0")
+        setattr(dummy, "__all__", [])
+
+        sys.modules[module_name] = dummy
+        return dummy
+
+
+# Install the interceptor
+if "paddlex" not in sys.modules:
+    interceptor = PaddleXModuleInterceptor()
+    # Handle both dict and module forms of __builtins__
+    if isinstance(__builtins__, dict):
+        __builtins__["__import__"] = interceptor  # type: ignore[assignment]
+    else:
+        __builtins__.__import__ = interceptor  # type: ignore[assignment]
+
+# Set environment variables to disable PaddleX
+os.environ.setdefault("PADDLEX_DISABLE", "1")
+os.environ.setdefault("PADDLEX_INFERENCE_DISABLE", "1")
+os.environ.setdefault("USE_PADDLEX", "False")
+os.environ.setdefault("ENABLE_PADDLEX", "False")
 
 
 def is_console_available() -> bool:

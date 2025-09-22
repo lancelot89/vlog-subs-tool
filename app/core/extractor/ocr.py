@@ -329,6 +329,54 @@ class SimplePaddleOCREngine:
             os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
             os.environ.setdefault("PADDLE_CPU_ONLY", "1")
 
+            # Additional environment variables to disable PaddleX
+            os.environ.setdefault("PADDLEX_DISABLE", "1")
+            os.environ.setdefault("PADDLEX_INFERENCE_DISABLE", "1")
+            os.environ.setdefault("USE_PADDLEX", "False")
+            os.environ.setdefault("ENABLE_PADDLEX", "False")
+
+            # Block PaddleX modules to prevent internal dependencies
+            # This is necessary because PaddleOCR 3.2.0 internally tries to import paddlex
+            import sys
+
+            # Create dummy modules to prevent import errors
+            if "paddlex" not in sys.modules:
+                import types
+
+                # Create comprehensive dummy module hierarchy for PaddleX
+                dummy_modules = {
+                    "paddlex": types.ModuleType("paddlex"),
+                    "paddlex.utils": types.ModuleType("paddlex.utils"),
+                    "paddlex.utils.device": types.ModuleType("paddlex.utils.device"),
+                    "paddlex.inference": types.ModuleType("paddlex.inference"),
+                    "paddlex.inference.utils": types.ModuleType("paddlex.inference.utils"),
+                    "paddlex.inference.pipelines": types.ModuleType("paddlex.inference.pipelines"),
+                    "paddlex.models": types.ModuleType("paddlex.models"),
+                    "paddlex.tasks": types.ModuleType("paddlex.tasks"),
+                }
+
+                # Add basic attributes that PaddleOCR might expect
+                setattr(dummy_modules["paddlex.utils.device"], "get_device", lambda: "cpu")
+                setattr(
+                    dummy_modules["paddlex.utils.device"], "is_compiled_with_cuda", lambda: False
+                )
+                setattr(
+                    dummy_modules["paddlex.inference"],
+                    "create_predictor",
+                    lambda *args, **kwargs: None,
+                )
+                setattr(
+                    dummy_modules["paddlex.inference.utils"],
+                    "download_and_decompress",
+                    lambda *args, **kwargs: None,
+                )
+
+                # Register all dummy modules
+                for module_name, module_obj in dummy_modules.items():
+                    sys.modules[module_name] = module_obj
+
+                logger.debug("Created comprehensive dummy paddlex module hierarchy")
+
             # Import PaddleOCR here to avoid PyInstaller scanning for dependencies
             from paddleocr import PaddleOCR as _PaddleOCR
 
