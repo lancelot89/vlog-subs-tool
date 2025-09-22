@@ -141,12 +141,11 @@ excludes = [
     'seaborn',
     'plotly',
 
-    # PaddleX完全除外（Issue #207対応）
-    'paddlex',
-    'paddlex.inference',
+    # PaddleX大型モジュール除外（Issue #207対応：コア機能は保持）
     'paddlex.deploy',
-    'paddlex.pipelines',
-    'paddlex.models',
+    'paddlex.pipelines.auto_compress',
+    'paddlex.models.llm',
+    'paddlex.models.speech',
 
     # 音声・動画処理（字幕抽出には不要）
     'ffmpeg',
@@ -193,14 +192,17 @@ a = Analysis(
     collect_all=[
         'app',
     ],
-    # PaddleOCR収集（最小限、PaddleX除外）
+    # PaddleOCR収集（PaddleXコア機能含む）
     collect_data=[
         'paddleocr',
         'paddle',
+        'paddlex',
     ],
     collect_submodules=[
         'paddleocr',
         'paddle.utils',
+        'paddlex.inference',
+        'paddlex.utils',
     ],
 )
 

@@ -14,8 +14,9 @@ try:
     # PaddlePaddleのバイナリとデータも収集（PaddleX関連は除外）
     paddle_datas, paddle_binaries, paddle_hiddenimports = collect_all("paddle")
 
-    # PaddleX関連を除外
-    paddle_hiddenimports = [imp for imp in paddle_hiddenimports if not imp.startswith("paddlex")]
+    # PaddleX大型モジュールのみ除外（コア機能は保持）
+    exclude_paddlex = ['paddlex.deploy', 'paddlex.pipelines.auto_compress', 'paddlex.models.llm', 'paddlex.models.speech']
+    paddle_hiddenimports = [imp for imp in paddle_hiddenimports if not any(imp.startswith(exc) for exc in exclude_paddlex)]
 
     datas += paddle_datas
     binaries += paddle_binaries

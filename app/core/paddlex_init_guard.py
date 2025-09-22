@@ -61,28 +61,12 @@ def ensure_paddleocr_cpp_extension_safe() -> None:
                 os.environ.setdefault("PADDLE_SKIP_CUDA_COMPILER_CHECK", "1")
                 os.environ.setdefault("PADDLE_DISABLE_CPP_EXTENSION", "1")
 
-            # PaddleX完全無効化（Issue #207: PaddleX使用禁止）
-            os.environ.setdefault("PADDLEX_DISABLE", "1")
-            os.environ.setdefault("DISABLE_PADDLEX", "1")
+            # PaddleX初期化制御（Issue #207: 必要最小限の制御）
+            os.environ.setdefault("PADDLEX_DISABLE_AUTO_INIT", "1")
 
-            # PaddleXモジュールをsys.modulesで事前にブロック
-            paddlex_modules = [mod for mod in sys.modules.keys() if mod.startswith('paddlex')]
-            for mod in paddlex_modules:
-                del sys.modules[mod]
-                logger.info(f"Removed PaddleX module from sys.modules: {mod}")
-
-            # PaddleXのインポートを阻止するモンキーパッチ
-            def stub_paddlex_import(name, *args, **kwargs):
-                if name.startswith('paddlex'):
-                    logger.warning(f"PaddleX import blocked: {name}")
-                    # ダミーモジュールを返すのではなく、ImportErrorを発生
-                    raise ImportError(f"PaddleX is disabled (Issue #207): {name}")
-                return original_import(name, *args, **kwargs)
-
-            # importをパッチ
-            import builtins
-            original_import = builtins.__import__
-            builtins.__import__ = stub_paddlex_import
+            # バイナリ実行時のみPaddleXキャッシュ無効化
+            if getattr(sys, "frozen", False):
+                os.environ.setdefault("PADDLEX_CACHE_DISABLED", "1")
 
             # cpp_extension.load のモンキーパッチ
             def stub_cpp_extension_load(*args, **kwargs):
@@ -174,10 +158,9 @@ def setup_paddleocr_environment_for_binary() -> None:
     os.environ.setdefault("PADDLE_SKIP_CUDA_COMPILER_CHECK", "1")
     os.environ.setdefault("PADDLE_DISABLE_CPP_EXTENSION", "1")
 
-    # PaddleX完全無効化（PaddleOCRが内部でPaddleXをインポートしようとするのを阻止）
-    os.environ.setdefault("PADDLEX_DISABLE", "1")
-    os.environ.setdefault("DISABLE_PADDLEX", "1")
-    os.environ.setdefault("PADDLEX_BACKEND", "none")
+    # PaddleX初期化制御（PaddleOCRとの互換性を保持）
+    os.environ.setdefault("PADDLEX_DISABLE_AUTO_INIT", "1")
+    os.environ.setdefault("PADDLEX_CACHE_DISABLED", "1")
 
     # 基本的なCPU専用設定も事前に適用
     os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
