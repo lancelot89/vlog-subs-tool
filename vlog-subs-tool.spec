@@ -98,7 +98,7 @@ excludes = [
     'matplotlib',
     'wx',
 
-    # データサイエンス・ML（不要）
+    # データサイエンス・ML（不要、Issue #207対応でサイズ削減）
     'IPython',
     'jupyter',
     'notebook',
@@ -107,11 +107,19 @@ excludes = [
     'tensorflow',
     'torch',
     'torchvision',
+    'torchaudio',  # 音声処理（字幕ツールには不要）
     'transformers',
     'ctranslate2',
     'sentencepiece',
     'langdetect',
     'opencc',
+
+    # ModelScope関連（重い、字幕処理には不要）
+    'modelscope',
+    'aistudio_sdk',
+
+    # HuggingFace関連（重い）
+    'huggingface_hub',
 
     # 削除された機能
     'app.core.benchmark',
@@ -132,6 +140,18 @@ excludes = [
     'xlrd',
     'seaborn',
     'plotly',
+
+    # PaddleX重いモジュール（cpp_extension問題回避）
+    'paddlex.inference',
+    'paddlex.deploy',
+    'paddlex.pipelines.auto_compress',
+    'paddlex.models.llm',
+    'paddlex.models.speech',
+
+    # 音声・動画処理（字幕抽出には不要）
+    'ffmpeg',
+    'av',
+    'imageio_ffmpeg',
 
     # ネットワーク関連（OCRローカル実行のため）
     'requests_oauthlib',

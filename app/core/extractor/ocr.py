@@ -73,16 +73,23 @@ except Exception as _import_error:  # pragma: no cover - dependency missing
     PADDLEOCR_AVAILABLE = False
     _PADDLE_IMPORT_ERROR = _import_error
 
-# Issue #207対応: paddlexを除外し、PaddleOCRのみを使用
-PADDLEX_AVAILABLE = False  # 明示的にFalseに設定
+PADDLEX_AVAILABLE = importlib.util.find_spec("paddlex") is not None
 _PADDLEX_MODULE: Optional[Any] = None
 
 
 def _load_paddlex_module() -> Any:
-    """Issue #207対応: paddlexは使用せず、Noneを返す"""
-    # paddlexを明示的に無効化
-    logging.warning("PaddleX module disabled for Issue #207 - using PaddleOCR only")
-    return None
+    """Lazily import :mod:`paddlex` when it is actually required."""
+
+    if not PADDLEX_AVAILABLE:  # pragma: no cover - optional dependency missing
+        raise ModuleNotFoundError("paddlex is not available")
+
+    global _PADDLEX_MODULE
+    if _PADDLEX_MODULE is None:  # pragma: no cover - import happens on demand
+        # Issue #207 対応: 安全なPaddleXインポートを使用（cpp_extension問題は runtime hook で解決）
+        _PADDLEX_MODULE = safe_paddlex_import()
+        if _PADDLEX_MODULE is None:
+            _PADDLEX_MODULE = importlib.import_module("paddlex")
+    return _PADDLEX_MODULE
 
 
 # ---------------------------------------------------------------------------

@@ -20,8 +20,13 @@ _paddlex_module: Optional[Any] = None
 
 
 def is_paddlex_available() -> bool:
-    """Issue #207対応: PaddleXは明示的に無効化"""
-    return False  # paddlexを完全に無効化
+    """PaddleXが利用可能かどうかを確認"""
+    try:
+        import importlib.util
+
+        return importlib.util.find_spec("paddlex") is not None
+    except ImportError:
+        return False
 
 
 def get_paddlex_init_status() -> dict:
