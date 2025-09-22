@@ -20,7 +20,7 @@ opencc-python-reimplemented>=0.1.7
 
 # Data Processing - NumPy version compatible with opencv-python 4.6.x
 pandas>=2.0.0
-numpy>=1.24.0,<2.0
+numpy>=1.24.0,<3.0
 
 # File Handling
 python-bidi>=0.4.2  # RTL language support
