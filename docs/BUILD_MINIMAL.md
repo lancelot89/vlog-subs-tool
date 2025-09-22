@@ -159,6 +159,40 @@ hiddenimports=[
 
 1. `datas` に追加または `--add-data` オプション使用
 
+## GitHub Actions対応
+
+CI/CDパイプラインも最小構成に対応済みです：
+
+### ワークフロー変更点
+
+- `requirements.txt` → `requirements-minimal.txt` を使用
+- `scripts/build_binary.sh` → 直接 `pyinstaller` コマンドを実行
+- プラットフォーム別最小specファイルを使用：
+  - Linux/Windows: `vlog-subs-tool-minimal.spec`
+  - macOS: `vlog-subs-tool-macos-minimal.spec`
+
+### 自動ビルド
+
+```yaml
+# .github/workflows/build-binaries.yml (抜粋)
+- name: Install Python dependencies (minimal config)
+  run: |
+    pip install -r requirements-minimal.txt
+
+- name: Build Linux binary (simplified PyInstaller)
+  run: |
+    pyinstaller --clean vlog-subs-tool-minimal.spec
+```
+
+### リリース作成
+
+タグをプッシュすると自動でバイナリがビルドされ、GitHub Releasesに公開されます：
+
+```bash
+git tag v1.1.0-minimal
+git push origin v1.1.0-minimal
+```
+
 ## 次のステップ
 
 1. **基本動作確認** - 最小構成で動作することを確認

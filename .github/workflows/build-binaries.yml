@@ -49,18 +49,27 @@ jobs:
           libfontconfig1 \
           libfreetype6
     
-    - name: Install Python dependencies
+    - name: Install Python dependencies (minimal config)
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pyinstaller
+        # Use minimal dependencies for stable builds (Issue #216)
+        pip install -r requirements-minimal.txt
 
-    - name: Build Linux binary
+    - name: Build Linux binary (simplified PyInstaller)
       run: |
-        # 仮想環境設定（GitHub Actionsではスキップされる）
-        export GITHUB_ACTIONS=true
-        chmod +x scripts/build_binary.sh
-        ./scripts/build_binary.sh linux
+        echo "Building with minimal PyInstaller configuration..."
+        # Issue #216: Use simplified spec file for stable builds
+        pyinstaller --clean --distpath dist/linux --workpath build/linux vlog-subs-tool-minimal.spec
+
+        # Verify binary was created
+        if [ ! -f "dist/linux/vlog-subs-tool/vlog-subs-tool" ]; then
+          echo "❌ Binary build failed - executable not found"
+          ls -la dist/linux/ || echo "dist/linux/ directory not found"
+          exit 1
+        fi
+
+        echo "✅ Linux binary build completed"
+        du -sh dist/linux/vlog-subs-tool/
     
     - name: Create Linux archive
       shell: bash
@@ -99,19 +108,28 @@ jobs:
       with:
         python-version: '3.12'
     
-    - name: Install Python dependencies
+    - name: Install Python dependencies (minimal config)
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pyinstaller
+        # Use minimal dependencies for stable builds (Issue #216)
+        pip install -r requirements-minimal.txt
 
-    - name: Build Windows binary
+    - name: Build Windows binary (simplified PyInstaller)
       shell: bash
       run: |
-        # 仮想環境設定（GitHub Actionsではスキップされる）
-        export GITHUB_ACTIONS=true
-        chmod +x scripts/build_binary.sh
-        ./scripts/build_binary.sh windows
+        echo "Building with minimal PyInstaller configuration..."
+        # Issue #216: Use simplified spec file for stable builds
+        pyinstaller --clean --distpath dist/windows --workpath build/windows vlog-subs-tool-minimal.spec
+
+        # Verify binary was created
+        if [ ! -f "dist/windows/vlog-subs-tool/vlog-subs-tool.exe" ]; then
+          echo "❌ Binary build failed - executable not found"
+          ls -la dist/windows/ || echo "dist/windows/ directory not found"
+          exit 1
+        fi
+
+        echo "✅ Windows binary build completed"
+        du -sh dist/windows/vlog-subs-tool/ || echo "Size calculation failed"
     
     - name: Create Windows ZIP archive
       shell: pwsh
@@ -141,18 +159,34 @@ jobs:
       with:
         python-version: '3.12'
     
-    - name: Install Python dependencies
+    - name: Install Python dependencies (minimal config)
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pyinstaller
+        # Use minimal dependencies for stable builds (Issue #216)
+        pip install -r requirements-minimal.txt
 
-    - name: Build macOS binary
+    - name: Build macOS binary (simplified PyInstaller)
       run: |
-        # 仮想環境設定（GitHub Actionsではスキップされる）
-        export GITHUB_ACTIONS=true
-        chmod +x scripts/build_binary.sh
-        ./scripts/build_binary.sh macos
+        echo "Building with minimal PyInstaller configuration..."
+        # Issue #216: Use simplified spec file for stable builds
+        pyinstaller --clean --distpath dist/macos --workpath build/macos vlog-subs-tool-macos-minimal.spec
+
+        # Verify binary was created
+        if [ ! -d "dist/macos/VLog字幕ツール.app" ]; then
+          echo "❌ Binary build failed - app bundle not found"
+          ls -la dist/macos/ || echo "dist/macos/ directory not found"
+          exit 1
+        fi
+
+        # Verify executable inside app bundle
+        if [ ! -f "dist/macos/VLog字幕ツール.app/Contents/MacOS/VLog字幕ツール" ]; then
+          echo "❌ Binary build failed - executable not found in app bundle"
+          ls -la "dist/macos/VLog字幕ツール.app/Contents/MacOS/" || echo "MacOS directory not found"
+          exit 1
+        fi
+
+        echo "✅ macOS binary build completed"
+        du -sh "dist/macos/VLog字幕ツール.app"
 
     - name: Fix macOS app permissions
       run: |
@@ -209,6 +243,15 @@ jobs:
         name: VLog字幕ツール ${{ github.event.inputs.tag_name || github.ref_name }}
         body: |
           ## 🎬 VLog字幕ツール ${{ github.event.inputs.tag_name || github.ref_name }}
+
+          ### ⚡ Issue #216対応: 最小構成ビルド
+
+          このバージョンから **PyInstaller設定を簡素化** し、ソース実行と完全同一挙動を実現しました：
+          - ImportError の解消（過度な除外設定を撤廃）
+          - 安定性の向上（デフォルト設定重視）
+          - ビルドプロセスの単純化
+
+          **注意**: バイナリサイズは一時的に増加しますが、動作安定性を優先しています。
 
           ### 📦 ダウンロード
 
