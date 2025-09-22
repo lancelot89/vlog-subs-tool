@@ -114,12 +114,15 @@ build_windows() {
             --distpath "$DIST_DIR/windows" \
             --workpath "$BUILD_DIR/windows" \
             --add-data "README.md:." \
+            --additional-hooks-dir="hooks" \
+            --runtime-hook="hooks/rthook-paddlex.py" \
             --hidden-import "PySide6.QtCore" \
             --hidden-import "PySide6.QtGui" \
             --hidden-import "PySide6.QtWidgets" \
             --hidden-import "paddleocr" \
             --hidden-import "paddle" \
             --exclude-module "paddlex" \
+            --exclude-module "paddlex-inference" \
             --hidden-import "cv2" \
             --hidden-import "numpy" \
             --hidden-import "psutil" \
@@ -160,12 +163,15 @@ build_macos() {
             --distpath "$DIST_DIR/macos" \
             --workpath "$BUILD_DIR/macos" \
             --add-data "README.md:." \
+            --additional-hooks-dir="hooks" \
+            --runtime-hook="hooks/rthook-paddlex.py" \
             --hidden-import "PySide6.QtCore" \
             --hidden-import "PySide6.QtGui" \
             --hidden-import "PySide6.QtWidgets" \
             --hidden-import "paddleocr" \
             --hidden-import "paddle" \
             --exclude-module "paddlex" \
+            --exclude-module "paddlex-inference" \
             --hidden-import "cv2" \
             --hidden-import "numpy" \
             --hidden-import "psutil" \
@@ -199,12 +205,15 @@ build_linux() {
             --distpath "$DIST_DIR/linux" \
             --workpath "$BUILD_DIR/linux" \
             --add-data "README.md:." \
+            --additional-hooks-dir="hooks" \
+            --runtime-hook="hooks/rthook-paddlex.py" \
             --hidden-import "PySide6.QtCore" \
             --hidden-import "PySide6.QtGui" \
             --hidden-import "PySide6.QtWidgets" \
             --hidden-import "paddleocr" \
             --hidden-import "paddle" \
             --exclude-module "paddlex" \
+            --exclude-module "paddlex-inference" \
             --hidden-import "cv2" \
             --hidden-import "numpy" \
             --hidden-import "psutil" \
