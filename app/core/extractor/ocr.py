@@ -56,7 +56,7 @@ import cv2
 import numpy as np
 
 from app.core.cpu_profiler import get_adaptive_thread_config
-from app.core.paddlex_init_guard import prevent_paddlex_autoinit, safe_paddlex_import
+from app.core.paddlex_init_guard import safe_paddlex_import
 
 logger = logging.getLogger(__name__)
 
@@ -325,7 +325,6 @@ class SimplePaddleOCREngine:
         )
 
     # ----------------------- initialisation ---------------------------
-    @prevent_paddlex_autoinit
     def initialize(self) -> bool:
         """Initialise PaddleOCR using bundled models.
 
@@ -381,6 +380,16 @@ class SimplePaddleOCREngine:
             # Fallback to basic configuration
             os.environ.setdefault("OMP_NUM_THREADS", "2")
             os.environ.setdefault("OPENBLAS_NUM_THREADS", "2")
+
+        # Issue #200 対応: 環境変数設定後にPaddleX初期化ガードを実行
+        # CPU専用設定などが適用された後でPaddleXを初期化することで、
+        # 意図しないGPUアクセスや設定の不整合を防ぐ
+        try:
+            from app.core.paddlex_init_guard import ensure_paddlex_single_init
+
+            ensure_paddlex_single_init()
+        except Exception as e:
+            logger.warning("PaddleX initialization guard failed, continuing: %s", e)
 
         try:
             models_root = self._resolve_models_root()
