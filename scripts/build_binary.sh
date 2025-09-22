@@ -97,6 +97,7 @@ build_windows() {
             --workpath "$BUILD_DIR/windows" \
             --add-data "README.md:." \
             --additional-hooks-dir="hooks" \
+            --runtime-hook="hooks/rthook-paddlex.py" \
             --hidden-import "PySide6.QtCore" \
             --hidden-import "PySide6.QtGui" \
             --hidden-import "PySide6.QtWidgets" \
@@ -145,6 +146,7 @@ build_macos() {
             --workpath "$BUILD_DIR/macos" \
             --add-data "README.md:." \
             --additional-hooks-dir="hooks" \
+            --runtime-hook="hooks/rthook-paddlex.py" \
             --hidden-import "PySide6.QtCore" \
             --hidden-import "PySide6.QtGui" \
             --hidden-import "PySide6.QtWidgets" \
@@ -186,6 +188,7 @@ build_linux() {
             --workpath "$BUILD_DIR/linux" \
             --add-data "README.md:." \
             --additional-hooks-dir="hooks" \
+            --runtime-hook="hooks/rthook-paddlex.py" \
             --hidden-import "PySide6.QtCore" \
             --hidden-import "PySide6.QtGui" \
             --hidden-import "PySide6.QtWidgets" \

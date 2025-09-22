@@ -21,18 +21,6 @@ def create_paddlex_stub():
     if 'paddlex' in sys.modules and not getattr(sys.modules['paddlex'], '_is_stub', False):
         return
 
-    # paddlex メインモジュール
-    paddlex = types.ModuleType('paddlex')
-    paddlex._is_stub = True  # スタブであることを示すフラグ
-
-    # paddlex.inference サブモジュール
-    inference = types.ModuleType('paddlex.inference')
-    inference._is_stub = True
-
-    # paddlex.inference.utils サブモジュール
-    utils = types.ModuleType('paddlex.inference.utils')
-    utils._is_stub = True
-
     # benchmark 関数のダミー実装
     def benchmark(*args, **kwargs):
         """ダミーのbenchmark関数 - 何もせずNoneを返す"""
@@ -43,17 +31,38 @@ def create_paddlex_stub():
         """ダミーの初期化関数 - 何もしない"""
         pass
 
-    # モジュール構造を構築
-    utils.benchmark = benchmark
-    inference.utils = utils
-    paddlex.inference = inference
+    # paddlex メインモジュール
+    paddlex = types.ModuleType('paddlex')
+    paddlex._is_stub = True  # スタブであることを示すフラグ
+    paddlex.__path__ = []  # パッケージとしてマーク
     paddlex.initialize = initialize
     paddlex._initialized = False  # 初期化フラグ
 
-    # sys.modules に登録
+    # paddlex.inference サブモジュール
+    inference = types.ModuleType('paddlex.inference')
+    inference._is_stub = True
+    inference.__path__ = []  # パッケージとしてマーク
+
+    # paddlex.inference.utils サブモジュール
+    utils = types.ModuleType('paddlex.inference.utils')
+    utils._is_stub = True
+    utils.__path__ = []  # パッケージとしてマーク
+    utils.benchmark = benchmark
+
+    # paddlex.inference.utils.benchmark サブモジュール
+    benchmark_module = types.ModuleType('paddlex.inference.utils.benchmark')
+    benchmark_module._is_stub = True
+    benchmark_module.benchmark = benchmark
+
+    # モジュール構造を構築
+    inference.utils = utils
+    paddlex.inference = inference
+
+    # sys.modules に登録（ネストしたインポートに対応）
     sys.modules['paddlex'] = paddlex
     sys.modules['paddlex.inference'] = inference
     sys.modules['paddlex.inference.utils'] = utils
+    sys.modules['paddlex.inference.utils.benchmark'] = benchmark_module
 
 
 # PyInstaller 実行時のみスタブを作成

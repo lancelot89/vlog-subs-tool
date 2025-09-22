@@ -26,6 +26,7 @@ try {
         --windowed `
         --name "vlog-subs-tool" `
         --additional-hooks-dir="hooks" `
+        --runtime-hook="hooks/rthook-paddlex.py" `
         --exclude-module "paddlex" `
         --exclude-module "paddlex-inference" `
         --hidden-import "PySide6.QtCore" `
