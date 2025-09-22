@@ -287,4 +287,4 @@ exports/
 
 # テンポラリ
 *.tmp
-*.temp
+*.tempvenv-minimal/

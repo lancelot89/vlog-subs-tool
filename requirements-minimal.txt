@@ -1,0 +1,47 @@
+# 最小構成 - Issue #216対応
+# ソース実行と同一挙動を最優先、不要な依存関係を除外
+
+# GUI Framework (必須)
+PySide6>=6.5.0
+
+# Video Processing (必須)
+opencv-python<=4.6.0.66
+
+# OCR (必須)
+paddlepaddle==3.0.0
+paddleocr==2.7.*
+
+# Data Processing (必須)
+pandas>=2.0.0
+numpy>=1.24.0,<2.0
+
+# File Handling (必須)
+python-bidi>=0.4.2
+pysrt>=1.1.2
+
+# Packaging (必須)
+pyinstaller>=5.13.0
+
+# Configuration (必須)
+PyYAML>=6.0
+
+# Image Processing (必須)
+Pillow>=10.0.0
+
+# System monitoring (必須)
+psutil>=5.9.0
+
+# ❌ 除外: 翻訳関連（動作確認後に別途追加）
+# torch>=2.0.0
+# ctranslate2>=3.20.0
+# transformers>=4.30.0
+# sentencepiece>=1.99
+# langdetect>=1.0.9
+# opencc-python-reimplemented>=0.1.7
+
+# ❌ 除外: ログ・進捗・ネットワーク（動作確認後に別途追加）
+# loguru>=0.7.0
+# tqdm>=4.65.0
+# requests>=2.31.0
+# ffmpeg-python>=0.2.0
+# pytesseract>=0.3.10
