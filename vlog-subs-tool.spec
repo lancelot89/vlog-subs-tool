@@ -27,12 +27,18 @@ hidden_imports = [
     'PySide6.QtMultimedia',
     'PySide6.QtMultimediaWidgets',
 
-    # PaddleOCR関連（コア機能のみ、PaddleX除外）
+    # PaddleOCR関連（PaddleX依存を含む完全サポート）
     'paddleocr',
     'paddlepaddle',
     'paddle',
     'paddle.utils',
     'paddle.utils.cpp_extension',
+    'paddlex',
+    'paddlex.utils',
+    'paddlex.utils.device',
+    'paddlex.utils.deps',
+    'paddlex.inference',
+    'paddlex.inference.utils',
 
     # OpenCV関連（必須）
     'cv2',
@@ -141,7 +147,7 @@ excludes = [
     'seaborn',
     'plotly',
 
-    # PaddleX大型モジュール除外（Issue #207対応：コア機能は保持）
+    # PaddleX不要モジュール除外（Issue #214対応：OCRに不要な機能のみ除外）
     'paddlex.deploy',
     'paddlex.pipelines.auto_compress',
     'paddlex.models.llm',
@@ -182,7 +188,7 @@ a = Analysis(
     hiddenimports=hidden_imports,
     hookspath=hookspath_list,
     hooksconfig={},
-    runtime_hooks=['hooks/rthook-paddlex.py'],  # Issue #207: PaddleXスタブ化でPaddleOCRインポートエラーを回避
+    runtime_hooks=[],  # Issue #214: PaddleX実インストールによりスタブ不要
     excludes=excludes,
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -192,7 +198,7 @@ a = Analysis(
     collect_all=[
         'app',
     ],
-    # PaddleOCR収集（PaddleXコア機能含む）
+    # PaddleOCR & PaddleX収集（Issue #214: 完全サポート）
     collect_data=[
         'paddleocr',
         'paddle',
@@ -203,6 +209,8 @@ a = Analysis(
         'paddle.utils',
         'paddlex.inference',
         'paddlex.utils',
+        'paddlex.utils.device',
+        'paddlex.utils.deps',
     ],
 )
 

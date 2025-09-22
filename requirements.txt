@@ -1,13 +1,14 @@
 # GUI Framework
 PySide6>=6.5.0
 
-# Video Processing - Compatible with paddleocr 2.7.* requirements
-opencv-python<=4.6.0.66
+# Video Processing - Compatible with paddleocr 3.x requirements
+opencv-python>=4.6.0.66,<5.0.0
 ffmpeg-python>=0.2.0
 
-# OCR - Fixed versions to avoid paddlex import issues
+# OCR - PaddleOCR 3.x with PaddleX support for binary execution
 paddlepaddle==3.0.0
-paddleocr==2.7.*
+paddleocr>=3.0.0
+paddlex[ocr]>=3.0.0  # Required for PaddleOCR 3.x binary execution
 pytesseract>=0.3.10  # オプション
 
 # Local Translation
