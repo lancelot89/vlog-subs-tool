@@ -37,6 +37,7 @@ import subprocess
 import sys
 import threading
 import time
+import types
 from dataclasses import dataclass
 from pathlib import Path
 from typing import (
@@ -51,6 +52,101 @@ from typing import (
     Tuple,
     Union,
 )
+
+# Block PaddleX imports at module level to prevent any import issues
+_original_import = None
+if isinstance(__builtins__, dict):
+    _original_import = __builtins__.get("__import__")
+else:
+    _original_import = getattr(__builtins__, "__import__", None)
+
+
+def _block_paddlex_import(name, globals=None, locals=None, fromlist=(), level=0):
+    """Module-level PaddleX import blocker."""
+    if name.startswith("paddlex"):
+        if name not in sys.modules:
+            dummy = types.ModuleType(name)
+            # Add basic attributes based on module name
+            if "device" in name:
+                setattr(dummy, "get_device", lambda: "cpu")
+                setattr(dummy, "is_compiled_with_cuda", lambda: False)
+            elif "inference" in name:
+                setattr(dummy, "create_predictor", lambda *args, **kwargs: None)
+                setattr(dummy, "download_and_decompress", lambda *args, **kwargs: None)
+                # Add benchmark function for paddlex.inference.utils.benchmark
+                if "benchmark" in name:
+                    setattr(dummy, "benchmark", lambda *args, **kwargs: {})
+            elif "utils" in name:
+                if "benchmark" in name:
+                    setattr(dummy, "benchmark", lambda *args, **kwargs: {})
+            setattr(dummy, "__version__", "1.0.0")
+            sys.modules[name] = dummy
+        return sys.modules[name]
+
+    if _original_import:
+        return _original_import(name, globals, locals, fromlist, level)
+    else:
+        import importlib
+
+        return importlib.__import__(name, globals, locals, fromlist, level)
+
+
+# Install the blocker at module level and create essential modules
+if "paddlex" not in sys.modules:
+    if isinstance(__builtins__, dict):
+        __builtins__["__import__"] = _block_paddlex_import
+    else:
+        __builtins__.__import__ = _block_paddlex_import
+
+    # Pre-create essential modules that PaddleOCR needs
+    # Main paddlex module
+    paddlex_main = types.ModuleType("paddlex")
+    setattr(paddlex_main, "create_predictor", lambda *args, **kwargs: None)
+    setattr(paddlex_main, "__version__", "1.0.0")
+    sys.modules["paddlex"] = paddlex_main
+
+    # Utils module
+    paddlex_utils = types.ModuleType("paddlex.utils")
+    sys.modules["paddlex.utils"] = paddlex_utils
+
+    # Device module
+    paddlex_device = types.ModuleType("paddlex.utils.device")
+    setattr(paddlex_device, "get_device", lambda: "cpu")
+    setattr(paddlex_device, "is_compiled_with_cuda", lambda: False)
+    setattr(paddlex_device, "get_default_device", lambda: "cpu")
+    setattr(paddlex_device, "parse_device", lambda x: "cpu")
+    sys.modules["paddlex.utils.device"] = paddlex_device
+
+    # Deps module
+    paddlex_deps = types.ModuleType("paddlex.utils.deps")
+
+    # Create DependencyError class
+    class DummyDependencyError(Exception):
+        pass
+
+    setattr(paddlex_deps, "DependencyError", DummyDependencyError)
+    sys.modules["paddlex.utils.deps"] = paddlex_deps
+
+    # Inference modules
+    paddlex_inference = types.ModuleType("paddlex.inference")
+    setattr(paddlex_inference, "create_predictor", lambda *args, **kwargs: None)
+
+    # Create PaddlePredictorOption class
+    class DummyPaddlePredictorOption:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    setattr(paddlex_inference, "PaddlePredictorOption", DummyPaddlePredictorOption)
+    sys.modules["paddlex.inference"] = paddlex_inference
+
+    paddlex_inference_utils = types.ModuleType("paddlex.inference.utils")
+    setattr(paddlex_inference_utils, "download_and_decompress", lambda *args, **kwargs: None)
+    sys.modules["paddlex.inference.utils"] = paddlex_inference_utils
+
+    # Benchmark module
+    benchmark_module = types.ModuleType("paddlex.inference.utils.benchmark")
+    setattr(benchmark_module, "benchmark", lambda *args, **kwargs: {})
+    sys.modules["paddlex.inference.utils.benchmark"] = benchmark_module
 
 import cv2
 import numpy as np
@@ -319,9 +415,10 @@ class SimplePaddleOCREngine:
 
         global PaddleOCR, PADDLEOCR_AVAILABLE, _PADDLE_IMPORT_ERROR
 
-        if PaddleOCR is None and not PADDLEOCR_AVAILABLE:
-            logger.error("PaddleOCR import failed: %s", _PADDLE_IMPORT_ERROR)
-            return False
+        # Skip this check since we do lazy import in the try block below
+        # if PaddleOCR is None and not PADDLEOCR_AVAILABLE:
+        #     logger.error("PaddleOCR import failed: %s", _PADDLE_IMPORT_ERROR)
+        #     return False
 
         # Initialize PaddleOCR on first use to prevent PyInstaller dependency issues
         try:
@@ -335,9 +432,70 @@ class SimplePaddleOCREngine:
             os.environ.setdefault("USE_PADDLEX", "False")
             os.environ.setdefault("ENABLE_PADDLEX", "False")
 
+            # Try to disable PaddleOCR features that depend on PaddleX
+            os.environ.setdefault("PADDLEOCR_USE_PADDLEX", "False")
+            os.environ.setdefault("PADDLEOCR_DISABLE_CHART", "1")
+            os.environ.setdefault("PADDLEOCR_DISABLE_VLM", "1")
+            os.environ.setdefault("PADDLEOCR_DISABLE_DOC", "1")
+
             # Block PaddleX modules to prevent internal dependencies
             # This is necessary because PaddleOCR 3.2.0 internally tries to import paddlex
             import sys
+            import types
+
+            # Set up import interception for PaddleX modules
+            original_import = None
+            if isinstance(__builtins__, dict):
+                original_import = __builtins__.get("__import__")
+            else:
+                original_import = getattr(__builtins__, "__import__", None)
+
+            def paddlex_blocking_import(name, globals=None, locals=None, fromlist=(), level=0):
+                """Block any paddlex imports and return dummy modules."""
+                if name.startswith("paddlex"):
+                    # Create or return existing dummy module
+                    if name not in sys.modules:
+                        dummy = types.ModuleType(name)
+
+                        # Add common attributes based on module name
+                        if "device" in name:
+                            setattr(dummy, "get_device", lambda: "cpu")
+                            setattr(dummy, "is_compiled_with_cuda", lambda: False)
+                        elif "inference" in name:
+                            setattr(dummy, "create_predictor", lambda *args, **kwargs: None)
+                            setattr(dummy, "download_and_decompress", lambda *args, **kwargs: None)
+                            # Add benchmark function for paddlex.inference.utils.benchmark
+                            if "benchmark" in name:
+                                setattr(dummy, "benchmark", lambda *args, **kwargs: {})
+                        elif "utils" in name:
+                            # Create any sub-attributes that might be needed
+                            if "benchmark" in name:
+                                setattr(dummy, "benchmark", lambda *args, **kwargs: {})
+                            else:
+                                setattr(dummy, "benchmark", types.ModuleType(f"{name}.benchmark"))
+
+                        setattr(dummy, "__version__", "1.0.0")
+                        setattr(dummy, "__all__", [])
+
+                        sys.modules[name] = dummy
+                        logger.debug(f"Created dummy module for {name}")
+
+                    return sys.modules[name]
+
+                # Use original import for non-paddlex modules
+                if original_import:
+                    return original_import(name, globals, locals, fromlist, level)
+                else:
+                    # Fallback if original import is not available
+                    import importlib
+
+                    return importlib.__import__(name, globals, locals, fromlist, level)
+
+            # Install the import hook temporarily
+            if isinstance(__builtins__, dict):
+                __builtins__["__import__"] = paddlex_blocking_import
+            else:
+                __builtins__.__import__ = paddlex_blocking_import
 
             # Create dummy modules to prevent import errors
             if "paddlex" not in sys.modules:
@@ -377,8 +535,20 @@ class SimplePaddleOCREngine:
 
                 logger.debug("Created comprehensive dummy paddlex module hierarchy")
 
-            # Import PaddleOCR here to avoid PyInstaller scanning for dependencies
-            from paddleocr import PaddleOCR as _PaddleOCR
+            # Import PaddleOCR core components directly to avoid PaddleX dependencies
+            try:
+                # Try to import basic PaddleOCR without extended features
+                from paddleocr.paddleocr import PaddleOCR as _PaddleOCR
+            except ImportError:
+                # Fallback to standard import
+                from paddleocr import PaddleOCR as _PaddleOCR
+
+            # Restore original import function after PaddleOCR import
+            if original_import:
+                if isinstance(__builtins__, dict):
+                    __builtins__["__import__"] = original_import
+                else:
+                    __builtins__.__import__ = original_import
 
             PaddleOCR = _PaddleOCR
             PADDLEOCR_AVAILABLE = True
@@ -387,6 +557,14 @@ class SimplePaddleOCREngine:
             PADDLEOCR_AVAILABLE = False
             _PADDLE_IMPORT_ERROR = import_error
             logger.error("PaddleOCR import failed: %s", import_error)
+            logger.error("Full traceback:", exc_info=True)
+
+            # Restore original import function in case of error
+            if _original_import:
+                if isinstance(__builtins__, dict):
+                    __builtins__["__import__"] = _original_import
+                else:
+                    __builtins__.__import__ = _original_import
             return False
 
         # Apply conservative environment defaults to keep memory usage under
