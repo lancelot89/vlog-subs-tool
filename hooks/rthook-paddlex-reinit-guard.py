@@ -106,23 +106,9 @@ if hasattr(sys, '_MEIPASS') or getattr(sys, 'frozen', False):
     import os
     os.environ.setdefault("PADDLEX_DISABLE_AUTO_INIT", "1")
 
-    # 遅延初期化でPaddleXガードを適用
-    def delayed_paddlex_guard():
-        try:
-            prevent_paddlex_reinitialization()
-        except Exception as e:
-            logger.error(f"Delayed PaddleX guard failed: {e}")
-
-    # PaddleX関連モジュールがインポートされる前にガードを設定
-    original_import = __builtins__.__import__
-
-    def hooked_import(name, *args, **kwargs):
-        if name.startswith('paddlex') and not getattr(hooked_import, '_guard_applied', False):
-            logger.info("PaddleX import detected - applying guard")
-            delayed_paddlex_guard()
-            hooked_import._guard_applied = True
-
-        return original_import(name, *args, **kwargs)
-
-    __builtins__.__import__ = hooked_import
-    logger.info("PaddleX import hook installed")
+    # 即座にガードを適用
+    try:
+        prevent_paddlex_reinitialization()
+        logger.info("PaddleX reinitialization guard applied immediately")
+    except Exception as e:
+        logger.warning(f"Failed to apply immediate PaddleX guard: {e}")
