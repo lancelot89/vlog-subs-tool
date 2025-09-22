@@ -48,10 +48,28 @@ check_environment() {
         log_warn "Python 3.12以降を推奨します（現在: $python_version）"
     fi
 
-    # PyInstaller確認
-    if ! command -v pyinstaller &> /dev/null; then
-        log_warn "PyInstallerがインストールされていません。インストール中..."
-        pip install 'pyinstaller>=6.15.0'
+    # PyInstaller確認（venv環境優先、Windows対応）
+    if [[ "$VIRTUAL_ENV" != "" ]]; then
+        # venv環境内のPyInstallerを使用（OS別パス対応）
+        if [[ "$OS" == "Windows_NT" ]] || [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "cygwin" ]]; then
+            # Windows環境
+            PYINSTALLER_CMD="$VIRTUAL_ENV/Scripts/pyinstaller.exe"
+        else
+            # Linux/macOS環境
+            PYINSTALLER_CMD="$VIRTUAL_ENV/bin/pyinstaller"
+        fi
+
+        if [[ ! -f "$PYINSTALLER_CMD" ]]; then
+            log_warn "venv環境にPyInstallerがインストールされていません。インストール中..."
+            pip install 'pyinstaller>=6.15.0'
+        fi
+    else
+        # システム環境のPyInstallerを確認
+        if ! command -v pyinstaller &> /dev/null; then
+            log_warn "PyInstallerがインストールされていません。インストール中..."
+            pip install 'pyinstaller>=6.15.0'
+        fi
+        PYINSTALLER_CMD="pyinstaller"
     fi
 
     # 重要な依存関係確認
@@ -83,13 +101,13 @@ build_windows() {
     # specファイルが存在する場合はそれを使用
     if [[ -f "vlog-subs-tool.spec" ]]; then
         log_info "specファイルを使用してビルド中..."
-        pyinstaller \
+        $PYINSTALLER_CMD \
             --distpath "$DIST_DIR/windows" \
             --workpath "$BUILD_DIR/windows" \
             vlog-subs-tool.spec
     else
         log_warn "specファイルが見つかりません。従来の方法でビルド..."
-        pyinstaller \
+        $PYINSTALLER_CMD \
             --onedir \
             --windowed \
             --name "vlog-subs-tool" \
@@ -121,7 +139,7 @@ build_macos() {
     # macOS専用specファイルが存在する場合はそれを優先使用
     if [[ -f "vlog-subs-tool-macos.spec" ]]; then
         log_info "macOS専用specファイルを使用してビルド中..."
-        pyinstaller \
+        $PYINSTALLER_CMD \
             --distpath "$DIST_DIR/macos" \
             --workpath "$BUILD_DIR/macos" \
             vlog-subs-tool-macos.spec
@@ -129,14 +147,14 @@ build_macos() {
         log_info "汎用specファイルを使用してビルド中..."
         # 汎用specファイルをmacOS用に一時変更
         sed 's/name='\''vlog-subs-tool'\''/name='\''VLog字幕ツール'\''/' vlog-subs-tool.spec > temp-macos.spec
-        pyinstaller \
+        $PYINSTALLER_CMD \
             --distpath "$DIST_DIR/macos" \
             --workpath "$BUILD_DIR/macos" \
             temp-macos.spec
         rm -f temp-macos.spec
     else
         log_warn "specファイルが見つかりません。従来の方法でビルド..."
-        pyinstaller \
+        $PYINSTALLER_CMD \
             --windowed \
             --name "$APP_NAME" \
             --distpath "$DIST_DIR/macos" \
@@ -168,13 +186,13 @@ build_linux() {
     # specファイルが存在する場合はそれを使用
     if [[ -f "vlog-subs-tool.spec" ]]; then
         log_info "specファイルを使用してビルド中..."
-        pyinstaller \
+        $PYINSTALLER_CMD \
             --distpath "$DIST_DIR/linux" \
             --workpath "$BUILD_DIR/linux" \
             vlog-subs-tool.spec
     else
         log_warn "specファイルが見つかりません。従来の方法でビルド..."
-        pyinstaller \
+        $PYINSTALLER_CMD \
             --onedir \
             --windowed \
             --name "vlog-subs-tool" \

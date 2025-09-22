@@ -106,6 +106,10 @@ excludes = [
     'torch',
     'torchvision',
     'transformers',
+    'ctranslate2',
+    'sentencepiece',
+    'langdetect',
+    'opencc',
 
     # 削除された機能
     'app.core.benchmark',
@@ -166,22 +170,13 @@ a = Analysis(
     # 必要最小限のモジュール収集（サイズ最適化）
     collect_all=[
         'app',
-        'app.ui',
-        'app.core',
-        'app.core.extractor',
-        'app.core.format',
-        'app.core.translate',
-        'app.core.qc',
-        'psutil',  # CPU情報取得
     ],
-    # PaddleOCR収集（AVX/non-AVX CPU互換性確保）
+    # PaddleOCR収集（最小限）
     collect_data=[
         'paddleocr',
-        'paddle',  # AVX/non-AVX CPU互換性のため必須
     ],
     collect_submodules=[
         'paddleocr',
-        'paddle',  # paddle.fluid.core_avx/core_noavx両方をバンドル
     ],
 )
 
