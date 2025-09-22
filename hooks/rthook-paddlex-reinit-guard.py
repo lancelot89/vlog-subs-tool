@@ -1,97 +1,111 @@
 # hooks/rthook-paddlex-reinit-guard.py
 """
-PyInstaller ランタイムフック - PaddleX重複初期化防止
+PyInstaller ランタイムフック - PaddleX完全初期化ブロック
 
 Issue #214 対応: PaddleXが複数回初期化されるエラー
 "PDX has already been initialized. Reinitialization is not supported."
-を防ぐため、PaddleX初期化を最初の1回のみに制限する。
+を防ぐため、PaddleX初期化を完全にブロックし、ダミー実装で置き換える。
 """
 
 import sys
+import types
 import logging
-import threading
 
 # ログ設定
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# 初期化状態管理
-_paddlex_initialized = False
-_init_lock = threading.Lock()
 
-
-def patch_paddlex_initialization():
-    """PaddleX初期化を制御してReinitialization errorを防ぐ"""
-    global _paddlex_initialized
-
+def create_minimal_paddlex_stub():
+    """PaddleXの最小限のスタブを作成してPaddleOCRインポートを可能にする"""
     try:
-        import paddlex
-        import paddlex.repo_manager.core
+        # PaddleXがインポート済みの場合は削除
+        paddlex_modules = [mod for mod in sys.modules.keys() if mod.startswith('paddlex')]
+        for mod in paddlex_modules:
+            del sys.modules[mod]
+            logger.info(f"Removed existing PaddleX module: {mod}")
 
-        logger.info("Applying PaddleX reinitialization guard")
+        # 最小限のPaddleXスタブモジュールを作成
+        paddlex = types.ModuleType('paddlex')
+        paddlex._initialized = True  # 初期化済みフラグ
+        paddlex.__version__ = "3.2.1"
+        paddlex.__path__ = []
 
-        # 元の初期化関数を保存
-        original_initialize = paddlex.repo_manager.core.initialize
+        # スタブ初期化関数
+        def stub_initialize(*args, **kwargs):
+            """PaddleX初期化のスタブ - 何もしない"""
+            logger.debug("PaddleX initialization bypassed (stub)")
+            return
 
-        def guarded_initialize(*args, **kwargs):
-            """重複初期化を防ぐガード付き初期化関数"""
-            global _paddlex_initialized
+        paddlex.initialize = stub_initialize
 
-            with _init_lock:
-                if _paddlex_initialized:
-                    logger.info("PaddleX reinitialization attempt blocked - already initialized")
-                    return
+        # paddlex.inference.utils.benchmark スタブ
+        inference_utils = types.ModuleType('paddlex.inference.utils')
+        inference_utils.__path__ = []
 
-                logger.info("Performing PaddleX initialization (first time)")
-                try:
-                    result = original_initialize(*args, **kwargs)
-                    _paddlex_initialized = True
-                    logger.info("PaddleX initialization completed successfully")
-                    return result
-                except Exception as e:
-                    if "already been initialized" in str(e):
-                        logger.info("PaddleX was already initialized elsewhere - marking as completed")
-                        _paddlex_initialized = True
-                        return
-                    else:
-                        logger.error(f"PaddleX initialization failed: {e}")
-                        raise
+        benchmark_module = types.ModuleType('paddlex.inference.utils.benchmark')
 
-        # 初期化関数を置き換え
-        paddlex.repo_manager.core.initialize = guarded_initialize
+        def stub_benchmark(*args, **kwargs):
+            """benchmark関数のスタブ - ダミー値を返す"""
+            logger.debug("PaddleX benchmark called (stub)")
+            return {"inference_time": 0.0, "preprocess_time": 0.0, "postprocess_time": 0.0}
 
-        # paddlex.initialize も存在する場合は同様にパッチ
-        if hasattr(paddlex, 'initialize'):
-            original_paddlex_init = paddlex.initialize
+        benchmark_module.benchmark = stub_benchmark
 
-            def guarded_paddlex_init(*args, **kwargs):
-                global _paddlex_initialized
+        # paddlex.inference スタブ
+        inference = types.ModuleType('paddlex.inference')
+        inference.__path__ = []
+        inference.utils = inference_utils
 
-                with _init_lock:
-                    if _paddlex_initialized:
-                        logger.info("PaddleX.initialize reinitialization attempt blocked")
-                        return
+        # paddlex.repo_manager.core スタブ
+        repo_manager = types.ModuleType('paddlex.repo_manager')
+        repo_manager.__path__ = []
 
-                    try:
-                        result = original_paddlex_init(*args, **kwargs)
-                        _paddlex_initialized = True
-                        return result
-                    except Exception as e:
-                        if "already been initialized" in str(e):
-                            _paddlex_initialized = True
-                            return
-                        raise
+        core = types.ModuleType('paddlex.repo_manager.core')
+        core.initialize = stub_initialize
 
-            paddlex.initialize = guarded_paddlex_init
+        repo_manager.core = core
 
-        logger.info("PaddleX reinitialization guard applied successfully")
+        # PaddleXモジュール階層構築
+        paddlex.inference = inference
+        paddlex.repo_manager = repo_manager
 
-    except ImportError:
-        logger.debug("PaddleX not available - skipping reinitialization guard")
+        # sys.modules に登録
+        sys.modules['paddlex'] = paddlex
+        sys.modules['paddlex.inference'] = inference
+        sys.modules['paddlex.inference.utils'] = inference_utils
+        sys.modules['paddlex.inference.utils.benchmark'] = benchmark_module
+        sys.modules['paddlex.repo_manager'] = repo_manager
+        sys.modules['paddlex.repo_manager.core'] = core
+
+        logger.info("PaddleX stub modules created successfully")
+
     except Exception as e:
-        logger.error(f"Failed to apply PaddleX reinitialization guard: {e}")
+        logger.error(f"Failed to create PaddleX stub: {e}")
 
 
-# PyInstaller実行時のみガードを適用
+def block_paddlex_initialization():
+    """PaddleX初期化を完全にブロック"""
+    # 最初にスタブを作成
+    create_minimal_paddlex_stub()
+
+    # インポートフックでPaddleXをスタブで置き換え
+    original_import = __builtins__.__import__
+
+    def hooked_import(name, *args, **kwargs):
+        if name == 'paddlex' or name.startswith('paddlex.'):
+            # 既にスタブが作成されている場合はそれを返す
+            if name in sys.modules:
+                logger.debug(f"Returning PaddleX stub for: {name}")
+                return sys.modules[name]
+
+        return original_import(name, *args, **kwargs)
+
+    __builtins__.__import__ = hooked_import
+    logger.info("PaddleX import hook installed")
+
+
+# PyInstaller実行時のみPaddleX初期化をブロック
 if hasattr(sys, '_MEIPASS') or getattr(sys, 'frozen', False):
-    patch_paddlex_initialization()
+    logger.info("Binary execution detected - blocking PaddleX initialization")
+    block_paddlex_initialization()
