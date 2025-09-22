@@ -90,10 +90,29 @@ def ensure_paddlex_single_init() -> None:
             _paddlex_initialized = True
             logger.info("PaddleX initialization guard successful")
 
+        except ImportError as e:
+            logger.error(f"PaddleX import failed: {e}")
+            logger.info("This may be a temporary issue if PaddleX is being installed")
+            logger.warning("PaddleX initialization failed, retry will be allowed on next attempt")
+            raise
         except Exception as e:
-            logger.error(f"PaddleX initialization guard failed: {e}")
-            # 初期化に失敗した場合でもフラグを立てて再試行を防ぐ
-            _paddlex_initialized = True
+            error_type = type(e).__name__
+            logger.error(f"PaddleX initialization guard failed ({error_type}): {e}")
+
+            # 環境変数の状態を診断情報として出力
+            env_diagnosis = {
+                "CUDA_VISIBLE_DEVICES": os.environ.get("CUDA_VISIBLE_DEVICES", "NOT_SET"),
+                "PADDLE_CPU_ONLY": os.environ.get("PADDLE_CPU_ONLY", "NOT_SET"),
+                "PADDLEX_DISABLE_AUTO_INIT": os.environ.get("PADDLEX_DISABLE_AUTO_INIT", "NOT_SET"),
+            }
+            logger.error(f"Environment at failure: {env_diagnosis}")
+
+            # 初期化に失敗した場合はフラグをFalseのままにして再試行を許可
+            logger.warning("PaddleX initialization failed, retry will be allowed on next attempt")
+            logger.info(
+                "Possible solutions: 1) Ensure environment variables are set properly, "
+                "2) Call force_paddlex_retry() to reset state, 3) Check PaddleX installation"
+            )
             raise
 
 
@@ -107,12 +126,21 @@ def safe_paddlex_import() -> Optional[Any]:
 
 
 def reset_paddlex_state() -> None:
-    """PaddleX状態をリセット（テスト用）"""
+    """PaddleX状態をリセット（テスト用および失敗後の再試行用）"""
     global _paddlex_initialized, _paddlex_module
     with _paddlex_init_lock:
         _paddlex_initialized = False
         _paddlex_module = None
-        logger.debug("PaddleX state reset")
+        logger.debug("PaddleX state reset - retry will be allowed")
+
+
+def force_paddlex_retry() -> None:
+    """PaddleX初期化の再試行を強制的に許可（失敗後のリカバリ用）"""
+    global _paddlex_initialized
+    with _paddlex_init_lock:
+        if _paddlex_initialized:
+            logger.info("Forcing PaddleX initialization retry after previous failure")
+            _paddlex_initialized = False
 
 
 def prevent_paddlex_autoinit(func: Callable[..., Any]) -> Callable[..., Any]:
