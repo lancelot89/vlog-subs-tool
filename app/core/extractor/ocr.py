@@ -56,39 +56,16 @@ import cv2
 import numpy as np
 
 from app.core.cpu_profiler import get_adaptive_thread_config
-from app.core.paddlex_init_guard import safe_paddleocr_import
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Availability flags --------------------------------------------------------
 # ---------------------------------------------------------------------------
-try:  # pragma: no cover - availability detection
-    # Issue #207対応: 基本的な環境設定でPaddleOCRを使用
-    import os
-
-    # 基本的なCPU専用設定
-    os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
-    os.environ.setdefault("PADDLE_CPU_ONLY", "1")
-
-    # PaddleOCRを直接インポート（PaddleXも内部で使用される）
-    from paddleocr import PaddleOCR
-
-    PADDLEOCR_AVAILABLE = True
-    _PADDLE_IMPORT_ERROR: Optional[Exception] = None
-
-except Exception as _import_error:  # pragma: no cover - dependency missing
-    PaddleOCR = None
-    PADDLEOCR_AVAILABLE = False
-    _PADDLE_IMPORT_ERROR = _import_error
-
-# PaddleX は使用しない（Issue #207対応でPaddleOCRのみ使用）
-PADDLEX_AVAILABLE = False  # PaddleXは使用しない
-
-
-def safe_paddlex_import() -> None:
-    """PaddleXインポート（使用しないためNoneを返す）"""
-    return None
+# PaddleOCR import moved to initialize() to prevent PyInstaller dependency issues
+PaddleOCR = None
+PADDLEOCR_AVAILABLE = False
+_PADDLE_IMPORT_ERROR: Optional[Exception] = None
 
 
 # ---------------------------------------------------------------------------
@@ -186,12 +163,11 @@ def _create_safe_paddleocr_kwargs(original: Mapping[str, Any]) -> Dict[str, Any]
             "max_text_length",
             "det_model_dir",
             "rec_model_dir",
+            "drop_score",
+            "enable_mkldnn",
         }:
             # No longer accepted by the constructor – ignore silently.
             continue
-        elif key == "drop_score":
-            # Newer versions expose the same behaviour via text_rec_score_thresh.
-            safe["text_rec_score_thresh"] = value
         else:
             safe[key] = value
     return safe
@@ -341,12 +317,29 @@ class SimplePaddleOCREngine:
         if self._ocr is not None:
             return True
 
+        global PaddleOCR, PADDLEOCR_AVAILABLE, _PADDLE_IMPORT_ERROR
+
         if PaddleOCR is None and not PADDLEOCR_AVAILABLE:
             logger.error("PaddleOCR import failed: %s", _PADDLE_IMPORT_ERROR)
             return False
 
-        # Issue #207対応: PaddleOCRのcpp_extension問題は環境変数で回避済み
-        # PaddleXはPaddleOCRが内部で使用するため、積極的な除去は行わない
+        # Initialize PaddleOCR on first use to prevent PyInstaller dependency issues
+        try:
+            # Basic CPU-only configuration
+            os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
+            os.environ.setdefault("PADDLE_CPU_ONLY", "1")
+
+            # Import PaddleOCR here to avoid PyInstaller scanning for dependencies
+            from paddleocr import PaddleOCR as _PaddleOCR
+
+            PaddleOCR = _PaddleOCR
+            PADDLEOCR_AVAILABLE = True
+            _PADDLE_IMPORT_ERROR = None
+        except Exception as import_error:
+            PADDLEOCR_AVAILABLE = False
+            _PADDLE_IMPORT_ERROR = import_error
+            logger.error("PaddleOCR import failed: %s", import_error)
+            return False
 
         # Apply conservative environment defaults to keep memory usage under
         # control and make the CPU-only configuration explicit.
@@ -389,9 +382,6 @@ class SimplePaddleOCREngine:
             # Fallback to basic configuration
             os.environ.setdefault("OMP_NUM_THREADS", "2")
             os.environ.setdefault("OPENBLAS_NUM_THREADS", "2")
-
-        # Issue #207対応: PaddleXは使用しないため初期化ガードは不要
-        # PaddleOCRのみを使用し、cpp_extension問題対策は既に適用済み
 
         try:
             models_root = self._resolve_models_root()
@@ -450,12 +440,8 @@ class SimplePaddleOCREngine:
                         {
                             "text_detection_model_dir": str(det_dir.resolve()),
                             "text_recognition_model_dir": str(rec_dir.resolve()),
-                            # langは指定されたモデルディレクトリと併用不可（PaddleOCR警告回避）
-                            "use_textline_orientation": True,  # 角度検出有効化
+                            "use_textline_orientation": True,
                             "device": "cpu",
-                            "use_space_char": True,
-                            "drop_score": 0.5,
-                            "enable_mkldnn": True,  # MKL-DNN有効化
                         }
                         if use_aggressive
                         else None
@@ -464,59 +450,38 @@ class SimplePaddleOCREngine:
                     {
                         "text_detection_model_dir": str(det_dir.resolve()),
                         "text_recognition_model_dir": str(rec_dir.resolve()),
-                        # langは指定されたモデルディレクトリと併用不可（PaddleOCR警告回避）
                         "use_textline_orientation": False,
                         "device": "cpu",
-                        "use_space_char": True,
-                        "drop_score": 0.5,
-                        "enable_mkldnn": True,  # MKL-DNN有効化のみ
                     },
                     # Phase 3: 安全設定 (従来の設定)
                     {
                         "text_detection_model_dir": str(det_dir.resolve()),
                         "text_recognition_model_dir": str(rec_dir.resolve()),
-                        # langは指定されたモデルディレクトリと併用不可（PaddleOCR警告回避）
                         "use_textline_orientation": False,
                         "device": "cpu",
-                        "use_space_char": True,
-                        "drop_score": 0.5,
-                        "enable_mkldnn": False,
                     },
                     # Phase 4: New API with minimal configuration
                     {
                         "text_detection_model_dir": str(det_dir.resolve()),
                         "text_recognition_model_dir": str(rec_dir.resolve()),
-                        # langは指定されたモデルディレクトリと併用不可（PaddleOCR警告回避）
                         "use_textline_orientation": False,
-                        "enable_mkldnn": False,
                     },
                 ]
                 # Remove None entries
                 config_candidates = [config for config in config_candidates if config is not None]
             else:
-                # 非Windows環境では従来の設定
+                # 非Windows環境では簡素な設定
                 config_candidates = [
                     {
                         "text_detection_model_dir": str(det_dir.resolve()),
                         "text_recognition_model_dir": str(rec_dir.resolve()),
-                        # langは指定されたモデルディレクトリと併用不可（PaddleOCR警告回避）
                         "device": "cpu",
                         "use_textline_orientation": True,
-                    },
-                    # Alternative configuration with different settings
-                    {
-                        "text_detection_model_dir": str(det_dir.resolve()),
-                        "text_recognition_model_dir": str(rec_dir.resolve()),
-                        # langは指定されたモデルディレクトリと併用不可（PaddleOCR警告回避）
-                        "device": "cpu",
-                        "use_textline_orientation": True,
-                        "enable_mkldnn": True,
                     },
                     # Minimal configuration
                     {
                         "text_detection_model_dir": str(det_dir.resolve()),
                         "text_recognition_model_dir": str(rec_dir.resolve()),
-                        # langは指定されたモデルディレクトリと併用不可（PaddleOCR警告回避）
                         "device": "cpu",
                     },
                 ]
@@ -904,38 +869,9 @@ class SimplePaddleOCREngine:
     def _run_ocr_with_actual_timing(
         self, image: np.ndarray, timing: OCRStageTimings, timeout_seconds: int = 30
     ) -> Any:
-        """Execute OCR with actual stage-by-stage timing measurements.
-
-        Preserves timeout functionality for platforms where PaddleOCR can stall.
-        """
-        # Check if we need special timeout handling (Apple Silicon)
-        if platform.system() == "Darwin" and platform.machine() == "arm64":
-            # Use process-based timing for Apple Silicon with timeout protection
-            return self._run_ocr_stage_timing_in_process(image, timing, timeout_seconds)
-
-        # For other platforms, run stage timing directly
-        return self._run_ocr_stage_timing_direct(image, timing)
-
-    def _run_ocr_stage_timing_direct(self, image: np.ndarray, timing: OCRStageTimings) -> Any:
-        """Execute stage timing directly (non-Apple Silicon platforms)."""
-        # Check if PaddleX is available for stage timing
-        if not PADDLEX_AVAILABLE:
-            logger.warning("PaddleX not available for stage timing, falling back to standard OCR")
-            # Fall back to standard OCR without stage timing
-            return self._ocr.ocr(image)
-
-        # Issue #207 対応: PaddleXは使用しないため、常にフォールバック
-        logger.warning("PaddleX not used (Issue #207), falling back to standard OCR")
-        return self._ocr.ocr(image)
-
-    def _run_ocr_stage_timing_in_process(
-        self, image: np.ndarray, timing: OCRStageTimings, timeout_seconds: int = 30
-    ) -> Any:
-        """Execute stage timing in a separate process for Apple Silicon with timeout protection."""
-        logger.info("Using process-based stage timing for Apple Silicon timeout protection")
-
-        # For Apple Silicon, fall back to total timing only to preserve timeout functionality
-        # This ensures we don't reintroduce the freeze issue while still providing timing data
+        """Execute OCR with total timing only (stage timing removed per Issue #212)."""
+        # Issue #212: Stage timing functionality removed to eliminate PaddleX dependencies
+        logger.info("Stage timing not available (Issue #212), using total timing only")
         return self._run_ocr_with_total_timing_only(image, timing, timeout_seconds)
 
     def _run_ocr_with_total_timing_only(
@@ -954,32 +890,6 @@ class SimplePaddleOCREngine:
         timing.recognition_time = total_ocr_time  # Put all time in recognition as fallback
 
         return raw_results
-
-    def _combine_detection_recognition_results(
-        self, det_results: Any, rec_results: Any
-    ) -> List[Any]:
-        """Combine detection and recognition results into the expected OCR format."""
-        combined: list[Any] = []
-        if not det_results or not rec_results:
-            return combined
-
-        # This is a simplified combination - the actual implementation
-        # would depend on the specific format returned by PaddleX models
-        try:
-            polys = det_results[0].get("dt_polys", [])
-            texts = rec_results[0].get("rec_texts", []) if rec_results else []
-            scores = rec_results[0].get("rec_scores", []) if rec_results else []
-
-            for i, poly in enumerate(polys):
-                text = texts[i] if i < len(texts) else ""
-                score = scores[i] if i < len(scores) else 0.0
-                combined.append([poly, (text, score)])
-
-        except (IndexError, KeyError, TypeError) as e:
-            logger.warning("Failed to combine detection/recognition results: %s", e)
-            return []
-
-        return combined
 
     def _run_ocr_with_timeout(self, image: np.ndarray, timeout_seconds: int = 30) -> Any:
         """Apple Siliconでのフリーズ対策: プロセスベースのタイムアウト付きOCR実行"""
@@ -1192,7 +1102,6 @@ __all__ = [
     "OCRStageTimings",
     "SimplePaddleOCREngine",
     "PADDLEOCR_AVAILABLE",
-    "PADDLEX_AVAILABLE",
     "_create_safe_paddleocr_kwargs",
     "OCRModelDownloader",
 ]
