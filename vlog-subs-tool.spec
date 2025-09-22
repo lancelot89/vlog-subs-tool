@@ -31,6 +31,8 @@ hidden_imports = [
     'paddleocr',
     'paddlepaddle',
     'paddle',
+    'paddle.utils',
+    'paddle.utils.cpp_extension',
 
     # OpenCV関連（必須）
     'cv2',
@@ -161,7 +163,7 @@ a = Analysis(
     hiddenimports=hidden_imports,
     hookspath=hookspath_list,
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=['hooks/rthook-paddle_cpp_extension.py'],
     excludes=excludes,
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -174,9 +176,11 @@ a = Analysis(
     # PaddleOCR収集（最小限）
     collect_data=[
         'paddleocr',
+        'paddle',
     ],
     collect_submodules=[
         'paddleocr',
+        'paddle.utils',
     ],
 )
 
