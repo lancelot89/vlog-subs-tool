@@ -56,6 +56,7 @@ import cv2
 import numpy as np
 
 from app.core.cpu_profiler import get_adaptive_thread_config
+from app.core.paddlex_init_guard import safe_paddlex_import
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +85,10 @@ def _load_paddlex_module() -> Any:
 
     global _PADDLEX_MODULE
     if _PADDLEX_MODULE is None:  # pragma: no cover - import happens on demand
-        _PADDLEX_MODULE = importlib.import_module("paddlex")
+        # Issue #200 対応: 安全なPaddleXインポートを使用
+        _PADDLEX_MODULE = safe_paddlex_import()
+        if _PADDLEX_MODULE is None:
+            _PADDLEX_MODULE = importlib.import_module("paddlex")
     return _PADDLEX_MODULE
 
 
@@ -376,6 +380,16 @@ class SimplePaddleOCREngine:
             # Fallback to basic configuration
             os.environ.setdefault("OMP_NUM_THREADS", "2")
             os.environ.setdefault("OPENBLAS_NUM_THREADS", "2")
+
+        # Issue #200 対応: 環境変数設定後にPaddleX初期化ガードを実行
+        # CPU専用設定などが適用された後でPaddleXを初期化することで、
+        # 意図しないGPUアクセスや設定の不整合を防ぐ
+        try:
+            from app.core.paddlex_init_guard import ensure_paddlex_single_init
+
+            ensure_paddlex_single_init()
+        except Exception as e:
+            logger.warning("PaddleX initialization guard failed, continuing: %s", e)
 
         try:
             models_root = self._resolve_models_root()
@@ -909,8 +923,14 @@ class SimplePaddleOCREngine:
             # Fall back to standard OCR without stage timing
             return self._ocr.ocr(image)
 
-        # Access PaddleX pipeline for individual model timing
+        # Issue #200 対応: PaddleXパイプラインアクセス時の初期化ガード
         try:
+            # 安全なPaddleXインポートを使用
+            paddlex_module = safe_paddlex_import()
+            if paddlex_module is None:
+                logger.warning("PaddleX safe import failed, falling back to standard OCR")
+                return self._ocr.ocr(image)
+
             pipeline = self._ocr._create_paddlex_pipeline()
         except (AttributeError, ImportError, RuntimeError) as e:
             logger.warning("Failed to create PaddleX pipeline for stage timing: %s", e)
