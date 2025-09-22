@@ -185,6 +185,21 @@ def main() -> None:
     logger.info("メインエントリーポイント開始")
     logger.info("multiprocessing.freeze_support() 実行完了")
 
+    # Issue #200 対応: PaddleX重複初期化エラーの防止
+    try:
+        from app.core.paddlex_init_guard import get_paddlex_init_status, initialize_for_binary
+
+        # バイナリ実行時の初期化ガードを実行
+        initialize_for_binary()
+
+        # 初期化状態をログ出力
+        init_status = get_paddlex_init_status()
+        logger.info(f"PaddleX initialization status: {init_status}")
+
+    except Exception as e:
+        logger.warning(f"PaddleX initialization guard failed: {e}")
+        # ガードが失敗してもアプリは継続実行
+
     is_standalone = setup_paths()
     logger.info(f"実行環境: {'スタンドアロン' if is_standalone else 'ソースコード'}")
 
