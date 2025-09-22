@@ -2,7 +2,7 @@
 PySide6>=6.5.0
 
 # Video Processing - Compatible with paddleocr 2.7.* requirements
-opencv-python<=4.6.0.66
+opencv-python<=4.12.0.88
 ffmpeg-python>=0.2.0
 
 # OCR - Fixed versions to avoid paddlex import issues
