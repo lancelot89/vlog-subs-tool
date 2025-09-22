@@ -5,9 +5,9 @@ PySide6>=6.5.0
 opencv-python>=4.8.0
 ffmpeg-python>=0.2.0
 
-# OCR
-paddlepaddle>=2.5.0
-paddleocr>=2.7.0
+# OCR - Fixed versions to avoid paddlex import issues
+paddlepaddle==2.6.*
+paddleocr==2.7.*
 pytesseract>=0.3.10  # オプション
 
 # Local Translation
