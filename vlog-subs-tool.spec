@@ -27,7 +27,7 @@ hidden_imports = [
     'PySide6.QtMultimedia',
     'PySide6.QtMultimediaWidgets',
 
-    # PaddleOCR関連（コア機能のみ）
+    # PaddleOCR関連（コア機能のみ、PaddleX除外）
     'paddleocr',
     'paddlepaddle',
     'paddle',
@@ -141,12 +141,12 @@ excludes = [
     'seaborn',
     'plotly',
 
-    # PaddleX重いモジュール（cpp_extension問題回避）
+    # PaddleX完全除外（Issue #207対応）
+    'paddlex',
     'paddlex.inference',
     'paddlex.deploy',
-    'paddlex.pipelines.auto_compress',
-    'paddlex.models.llm',
-    'paddlex.models.speech',
+    'paddlex.pipelines',
+    'paddlex.models',
 
     # 音声・動画処理（字幕抽出には不要）
     'ffmpeg',
@@ -183,7 +183,7 @@ a = Analysis(
     hiddenimports=hidden_imports,
     hookspath=hookspath_list,
     hooksconfig={},
-    runtime_hooks=['hooks/rthook-paddle_cpp_extension.py'],
+    runtime_hooks=[],  # Issue #207: runtime hookを無効化してPaddleX初期化問題を回避
     excludes=excludes,
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -193,7 +193,7 @@ a = Analysis(
     collect_all=[
         'app',
     ],
-    # PaddleOCR収集（最小限）
+    # PaddleOCR収集（最小限、PaddleX除外）
     collect_data=[
         'paddleocr',
         'paddle',

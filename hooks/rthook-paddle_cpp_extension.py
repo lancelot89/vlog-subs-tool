@@ -31,38 +31,38 @@ def stub_cpp_extension_setup(*args, **kwargs):
 
 # PyInstaller環境での paddlepaddle.utils.cpp_extension のパッチ
 if hasattr(sys, '_MEIPASS'):
-    try:
-        # paddlepaddle がインポート済みの場合のパッチ
-        if 'paddle' in sys.modules:
-            import paddle
-            if hasattr(paddle, 'utils') and hasattr(paddle.utils, 'cpp_extension'):
-                paddle.utils.cpp_extension.load = stub_cpp_extension_load
-                paddle.utils.cpp_extension.setup = stub_cpp_extension_setup
-                logging.info("Patched paddle.utils.cpp_extension functions")
+    # PaddleX初期化問題を回避するため、環境変数を事前に設定
+    import os
+    os.environ.setdefault("PADDLEX_DISABLE_AUTO_INIT", "1")
 
-        # 将来的なインポートに備えた import hook
-        def patch_cpp_extension():
+    try:
+        # 遅延パッチング: cpp_extensionインポート時のみ処理
+        def patch_cpp_extension_on_import():
             try:
                 import paddle.utils.cpp_extension
                 paddle.utils.cpp_extension.load = stub_cpp_extension_load
                 paddle.utils.cpp_extension.setup = stub_cpp_extension_setup
-                logging.info("Patched paddle.utils.cpp_extension via import hook")
+                logging.info("Patched paddle.utils.cpp_extension functions")
             except ImportError:
-                # paddle または cpp_extension が利用できない場合は無視
                 pass
 
-        # 遅延パッチのためのフック登録
+        # 最小限のimport hookでcpp_extensionのみを対象
         original_import = __builtins__.__import__
 
-        def patched_import(name, *args, **kwargs):
+        def safe_import_hook(name, *args, **kwargs):
             module = original_import(name, *args, **kwargs)
-            if name.startswith('paddle') and 'cpp_extension' in name:
-                patch_cpp_extension()
+            # cpp_extensionモジュールのみパッチ
+            if name == 'paddle.utils.cpp_extension':
+                try:
+                    module.load = stub_cpp_extension_load
+                    module.setup = stub_cpp_extension_setup
+                    logging.info(f"Patched {name} successfully")
+                except AttributeError:
+                    pass
             return module
 
-        __builtins__.__import__ = patched_import
-
-        logging.info("paddle cpp_extension runtime hook loaded successfully")
+        __builtins__.__import__ = safe_import_hook
+        logging.info("Minimal cpp_extension hook installed")
 
     except Exception as e:
-        logging.warning(f"Failed to apply paddle cpp_extension patch: {e}")
+        logging.warning(f"Failed to install cpp_extension hook: {e}")

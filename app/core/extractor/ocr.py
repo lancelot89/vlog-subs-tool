@@ -56,7 +56,7 @@ import cv2
 import numpy as np
 
 from app.core.cpu_profiler import get_adaptive_thread_config
-from app.core.paddlex_init_guard import safe_paddlex_import
+from app.core.paddlex_init_guard import safe_paddleocr_import
 
 logger = logging.getLogger(__name__)
 
@@ -64,32 +64,25 @@ logger = logging.getLogger(__name__)
 # Availability flags --------------------------------------------------------
 # ---------------------------------------------------------------------------
 try:  # pragma: no cover - availability detection
+    # Issue #207対応: 基本的な環境設定でPaddleOCRを使用
+    import os
+
+    # 基本的なCPU専用設定
+    os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
+    os.environ.setdefault("PADDLE_CPU_ONLY", "1")
+
+    # PaddleOCRを直接インポート（PaddleXも内部で使用される）
     from paddleocr import PaddleOCR
 
     PADDLEOCR_AVAILABLE = True
     _PADDLE_IMPORT_ERROR: Optional[Exception] = None
+
 except Exception as _import_error:  # pragma: no cover - dependency missing
     PaddleOCR = None
     PADDLEOCR_AVAILABLE = False
     _PADDLE_IMPORT_ERROR = _import_error
 
-PADDLEX_AVAILABLE = importlib.util.find_spec("paddlex") is not None
-_PADDLEX_MODULE: Optional[Any] = None
-
-
-def _load_paddlex_module() -> Any:
-    """Lazily import :mod:`paddlex` when it is actually required."""
-
-    if not PADDLEX_AVAILABLE:  # pragma: no cover - optional dependency missing
-        raise ModuleNotFoundError("paddlex is not available")
-
-    global _PADDLEX_MODULE
-    if _PADDLEX_MODULE is None:  # pragma: no cover - import happens on demand
-        # Issue #207 対応: 安全なPaddleXインポートを使用（cpp_extension問題は runtime hook で解決）
-        _PADDLEX_MODULE = safe_paddlex_import()
-        if _PADDLEX_MODULE is None:
-            _PADDLEX_MODULE = importlib.import_module("paddlex")
-    return _PADDLEX_MODULE
+# PaddleX は使用しない（Issue #207対応でPaddleOCRのみ使用）
 
 
 # ---------------------------------------------------------------------------
@@ -180,7 +173,7 @@ def _create_safe_paddleocr_kwargs(original: Mapping[str, Any]) -> Dict[str, Any]
         if key == "use_angle_cls":
             # PaddleOCR >= 3.0 renamed the flag to use_textline_orientation.
             safe["use_textline_orientation"] = bool(value)
-        elif key in {"show_log", "use_space_char", "use_gpu", "max_text_length"}:
+        elif key in {"show_log", "use_space_char", "use_gpu", "max_text_length", "det_model_dir", "rec_model_dir"}:
             # No longer accepted by the constructor – ignore silently.
             continue
         elif key == "drop_score":
@@ -339,6 +332,9 @@ class SimplePaddleOCREngine:
             logger.error("PaddleOCR import failed: %s", _PADDLE_IMPORT_ERROR)
             return False
 
+        # Issue #207対応: PaddleOCRのcpp_extension問題は環境変数で回避済み
+        # PaddleXはPaddleOCRが内部で使用するため、積極的な除去は行わない
+
         # Apply conservative environment defaults to keep memory usage under
         # control and make the CPU-only configuration explicit.
         os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
@@ -381,15 +377,8 @@ class SimplePaddleOCREngine:
             os.environ.setdefault("OMP_NUM_THREADS", "2")
             os.environ.setdefault("OPENBLAS_NUM_THREADS", "2")
 
-        # Issue #200 対応: 環境変数設定後にPaddleX初期化ガードを実行
-        # CPU専用設定などが適用された後でPaddleXを初期化することで、
-        # 意図しないGPUアクセスや設定の不整合を防ぐ
-        try:
-            from app.core.paddlex_init_guard import ensure_paddlex_single_init
-
-            ensure_paddlex_single_init()
-        except Exception as e:
-            logger.warning("PaddleX initialization guard failed, continuing: %s", e)
+        # Issue #207対応: PaddleXは使用しないため初期化ガードは不要
+        # PaddleOCRのみを使用し、cpp_extension問題対策は既に適用済み
 
         try:
             models_root = self._resolve_models_root()
@@ -448,9 +437,9 @@ class SimplePaddleOCREngine:
                         {
                             "text_detection_model_dir": str(det_dir.resolve()),
                             "text_recognition_model_dir": str(rec_dir.resolve()),
-                            "lang": lang,
+                            # langは指定されたモデルディレクトリと併用不可（PaddleOCR警告回避）
                             "use_textline_orientation": True,  # 角度検出有効化
-                            "use_gpu": False,
+                            "device": "cpu",
                             "use_space_char": True,
                             "drop_score": 0.5,
                             "enable_mkldnn": True,  # MKL-DNN有効化
@@ -462,9 +451,9 @@ class SimplePaddleOCREngine:
                     {
                         "text_detection_model_dir": str(det_dir.resolve()),
                         "text_recognition_model_dir": str(rec_dir.resolve()),
-                        "lang": lang,
+                        # langは指定されたモデルディレクトリと併用不可（PaddleOCR警告回避）
                         "use_textline_orientation": False,
-                        "use_gpu": False,
+                        "device": "cpu",
                         "use_space_char": True,
                         "drop_score": 0.5,
                         "enable_mkldnn": True,  # MKL-DNN有効化のみ
@@ -473,20 +462,19 @@ class SimplePaddleOCREngine:
                     {
                         "text_detection_model_dir": str(det_dir.resolve()),
                         "text_recognition_model_dir": str(rec_dir.resolve()),
-                        "lang": lang,
+                        # langは指定されたモデルディレクトリと併用不可（PaddleOCR警告回避）
                         "use_textline_orientation": False,
-                        "use_gpu": False,
+                        "device": "cpu",
                         "use_space_char": True,
                         "drop_score": 0.5,
                         "enable_mkldnn": False,
                     },
-                    # Phase 4: Legacy API fallback
+                    # Phase 4: New API with minimal configuration
                     {
-                        "det_model_dir": str(det_dir.resolve()),
-                        "rec_model_dir": str(rec_dir.resolve()),
-                        "lang": lang,
-                        "use_angle_cls": False,
-                        "use_gpu": False,
+                        "text_detection_model_dir": str(det_dir.resolve()),
+                        "text_recognition_model_dir": str(rec_dir.resolve()),
+                        # langは指定されたモデルディレクトリと併用不可（PaddleOCR警告回避）
+                        "use_textline_orientation": False,
                         "enable_mkldnn": False,
                     },
                 ]
@@ -498,25 +486,25 @@ class SimplePaddleOCREngine:
                     {
                         "text_detection_model_dir": str(det_dir.resolve()),
                         "text_recognition_model_dir": str(rec_dir.resolve()),
-                        "lang": lang,
+                        # langは指定されたモデルディレクトリと併用不可（PaddleOCR警告回避）
+                        "device": "cpu",
                         "use_textline_orientation": True,
-                        "use_gpu": False,
                     },
-                    # Legacy API compatibility
+                    # Alternative configuration with different settings
                     {
-                        "det_model_dir": str(det_dir.resolve()),
-                        "rec_model_dir": str(rec_dir.resolve()),
-                        "lang": lang,
-                        "use_angle_cls": True,
-                        "use_gpu": False,
+                        "text_detection_model_dir": str(det_dir.resolve()),
+                        "text_recognition_model_dir": str(rec_dir.resolve()),
+                        # langは指定されたモデルディレクトリと併用不可（PaddleOCR警告回避）
+                        "device": "cpu",
+                        "use_textline_orientation": True,
                         "enable_mkldnn": True,
                     },
-                    # Minimal parameters
+                    # Minimal configuration
                     {
-                        "det_model_dir": str(det_dir.resolve()),
-                        "rec_model_dir": str(rec_dir.resolve()),
-                        "lang": lang,
-                        "use_gpu": False,
+                        "text_detection_model_dir": str(det_dir.resolve()),
+                        "text_recognition_model_dir": str(rec_dir.resolve()),
+                        # langは指定されたモデルディレクトリと併用不可（PaddleOCR警告回避）
+                        "device": "cpu",
                     },
                 ]
 
