@@ -83,6 +83,12 @@ except Exception as _import_error:  # pragma: no cover - dependency missing
     _PADDLE_IMPORT_ERROR = _import_error
 
 # PaddleX は使用しない（Issue #207対応でPaddleOCRのみ使用）
+PADDLEX_AVAILABLE = False  # PaddleXは使用しない
+
+
+def safe_paddlex_import() -> None:
+    """PaddleXインポート（使用しないためNoneを返す）"""
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -173,7 +179,14 @@ def _create_safe_paddleocr_kwargs(original: Mapping[str, Any]) -> Dict[str, Any]
         if key == "use_angle_cls":
             # PaddleOCR >= 3.0 renamed the flag to use_textline_orientation.
             safe["use_textline_orientation"] = bool(value)
-        elif key in {"show_log", "use_space_char", "use_gpu", "max_text_length", "det_model_dir", "rec_model_dir"}:
+        elif key in {
+            "show_log",
+            "use_space_char",
+            "use_gpu",
+            "max_text_length",
+            "det_model_dir",
+            "rec_model_dir",
+        }:
             # No longer accepted by the constructor – ignore silently.
             continue
         elif key == "drop_score":
@@ -911,93 +924,9 @@ class SimplePaddleOCREngine:
             # Fall back to standard OCR without stage timing
             return self._ocr.ocr(image)
 
-        # Issue #200 対応: PaddleXパイプラインアクセス時の初期化ガード
-        try:
-            # 安全なPaddleXインポートを使用
-            paddlex_module = safe_paddlex_import()
-            if paddlex_module is None:
-                logger.warning("PaddleX safe import failed, falling back to standard OCR")
-                return self._ocr.ocr(image)
-
-            pipeline = self._ocr._create_paddlex_pipeline()
-        except (AttributeError, ImportError, RuntimeError) as e:
-            logger.warning("Failed to create PaddleX pipeline for stage timing: %s", e)
-            logger.warning("Falling back to standard OCR")
-            return self._ocr.ocr(image)
-
-        if not hasattr(pipeline, "text_det_model") or not hasattr(pipeline, "text_rec_model"):
-            raise RuntimeError("PaddleX pipeline does not expose individual models")
-
-        # Stage 1: Text Detection
-        det_start_time = time.perf_counter()
-        try:
-            det_results = pipeline.text_det_model.predict([image])
-            # Handle generator result if needed
-            if hasattr(det_results, "__iter__") and not isinstance(det_results, (list, tuple)):
-                det_results = list(det_results)
-        except Exception as e:
-            raise RuntimeError(f"Text detection failed: {e}")
-        timing.detection_time = time.perf_counter() - det_start_time
-
-        # Check if detection found any text regions
-        if not det_results or len(det_results) == 0:
-            # No text detected, set remaining stages to zero
-            timing.classification_time = 0.0
-            timing.recognition_time = 0.0
-            return [[]]  # Return empty result in expected format
-
-        # Handle the case where det_results is a generator or has different structure
-        first_result = det_results[0] if isinstance(det_results, (list, tuple)) else det_results
-
-        # Safely check for text detection results
-        has_text_regions = False
-        try:
-            if hasattr(first_result, "get") and first_result.get("dt_polys") is not None:
-                dt_polys = first_result.get("dt_polys")
-                # Check if dt_polys contains actual detections
-                if isinstance(dt_polys, (list, tuple)) and len(dt_polys) > 0:
-                    has_text_regions = True
-                elif hasattr(dt_polys, "__len__") and len(dt_polys) > 0:
-                    has_text_regions = True
-        except Exception:
-            # If any error occurs in checking, assume no text regions
-            pass
-
-        if not has_text_regions:
-            # No text regions found, skip remaining stages
-            timing.classification_time = 0.0
-            timing.recognition_time = 0.0
-            return [[]]
-
-        # Stage 2: Text Line Orientation (Classification) - if enabled
-        cls_start_time = time.perf_counter()
-        if hasattr(pipeline, "text_cls_model") and pipeline.text_cls_model is not None:
-            try:
-                # Extract text regions for classification
-                text_regions = first_result["dt_polys"]
-                # Run classification on detected regions
-                cls_results = pipeline.text_cls_model.predict(text_regions)
-                if hasattr(cls_results, "__iter__") and not isinstance(cls_results, (list, tuple)):
-                    cls_results = list(cls_results)
-            except Exception as e:
-                logger.warning("Text classification failed: %s", e)
-                # Continue without classification
-        timing.classification_time = time.perf_counter() - cls_start_time
-
-        # Stage 3: Text Recognition
-        rec_start_time = time.perf_counter()
-        try:
-            rec_results = pipeline.text_rec_model.predict(det_results)
-            # Handle generator result if needed
-            if hasattr(rec_results, "__iter__") and not isinstance(rec_results, (list, tuple)):
-                rec_results = list(rec_results)
-        except Exception as e:
-            raise RuntimeError(f"Text recognition failed: {e}")
-        timing.recognition_time = time.perf_counter() - rec_start_time
-
-        # Combine results in expected format
-        final_results = self._combine_detection_recognition_results(det_results, rec_results)
-        return [final_results]
+        # Issue #207 対応: PaddleXは使用しないため、常にフォールバック
+        logger.warning("PaddleX not used (Issue #207), falling back to standard OCR")
+        return self._ocr.ocr(image)
 
     def _run_ocr_stage_timing_in_process(
         self, image: np.ndarray, timing: OCRStageTimings, timeout_seconds: int = 30

@@ -189,9 +189,9 @@ def main() -> None:
     # バイナリ実行時のPaddleOCR環境設定のみを事前に適用
     try:
         from app.core.paddlex_init_guard import (
+            complete_binary_initialization,
             get_paddleocr_init_status,
             setup_paddleocr_environment_for_binary,
-            complete_binary_initialization,
         )
 
         # バイナリ実行時の環境設定を適用

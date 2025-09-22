@@ -56,7 +56,9 @@ def ensure_paddleocr_cpp_extension_safe() -> None:
         try:
             # バイナリ実行時の追加設定
             if getattr(sys, "frozen", False):
-                logger.info("Binary execution detected - applying Issue #207 cpp_extension workaround")
+                logger.info(
+                    "Binary execution detected - applying Issue #207 cpp_extension workaround"
+                )
                 # cpp_extension問題を回避
                 os.environ.setdefault("PADDLE_SKIP_CUDA_COMPILER_CHECK", "1")
                 os.environ.setdefault("PADDLE_DISABLE_CPP_EXTENSION", "1")
@@ -71,35 +73,39 @@ def ensure_paddleocr_cpp_extension_safe() -> None:
                 os.environ.setdefault("DISABLE_PADDLEX", "1")
 
                 # PaddleXモジュールの初期化を阻止
-                paddlex_modules = [mod for mod in sys.modules.keys() if mod.startswith('paddlex')]
+                paddlex_modules = [mod for mod in sys.modules.keys() if mod.startswith("paddlex")]
                 for mod in paddlex_modules:
                     del sys.modules[mod]
                     logger.info(f"Removed PaddleX module from sys.modules: {mod}")
 
                 # PaddleXインポートを阻止するモンキーパッチ（バイナリ実行時のみ）
-                def stub_paddlex_import(name, *args, **kwargs):
-                    if name.startswith('paddlex'):
+                def stub_paddlex_import(name: str, *args: Any, **kwargs: Any) -> Any:
+                    if name.startswith("paddlex"):
                         logger.warning(f"PaddleX import blocked in binary: {name}")
                         # ダミーモジュールを返して重複初期化を防止
                         from unittest.mock import Mock
+
                         return Mock()
                     return original_import(name, *args, **kwargs)
 
                 # importをパッチ
                 import builtins
+
                 original_import = builtins.__import__
                 builtins.__import__ = stub_paddlex_import
 
             # cpp_extension.load のモンキーパッチ
-            def stub_cpp_extension_load(*args, **kwargs):
+            def stub_cpp_extension_load(*args: Any, **kwargs: Any) -> Any:
                 logger.warning("cpp_extension.load() called - returning stub to prevent crash")
                 from unittest.mock import Mock
+
                 return Mock()
 
             # PaddleOCRインポート前にcpp_extensionをパッチ
             try:
                 import paddle.utils.cpp_extension
-                original_load = getattr(paddle.utils.cpp_extension, 'load', None)
+
+                original_load = getattr(paddle.utils.cpp_extension, "load", None)
                 if original_load:
                     paddle.utils.cpp_extension.load = stub_cpp_extension_load
                     logger.info("Applied cpp_extension.load patch for Issue #207")
@@ -125,7 +131,9 @@ def ensure_paddleocr_cpp_extension_safe() -> None:
             env_diagnosis = {
                 "CUDA_VISIBLE_DEVICES": os.environ.get("CUDA_VISIBLE_DEVICES", "NOT_SET"),
                 "PADDLE_CPU_ONLY": os.environ.get("PADDLE_CPU_ONLY", "NOT_SET"),
-                "PADDLE_DISABLE_CPP_EXTENSION": os.environ.get("PADDLE_DISABLE_CPP_EXTENSION", "NOT_SET"),
+                "PADDLE_DISABLE_CPP_EXTENSION": os.environ.get(
+                    "PADDLE_DISABLE_CPP_EXTENSION", "NOT_SET"
+                ),
                 "PADDLEX_DISABLE": os.environ.get("PADDLEX_DISABLE", "NOT_SET"),
             }
             logger.error(f"Environment at failure: {env_diagnosis}")
