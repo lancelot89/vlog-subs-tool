@@ -168,8 +168,12 @@ quality-fix: format
 # ビルド
 build:
 	@echo "=== PyInstaller Build ==="
+	@if [ ! -f "$(VENV_PYTHON)" ]; then \
+		echo "❌ venv環境が見つかりません。'make setup' を実行してください"; \
+		exit 1; \
+	fi
 	@echo "PyInstallerでビルド中..."
-	pyinstaller --noconfirm --log-level INFO vlog-subs-tool.spec --distpath dist/local-build
+	$(PYTHON) -m PyInstaller --noconfirm --log-level INFO vlog-subs-tool.spec --distpath dist/local-build
 	@echo "ビルド完了: dist/local-build/"
 	@echo "ビルドサイズ:"
 	du -sh dist/local-build/* 2>/dev/null || echo "ビルド出力が見つかりません"
@@ -179,6 +183,10 @@ build-mac:
 	@echo "=== macOS Binary Build (Issue #200対応) ==="
 	@if [ "$(shell uname)" != "Darwin" ]; then \
 		echo "❌ このコマンドはmacOSでのみ実行可能です"; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(VENV_PYTHON)" ]; then \
+		echo "❌ venv環境が見つかりません。'make setup' を実行してください"; \
 		exit 1; \
 	fi
 	@echo "macOS用バイナリをビルド中..."
@@ -191,6 +199,10 @@ build-linux:
 		echo "❌ このコマンドはLinuxでのみ実行可能です"; \
 		exit 1; \
 	fi
+	@if [ ! -f "$(VENV_PYTHON)" ]; then \
+		echo "❌ venv環境が見つかりません。'make setup' を実行してください"; \
+		exit 1; \
+	fi
 	@echo "Linux用バイナリをビルド中..."
 	bash scripts/build_binary.sh --platform linux
 	@echo "✓ Linuxバイナリビルド完了"
@@ -199,6 +211,10 @@ build-windows:
 	@echo "=== Windows Binary Build (Issue #200対応) ==="
 	@if [ "$(OS)" != "Windows_NT" ]; then \
 		echo "❌ このコマンドはWindowsでのみ実行可能です"; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(VENV_PYTHON)" ]; then \
+		echo "❌ venv環境が見つかりません。'make setup' を実行してください"; \
 		exit 1; \
 	fi
 	@echo "Windows用バイナリをビルド中..."
