@@ -166,7 +166,7 @@ excludes = [
 
 # フックパス設定（存在する場合のみ）
 hookspath_list = []
-hooks_dir = project_root / "hooks"
+hooks_dir = project_root / "hooks-original"  # hooks -> hooks-original に移動済み
 if hooks_dir.exists():
     hookspath_list.append(str(hooks_dir))
 
@@ -182,7 +182,7 @@ a = Analysis(
     hiddenimports=hidden_imports,
     hookspath=hookspath_list,
     hooksconfig={},
-    runtime_hooks=['hooks/rthook-paddlex.py'],  # Issue #207: PaddleXスタブ化でPaddleOCRインポートエラーを回避
+    runtime_hooks=['hooks-original/rthook-paddlex.py'],  # Issue #207: PaddleXスタブ化でPaddleOCRインポートエラーを回避
     excludes=excludes,
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
