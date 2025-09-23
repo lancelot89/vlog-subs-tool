@@ -159,13 +159,10 @@ def test_imports(logger: Any) -> bool:
 
     # Stage 5: アプリケーションモジュール
     try:
-        if getattr(sys, "frozen", False):
-            from ui.main_window import main as app_main
-        else:
-            try:
-                from app.ui.main_window import main as app_main
-            except (ImportError, ModuleNotFoundError):
-                from ui.main_window import main as app_main
+        try:
+            from app.ui.main_window import main as app_main  # noqa: F401  # pylint: disable=unused-import
+        except (ImportError, ModuleNotFoundError):
+            from ui.main_window import main as app_main  # noqa: F401  # pylint: disable=unused-import
         logger.info("✅ Stage 5: アプリケーションモジュール - OK")
         return True
     except Exception as e:
@@ -219,13 +216,10 @@ def main() -> None:
         # メインアプリケーション起動
         logger.info("アプリケーション起動開始")
 
-        if is_standalone:
+        try:
+            from app.ui.main_window import main as app_main
+        except (ImportError, ModuleNotFoundError):
             from ui.main_window import main as app_main
-        else:
-            try:
-                from app.ui.main_window import main as app_main
-            except (ImportError, ModuleNotFoundError):
-                from ui.main_window import main as app_main
 
         logger.info("UIモジュール読み込み完了、アプリケーション起動中...")
         app_main()

@@ -85,14 +85,14 @@ install-dev: install
 
 # クリーンアップ
 clean:
-	@echo "一時ファイルとキャッシュを削除中..."
-	find . -type f -name "*.pyc" -delete
-	find . -type d -name "__pycache__" -delete
-	find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
-	find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
-	find . -type d -name ".mypy_cache" -exec rm -rf {} + 2>/dev/null || true
-	rm -rf build/ dist/ *.spec
-	@echo "✓ 一時ファイルクリーンアップ完了"
+        @echo "一時ファイルとキャッシュを削除中..."
+        find . -type f -name "*.pyc" -delete
+        find . -type d -name "__pycache__" -delete
+        find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
+        find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
+        find . -type d -name ".mypy_cache" -exec rm -rf {} + 2>/dev/null || true
+        rm -rf build/ dist/
+        @echo "✓ 一時ファイルクリーンアップ完了"
 
 # venv環境も含む完全クリーンアップ
 clean-all: clean
@@ -167,16 +167,16 @@ quality-fix: format
 
 # ビルド
 build:
-	@echo "=== PyInstaller Build ==="
-	@if [ ! -f "$(VENV_PYTHON)" ]; then \
-		echo "❌ venv環境が見つかりません。'make setup' を実行してください"; \
-		exit 1; \
-	fi
-	@echo "PyInstallerでビルド中..."
-	$(PYTHON) -m PyInstaller --noconfirm --log-level INFO vlog-subs-tool.spec --distpath dist/local-build
-	@echo "ビルド完了: dist/local-build/"
-	@echo "ビルドサイズ:"
-	du -sh dist/local-build/* 2>/dev/null || echo "ビルド出力が見つかりません"
+        @echo "=== PyInstaller Build ==="
+        @if [ ! -f "$(VENV_PYTHON)" ]; then \
+                echo "❌ venv環境が見つかりません。'make setup' を実行してください"; \
+                exit 1; \
+        fi
+        @echo "PyInstallerでビルド中..."
+        $(PYTHON) -m PyInstaller --clean --noconfirm vlog-subs-tool.spec --distpath dist/local-build --workpath build/local-build
+        @echo "ビルド完了: dist/local-build/vlog-subs-tool/"
+        @echo "ビルドサイズ:"
+        du -sh dist/local-build/vlog-subs-tool 2>/dev/null || echo "ビルド出力が見つかりません"
 
 # プラットフォーム別バイナリビルド（Issue #200 対応）
 build-mac:
@@ -189,8 +189,8 @@ build-mac:
 		echo "❌ venv環境が見つかりません。'make setup' を実行してください"; \
 		exit 1; \
 	fi
-	@echo "macOS用バイナリをビルド中..."
-	bash scripts/build_binary.sh --platform mac
+        @echo "macOS用バイナリをビルド中..."
+        bash scripts/build_binary.sh --platform macos
 	@echo "✓ macOSバイナリビルド完了"
 
 build-linux:
@@ -223,22 +223,19 @@ build-windows:
 
 # バイナリテスト（Issue #200対応）
 test-binary:
-	@echo "=== Binary Test (Issue #200対応) ==="
-	@echo "バイナリの基本動作テスト中..."
-	@if [ -f "dist/local-build/vlog-subs-tool" ]; then \
-		echo "✓ Linuxバイナリが見つかりました"; \
-		timeout 10s ./dist/local-build/vlog-subs-tool --version 2>/dev/null || echo "バイナリテスト完了（タイムアウトまたはGUIモード）"; \
-	elif [ -f "dist/local-build/vlog-subs-tool.exe" ]; then \
-		echo "✓ Windowsバイナリが見つかりました"; \
-		timeout 10s ./dist/local-build/vlog-subs-tool.exe --version 2>/dev/null || echo "バイナリテスト完了（タイムアウトまたはGUIモード）"; \
-	elif [ -f "dist/local-build/vlog-subs-tool.app/Contents/MacOS/vlog-subs-tool" ]; then \
-		echo "✓ macOSバイナリが見つかりました"; \
-		timeout 10s ./dist/local-build/vlog-subs-tool.app/Contents/MacOS/vlog-subs-tool --version 2>/dev/null || echo "バイナリテスト完了（タイムアウトまたはGUIモード）"; \
-	else \
-		echo "❌ ビルドされたバイナリが見つかりません"; \
-		echo "利用可能ファイル:"; \
-		ls -la dist/local-build/ 2>/dev/null || echo "dist/local-build/ ディレクトリが存在しません"; \
-		exit 1; \
+        @echo "=== Binary Test (Issue #200対応) ==="
+        @echo "バイナリの基本動作テスト中..."
+        @if [ -f "dist/local-build/vlog-subs-tool/vlog-subs-tool" ]; then \
+                echo "✓ Linux/macOSバイナリが見つかりました"; \
+                timeout 10s ./dist/local-build/vlog-subs-tool/vlog-subs-tool --version 2>/dev/null || echo "バイナリテスト完了（タイムアウトまたはGUIモード）"; \
+        elif [ -f "dist/local-build/vlog-subs-tool/vlog-subs-tool.exe" ]; then \
+                echo "✓ Windowsバイナリが見つかりました"; \
+                timeout 10s ./dist/local-build/vlog-subs-tool/vlog-subs-tool.exe --version 2>/dev/null || echo "バイナリテスト完了（タイムアウトまたはGUIモード）"; \
+        else \
+                echo "❌ ビルドされたバイナリが見つかりません"; \
+                echo "利用可能ファイル:"; \
+                ls -la dist/local-build/ 2>/dev/null || echo "dist/local-build/ ディレクトリが存在しません"; \
+                exit 1; \
 	fi
 
 # 開発環境セットアップ

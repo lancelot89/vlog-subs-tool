@@ -1,46 +1,26 @@
 # scripts/test_exe.ps1
-# Issue #204 対応: EXE起動テストスクリプト
-# 使用方法: powershell -ExecutionPolicy Bypass -File scripts/test_exe.ps1
+# Minimal smoke test for the Windows onedir build.
+# Usage: powershell -ExecutionPolicy Bypass -File scripts/test_exe.ps1
 
-Write-Host "=== VLog字幕ツール EXE起動テスト ===" -ForegroundColor Green
-Write-Host "Issue #204 paddlex初期化エラー対応の検証" -ForegroundColor Cyan
+Write-Host "=== VLog字幕ツール PyInstaller テスト ===" -ForegroundColor Green
+Write-Host "シンプルな onedir ビルドがソース実行と同じ挙動になることを確認します" -ForegroundColor Cyan
 
-# 作業ディレクトリの確認
-$workDir = Get-Location
-Write-Host "作業ディレクトリ: $workDir" -ForegroundColor Yellow
+$root = Split-Path -Parent $MyInvocation.MyCommand.Path
+Set-Location "$root/.."
 
-# 前回のビルド成果物をクリーンアップ
-Write-Host "前回のビルドファイルをクリーンアップ中..." -ForegroundColor Yellow
-if (Test-Path ".\dist\") {
-    Remove-Item -Recurse -Force ".\dist\*" -ErrorAction SilentlyContinue
-}
-if (Test-Path ".\build\") {
-    Remove-Item -Recurse -Force ".\build\*" -ErrorAction SilentlyContinue
-}
+# 前回成果物のクリーンアップ
+Write-Host "前回のビルド成果物を削除中..." -ForegroundColor Yellow
+Remove-Item -Recurse -Force ".\dist\windows" -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force ".\build\windows" -ErrorAction SilentlyContinue
 
-# PyInstallerでビルド実行
-Write-Host "PyInstallerでEXEビルド中..." -ForegroundColor Yellow
+# PyInstallerでビルド
+Write-Host "PyInstallerでonedirビルド中..." -ForegroundColor Yellow
 try {
     pyinstaller `
-        --onefile `
-        --windowed `
-        --name "vlog-subs-tool" `
-        --additional-hooks-dir="hooks" `
-        --runtime-hook="hooks/rthook-paddlex.py" `
-        --exclude-module "paddlex" `
-        --exclude-module "paddlex-inference" `
-        --hidden-import "PySide6.QtCore" `
-        --hidden-import "PySide6.QtGui" `
-        --hidden-import "PySide6.QtWidgets" `
-        --hidden-import "paddleocr" `
-        --hidden-import "paddle" `
-        --hidden-import "cv2" `
-        --hidden-import "numpy" `
-        --hidden-import "psutil" `
-        --exclude-module "tkinter" `
-        --exclude-module "matplotlib" `
-        --noupx `
-        "app/main.py"
+        --clean `
+        --distpath ".\dist\windows" `
+        --workpath ".\build\windows" `
+        ".\vlog-subs-tool.spec"
 
     if ($LASTEXITCODE -ne 0) {
         throw "PyInstallerビルドが失敗しました (終了コード: $LASTEXITCODE)"
@@ -50,63 +30,49 @@ try {
     exit 1
 }
 
-# ビルド成果物の確認
-$exePath = ".\dist\vlog-subs-tool.exe"
+$exePath = ".\dist\windows\vlog-subs-tool\vlog-subs-tool.exe"
 if (-not (Test-Path $exePath)) {
     Write-Host "エラー: EXEファイルが生成されませんでした" -ForegroundColor Red
     Write-Host "期待されるパス: $exePath" -ForegroundColor Red
     exit 1
 }
 
-# ファイルサイズの表示
 $fileSize = (Get-Item $exePath).Length / 1MB
 Write-Host "EXEファイル生成成功: $exePath" -ForegroundColor Green
 Write-Host "ファイルサイズ: $([math]::Round($fileSize, 2)) MB" -ForegroundColor Cyan
 
-# EXE起動テスト
-Write-Host "=== EXE起動テスト実行 ===" -ForegroundColor Green
-Write-Host "注意: GUIアプリケーションのため、手動でウィンドウを閉じてください" -ForegroundColor Yellow
+# 起動テスト
+Write-Host "=== onedirバイナリの起動テスト ===" -ForegroundColor Green
+Write-Host "GUIアプリケーションのため、ウィンドウが開いたら手動で閉じてください" -ForegroundColor Yellow
 
 try {
-    # バックグラウンドでEXEを起動
     $process = Start-Process -FilePath $exePath -PassThru
-
-    # 5秒待機してプロセスの状態を確認
     Start-Sleep -Seconds 5
 
     if ($process.HasExited) {
         Write-Host "エラー: EXEが予期せず終了しました (終了コード: $($process.ExitCode))" -ForegroundColor Red
-
-        # エラーログがあれば表示を試行
-        if (Test-Path ".\vlog-subs-tool.log") {
-            Write-Host "ログファイルの内容:" -ForegroundColor Yellow
-            Get-Content ".\vlog-subs-tool.log" | Select-Object -Last 20
-        }
-
         exit 1
-    } else {
-        Write-Host "成功: EXEが正常に起動しました (PID: $($process.Id))" -ForegroundColor Green
-        Write-Host "プロセスは動作中です。手動でアプリケーションを閉じてください。" -ForegroundColor Cyan
-
-        # プロセスの終了を待機（タイムアウト付き）
-        $timeout = 30  # 30秒でタイムアウト
-        $waited = 0
-        while (-not $process.HasExited -and $waited -lt $timeout) {
-            Start-Sleep -Seconds 1
-            $waited++
-        }
-
-        if (-not $process.HasExited) {
-            Write-Host "警告: プロセスが30秒以内に終了しませんでした。手動でプロセスを終了します。" -ForegroundColor Yellow
-            $process.Kill()
-        }
-
-        Write-Host "EXE起動テスト完了" -ForegroundColor Green
     }
+
+    Write-Host "成功: プロセスが起動しました (PID: $($process.Id))" -ForegroundColor Green
+    Write-Host "必要に応じてUIの操作を確認してください" -ForegroundColor Cyan
+
+    $timeout = 30
+    $elapsed = 0
+    while (-not $process.HasExited -and $elapsed -lt $timeout) {
+        Start-Sleep -Seconds 1
+        $elapsed++
+    }
+
+    if (-not $process.HasExited) {
+        Write-Host "注意: テストタイムアウトのためプロセスを終了します" -ForegroundColor Yellow
+        $process.Kill()
+    }
+
+    Write-Host "起動テスト完了" -ForegroundColor Green
 } catch {
     Write-Host "EXE起動エラー: $_" -ForegroundColor Red
     exit 1
 }
 
 Write-Host "=== テスト完了 ===" -ForegroundColor Green
-Write-Host "Issue #204 の修正が正常に動作することを確認しました" -ForegroundColor Cyan
