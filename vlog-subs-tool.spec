@@ -27,12 +27,20 @@ hidden_imports = [
     'PySide6.QtMultimedia',
     'PySide6.QtMultimediaWidgets',
 
-    # PaddleOCR関連（コア機能のみ、PaddleX除外）
+    # PaddleOCR関連（Issue #219対応：動的インポートされるモジュールも含む）
     'paddleocr',
     'paddlepaddle',
     'paddle',
     'paddle.utils',
     'paddle.utils.cpp_extension',
+    'paddle.fluid',
+    'paddle.inference',
+    'paddleocr.tools.infer.utility',
+    'paddleocr.tools.infer.predict_system',
+    'paddleocr.paddleocr',
+    'paddleocr.tools.infer.predict_det',
+    'paddleocr.tools.infer.predict_rec',
+    'paddleocr.tools.infer.predict_cls',
 
     # OpenCV関連（必須）
     'cv2',
@@ -81,12 +89,31 @@ if app_models_path.exists():
     datas.append(('app/models', 'models'))
     print(f"Added app models directory: {app_models_path}")
 
-# PaddleOCR関連のデータファイル（必要最小限）
+# PaddleOCR関連のデータファイル（Issue #219対応：必要なリソースを確実にバンドル）
 try:
     import paddleocr
-    print("PaddleOCR found - lightweight support enabled")
+    from PyInstaller.utils.hooks import collect_data_files
+
+    # PaddleOCRのYAML/dictionary/configファイルを確実に収集
+    paddleocr_data_files = collect_data_files(
+        'paddleocr',
+        includes=['**/*.yml', '**/*.yaml', '**/*.json', '**/*.txt', '**/*.dict']
+    )
+    datas.extend(paddleocr_data_files)
+    print(f"PaddleOCR found - collected {len(paddleocr_data_files)} data files")
+
+    # Paddleのコアリソースも収集
+    paddle_data_files = collect_data_files(
+        'paddle',
+        includes=['**/*.yml', '**/*.yaml', '**/*.json']
+    )
+    datas.extend(paddle_data_files)
+    print(f"Paddle core - collected {len(paddle_data_files)} data files")
+
 except ImportError as e:
     print(f"Warning: PaddleOCR not available: {e}")
+except Exception as e:
+    print(f"Warning: PaddleOCR data collection failed: {e}")
 
 # バイナリの定義（PaddleOCRモデルなど）
 binaries = []
@@ -164,11 +191,8 @@ excludes = [
     'flake8',
 ]
 
-# フックパス設定（存在する場合のみ）
+# フックパス設定（Issue #219: 簡素化されたアプローチのため無効化）
 hookspath_list = []
-hooks_dir = project_root / "hooks"
-if hooks_dir.exists():
-    hookspath_list.append(str(hooks_dir))
 
 # 分析設定（完全スタンドアロン対応）
 a = Analysis(
@@ -182,7 +206,7 @@ a = Analysis(
     hiddenimports=hidden_imports,
     hookspath=hookspath_list,
     hooksconfig={},
-    runtime_hooks=['hooks/rthook-paddlex.py'],  # Issue #207: PaddleXスタブ化でPaddleOCRインポートエラーを回避
+    runtime_hooks=[],  # Issue #219: 簡素化されたアプローチ（PaddleXスタブ不要）
     excludes=excludes,
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
