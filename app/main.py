@@ -159,12 +159,20 @@ def test_imports(logger: Any) -> bool:
 
     # Stage 5: アプリケーションモジュール
     try:
+        import importlib
+
         try:
-            from app.ui.main_window import main as app_main  # noqa: F401  # pylint: disable=unused-import
+            main_module = importlib.import_module("app.ui.main_window")
         except (ImportError, ModuleNotFoundError):
-            from ui.main_window import main as app_main  # noqa: F401  # pylint: disable=unused-import
-        logger.info("✅ Stage 5: アプリケーションモジュール - OK")
-        return True
+            main_module = importlib.import_module("ui.main_window")
+
+        # Check if main function exists
+        if hasattr(main_module, "main"):
+            logger.info("✅ Stage 5: アプリケーションモジュール - OK")
+            return True
+        else:
+            logger.error("❌ Stage 5: main function not found")
+            return False
     except Exception as e:
         logger.error(f"❌ Stage 5: アプリケーションモジュール - {e}")
         return False
@@ -216,13 +224,15 @@ def main() -> None:
         # メインアプリケーション起動
         logger.info("アプリケーション起動開始")
 
+        import importlib
+
         try:
-            from app.ui.main_window import main as app_main
+            main_module = importlib.import_module("app.ui.main_window")
         except (ImportError, ModuleNotFoundError):
-            from ui.main_window import main as app_main
+            main_module = importlib.import_module("ui.main_window")
 
         logger.info("UIモジュール読み込み完了、アプリケーション起動中...")
-        app_main()
+        main_module.main()
         logger.info("アプリケーション正常終了")
 
     except ModuleNotFoundError as e:
