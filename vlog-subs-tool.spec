@@ -1,10 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""Minimal PyInstaller spec for the vlog-subs-tool application.
+"""PyInstaller spec for the vlog-subs-tool application.
 
-The goal is to mirror the behaviour of running the source tree directly, so
-this spec intentionally avoids custom hooks, module exclusions, UPX
-compression or other optimisations.  Everything the runtime might touch is
-included as-is in an onedir build.
+The goal is to mirror the behaviour of running the source tree directly.
+This spec includes necessary PaddleOCR resources and hidden imports while
+avoiding custom hooks, module exclusions, UPX compression or other complex
+optimisations. Everything the runtime might touch is included in an onedir build.
 """
 
 from pathlib import Path
@@ -23,12 +23,75 @@ _datas = [
     (str(project_root / "app" / "models"), "app/models"),
 ]
 
+# Collect PaddleOCR data files (YAML/dictionary/config files) for OCR functionality
+try:
+    from PyInstaller.utils.hooks import collect_data_files
+
+    # Collect PaddleOCR's configuration and dictionary files
+    paddleocr_datas = collect_data_files(
+        "paddleocr", includes=["**/*.yml", "**/*.yaml", "**/*.json", "**/*.txt", "**/*.dict"]
+    )
+    _datas.extend(paddleocr_datas)
+    print(f"Collected {len(paddleocr_datas)} PaddleOCR data files")
+
+    # Collect Paddle core configuration files
+    paddle_datas = collect_data_files("paddle", includes=["**/*.yml", "**/*.yaml", "**/*.json"])
+    _datas.extend(paddle_datas)
+    print(f"Collected {len(paddle_datas)} Paddle data files")
+
+except ImportError:
+    print("Warning: PyInstaller hooks not available, skipping data collection")
+except Exception as e:
+    print(f"Warning: Data collection failed: {e}")
+
+# Hidden imports for PaddleOCR and dynamically loaded modules
+_hiddenimports = [
+    # PySide6 GUI framework
+    "PySide6.QtCore",
+    "PySide6.QtGui",
+    "PySide6.QtWidgets",
+    "PySide6.QtMultimedia",
+    "PySide6.QtMultimediaWidgets",
+    # PaddleOCR core modules
+    "paddleocr",
+    "paddlepaddle",
+    "paddle",
+    "paddle.utils",
+    "paddle.fluid",
+    "paddle.inference",
+    # PaddleOCR inference modules (dynamically imported)
+    "paddleocr.tools.infer.utility",
+    "paddleocr.tools.infer.predict_system",
+    "paddleocr.tools.infer.predict_det",
+    "paddleocr.tools.infer.predict_rec",
+    "paddleocr.tools.infer.predict_cls",
+    "paddleocr.paddleocr",
+    # Core image processing libraries
+    "cv2",
+    "numpy",
+    "PIL",
+    "PIL.Image",
+    # Other application dependencies
+    "pytesseract",
+    "pysrt",
+    "pandas",
+    "yaml",
+    "bidi.algorithm",
+    "psutil",
+    # Application modules
+    "app",
+    "app.main",
+    "app.core",
+    "app.ui",
+    "app.ui.main_window",
+]
+
 a = Analysis(
     ["app/main.py"],
     pathex=[str(project_root)],
     binaries=[],
     datas=_datas,
-    hiddenimports=[],
+    hiddenimports=_hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
