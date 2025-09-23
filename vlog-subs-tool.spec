@@ -1,247 +1,134 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""
-VLog字幕ツール PyInstaller設定ファイル
-PaddleOCR、PySide6、OpenCVなど大型ライブラリの包含に対応
+"""PyInstaller spec for the vlog-subs-tool application.
+
+The goal is to mirror the behaviour of running the source tree directly.
+This spec includes necessary PaddleOCR resources and hidden imports while
+avoiding custom hooks, module exclusions, UPX compression or other complex
+optimisations. Everything the runtime might touch is included in an onedir build.
 """
 
-import os
-import sys
 from pathlib import Path
 
-# プロジェクトルートディレクトリ（CI環境対応）
-if hasattr(sys, '_MEIPASS'):
-    # PyInstallerで実行される場合
-    project_root = Path(sys._MEIPASS)
-else:
-    # 通常の開発環境
+block_cipher = None
+
+try:
+    project_root = Path(__file__).resolve().parent
+except NameError:
     project_root = Path.cwd()
 
-app_dir = project_root / "app"
-
-# 隠しインポートの定義（最適化済み）
-hidden_imports = [
-    # PySide6関連（必須）
-    'PySide6.QtCore',
-    'PySide6.QtGui',
-    'PySide6.QtWidgets',
-    'PySide6.QtMultimedia',
-    'PySide6.QtMultimediaWidgets',
-
-    # PaddleOCR関連（コア機能のみ、PaddleX除外）
-    'paddleocr',
-    'paddlepaddle',
-    'paddle',
-    'paddle.utils',
-    'paddle.utils.cpp_extension',
-
-    # OpenCV関連（必須）
-    'cv2',
-    'numpy',
-
-    # 基本ライブラリ（必須）
-    'PIL',
-    'PIL.Image',
-    'pytesseract',
-    'pysrt',
-    'pandas',
-    'yaml',
-    'bidi.algorithm',
-
-    # CPU最適化（基本のみ）
-    'psutil',
-
-    # アプリケーション内部モジュール（必要最小限）
-    'app',
-    'app.main',
-    'app.core',
-    'app.core.models',
-    'app.core.extractor',
-    'app.core.extractor.ocr',
-    'app.core.format',
-    'app.core.format.srt',
-    'app.core.csv',
-    'app.core.qc',
-    'app.core.qc.rules',
-    'app.core.translate',
-    'app.core.cpu_profiler',
-    'app.ui',
-    'app.ui.main_window',
-    'app.ui.views',
-    'app.ui.dialogs',
+# Bundle configuration files and locally cached OCR models alongside the
+# executable so runtime lookups behave the same as in a source checkout.
+_datas = [
+    (str(project_root / "app" / "config"), "app/config"),
+    (str(project_root / "app" / "models"), "app/models"),
 ]
 
-# データファイルの定義（サイズ最適化）
-datas = [
-    ('README.md', '.'),
-]
-
-# アプリケーションモデルファイルが存在する場合のみ追加
-app_models_path = project_root / "app" / "models"
-if app_models_path.exists():
-    datas.append(('app/models', 'models'))
-    print(f"Added app models directory: {app_models_path}")
-
-# PaddleOCR関連のデータファイル（必要最小限）
+# Collect PaddleOCR data files (YAML/dictionary/config files) for OCR functionality
 try:
-    import paddleocr
-    print("PaddleOCR found - lightweight support enabled")
-except ImportError as e:
-    print(f"Warning: PaddleOCR not available: {e}")
+    from PyInstaller.utils.hooks import collect_data_files
 
-# バイナリの定義（PaddleOCRモデルなど）
-binaries = []
+    # Collect PaddleOCR's configuration and dictionary files
+    paddleocr_datas = collect_data_files(
+        "paddleocr", includes=["**/*.yml", "**/*.yaml", "**/*.json", "**/*.txt", "**/*.dict"]
+    )
+    _datas.extend(paddleocr_datas)
+    print(f"Collected {len(paddleocr_datas)} PaddleOCR data files")
 
-# 除外するモジュール（サイズ削減）
-excludes = [
-    # GUI関連（不要）
-    'tkinter',
-    'matplotlib',
-    'wx',
+    # Collect Paddle core configuration files
+    paddle_datas = collect_data_files("paddle", includes=["**/*.yml", "**/*.yaml", "**/*.json"])
+    _datas.extend(paddle_datas)
+    print(f"Collected {len(paddle_datas)} Paddle data files")
 
-    # データサイエンス・ML（不要、Issue #207対応でサイズ削減）
-    'IPython',
-    'jupyter',
-    'notebook',
-    'scipy',
-    'sklearn',
-    'tensorflow',
-    'torch',
-    'torchvision',
-    'torchaudio',  # 音声処理（字幕ツールには不要）
-    'transformers',
-    'ctranslate2',
-    'sentencepiece',
-    'langdetect',
-    'opencc',
+except ImportError:
+    print("Warning: PyInstaller hooks not available, skipping data collection")
+except Exception as e:
+    print(f"Warning: Data collection failed: {e}")
 
-    # ModelScope関連（重い、字幕処理には不要）
-    'modelscope',
-    'aistudio_sdk',
-
-    # HuggingFace関連（重い）
-    'huggingface_hub',
-
-    # 削除された機能
-    'app.core.benchmark',
-    'app.core.linux_optimizer',
-
-    # 未使用ライブラリ（サイズ削減）
-    'loguru',
-    'tqdm',
-    'deepl',
-    'google.cloud.translate',
-    'google.cloud.translate_v3',
-    'google.auth',
-    'google.api_core',
-
-    # 大型ライブラリ（不要）
-    'openpyxl',
-    'xlsxwriter',
-    'xlrd',
-    'seaborn',
-    'plotly',
-
-    # PaddleX大型モジュール除外（Issue #207対応：コア機能は保持）
-    'paddlex.deploy',
-    'paddlex.pipelines.auto_compress',
-    'paddlex.models.llm',
-    'paddlex.models.speech',
-
-    # 音声・動画処理（字幕抽出には不要）
-    'ffmpeg',
-    'av',
-    'imageio_ffmpeg',
-
-    # ネットワーク関連（OCRローカル実行のため）
-    'requests_oauthlib',
-    'urllib3.contrib.pyopenssl',
-
-    # 開発ツール
-    'pytest',
-    'mypy',
-    'black',
-    'isort',
-    'flake8',
+# Hidden imports for PaddleOCR and dynamically loaded modules
+_hiddenimports = [
+    # PySide6 GUI framework
+    "PySide6.QtCore",
+    "PySide6.QtGui",
+    "PySide6.QtWidgets",
+    "PySide6.QtMultimedia",
+    "PySide6.QtMultimediaWidgets",
+    # PaddleOCR core modules
+    "paddleocr",
+    "paddlepaddle",
+    "paddle",
+    "paddle.utils",
+    "paddle.fluid",
+    "paddle.inference",
+    # PaddleOCR inference modules (dynamically imported)
+    "paddleocr.tools.infer.utility",
+    "paddleocr.tools.infer.predict_system",
+    "paddleocr.tools.infer.predict_det",
+    "paddleocr.tools.infer.predict_rec",
+    "paddleocr.tools.infer.predict_cls",
+    "paddleocr.paddleocr",
+    # Core image processing libraries
+    "cv2",
+    "numpy",
+    "PIL",
+    "PIL.Image",
+    # Other application dependencies
+    "pytesseract",
+    "pysrt",
+    "pandas",
+    "yaml",
+    "bidi.algorithm",
+    "psutil",
+    # Application modules
+    "app",
+    "app.main",
+    "app.core",
+    "app.ui",
+    "app.ui.main_window",
 ]
 
-# フックパス設定（存在する場合のみ）
-hookspath_list = []
-hooks_dir = project_root / "hooks"
-if hooks_dir.exists():
-    hookspath_list.append(str(hooks_dir))
-
-# 分析設定（完全スタンドアロン対応）
 a = Analysis(
-    ['app/main.py'],
-    pathex=[str(project_root), str(app_dir)],
-    binaries=binaries,
-    datas=datas + [
-        # アプリケーション全体をバンドル
-        (str(app_dir), 'app'),
-    ],
-    hiddenimports=hidden_imports,
-    hookspath=hookspath_list,
+    ["app/main.py"],
+    pathex=[str(project_root)],
+    binaries=[],
+    datas=_datas,
+    hiddenimports=_hiddenimports,
+    hookspath=[],
     hooksconfig={},
-    runtime_hooks=['hooks/rthook-paddlex.py'],  # Issue #207: PaddleXスタブ化でPaddleOCRインポートエラーを回避
-    excludes=excludes,
+    runtime_hooks=[],
+    excludes=[],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
-    cipher=None,
+    cipher=block_cipher,
     noarchive=False,
-    # 必要最小限のモジュール収集（サイズ最適化）
-    collect_all=[
-        'app',
-    ],
-    # PaddleOCR収集（PaddleXコア機能含む）
-    collect_data=[
-        'paddleocr',
-        'paddle',
-        'paddlex',
-    ],
-    collect_submodules=[
-        'paddleocr',
-        'paddle.utils',
-        'paddlex.inference',
-        'paddlex.utils',
-    ],
 )
 
-# PYZアーカイブ作成
-pyz = PYZ(a.pure, a.zipped_data, cipher=None)
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-# デバッグモード判定（環境変数または設定ファイルから判定）
-# 本番ビルド時は console=False に設定
-import os
-DEBUG_MODE = os.environ.get('VLOG_SUBS_DEBUG', 'false').lower() == 'true'
-
-# 実行ファイル設定（--onedir形式でウイルス誤検知を回避）
 exe = EXE(
     pyz,
     a.scripts,
     [],
     exclude_binaries=True,
-    name='vlog-subs-tool',
+    name="vlog-subs-tool",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=False,  # UPX圧縮を無効化（誤検知回避）
-    console=DEBUG_MODE,  # 環境変数 VLOG_SUBS_DEBUG=true でコンソール表示
+    upx=False,
+    console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,
 )
 
-# ディレクトリ形式でファイルを収集
 coll = COLLECT(
     exe,
     a.binaries,
     a.zipfiles,
     a.datas,
     strip=False,
-    upx=False,  # UPX圧縮を無効化（誤検知回避）
+    upx=False,
     upx_exclude=[],
-    name='vlog-subs-tool',
+    name="vlog-subs-tool",
 )

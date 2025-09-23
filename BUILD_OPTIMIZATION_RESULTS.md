@@ -2,6 +2,10 @@
 
 ## Issue #154: PyInstaller ビルドファイルサイズ最適化
 
+> **Note:** このドキュメントは過去のサイズ最適化検証を記録したものです。現
+> 在のリポジトリは単一の `vlog-subs-tool.spec` に統合され、プラットフォーム
+> 別の spec や独自フックは使用していません。
+
 ### 最適化対象
 - vlog-subs-tool.spec（メインビルドファイル）
 - vlog-subs-tool-macos.spec（macOS専用）

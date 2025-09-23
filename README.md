@@ -186,6 +186,61 @@ subs/
 プロジェクト.subproj     # 作業内容を保存
 ```
 
+## 🏗️ PyInstallerでバイナリを作成する（開発者向け）
+
+ソースコードと同じ挙動になることを最優先した最小構成の `vlog-subs-tool.spec`
+を用意しています。追加の隠しインポートやフック、モジュール除外、UPX圧縮
+などは一切使わず、PyInstaller のデフォルト動作に任せることで、環境の違い
+による ImportError を避けています。
+
+### 1. クリーンな環境を準備
+
+```bash
+python3 -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+### 2. PyInstaller で onedir ビルド
+
+Linux / macOS の例:
+
+```bash
+pyinstaller --clean \
+  --distpath dist/linux \
+  --workpath build/linux \
+  vlog-subs-tool.spec
+```
+
+Windows PowerShell の例:
+
+```powershell
+pyinstaller `
+  --clean `
+  --distpath .\dist\windows `
+  --workpath .\build\windows `
+  .\vlog-subs-tool.spec
+```
+
+> `scripts/build_binary.sh`（Linux/macOS用）や `scripts/test_exe.ps1`
+> （Windows用）を使うと同じコマンドを自動実行できます。どちらも spec を
+> そのまま呼び出すだけの最小構成です。
+
+### 3. 出力物を起動してソース実行と比較
+
+```
+dist/<platform>/vlog-subs-tool/
+└── vlog-subs-tool(.exe)
+```
+
+1. ソースコード側: `python -m app.main`
+2. バイナリ側: `./dist/<platform>/vlog-subs-tool/vlog-subs-tool`
+
+同じテスト動画／画像／字幕を入力し、GUI 上の結果が一致することを確認して
+ください。バイナリは `console=True` でビルドされるため、ImportError など
+が発生した場合はコンソールにそのまま表示されます。
+
 ## 💼 開発者・貢献者の方へ
 
 ### 🤝 バグ報告・機能要望

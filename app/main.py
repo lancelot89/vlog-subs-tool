@@ -159,15 +159,20 @@ def test_imports(logger: Any) -> bool:
 
     # Stage 5: アプリケーションモジュール
     try:
-        if getattr(sys, "frozen", False):
-            from ui.main_window import main as app_main
+        import importlib
+
+        try:
+            main_module = importlib.import_module("app.ui.main_window")
+        except (ImportError, ModuleNotFoundError):
+            main_module = importlib.import_module("ui.main_window")
+
+        # Check if main function exists
+        if hasattr(main_module, "main"):
+            logger.info("✅ Stage 5: アプリケーションモジュール - OK")
+            return True
         else:
-            try:
-                from app.ui.main_window import main as app_main
-            except (ImportError, ModuleNotFoundError):
-                from ui.main_window import main as app_main
-        logger.info("✅ Stage 5: アプリケーションモジュール - OK")
-        return True
+            logger.error("❌ Stage 5: main function not found")
+            return False
     except Exception as e:
         logger.error(f"❌ Stage 5: アプリケーションモジュール - {e}")
         return False
@@ -219,16 +224,15 @@ def main() -> None:
         # メインアプリケーション起動
         logger.info("アプリケーション起動開始")
 
-        if is_standalone:
-            from ui.main_window import main as app_main
-        else:
-            try:
-                from app.ui.main_window import main as app_main
-            except (ImportError, ModuleNotFoundError):
-                from ui.main_window import main as app_main
+        import importlib
+
+        try:
+            main_module = importlib.import_module("app.ui.main_window")
+        except (ImportError, ModuleNotFoundError):
+            main_module = importlib.import_module("ui.main_window")
 
         logger.info("UIモジュール読み込み完了、アプリケーション起動中...")
-        app_main()
+        main_module.main()
         logger.info("アプリケーション正常終了")
 
     except ModuleNotFoundError as e:
