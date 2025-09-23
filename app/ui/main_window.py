@@ -1810,11 +1810,14 @@ def main() -> None:
             logging.error(f"OpenCV import failed: {e}")
 
         try:
-            import paddleocr
+            import importlib.metadata as importlib_metadata
 
-            logging.info("PaddleOCR imported successfully")
-        except ImportError as e:
-            logging.error(f"PaddleOCR import failed: {e}")
+            version = importlib_metadata.version("paddleocr")
+            logging.info(f"PaddleOCR distribution detected (version {version})")
+        except importlib_metadata.PackageNotFoundError:
+            logging.error("PaddleOCR distribution not found")
+        except Exception as e:
+            logging.error(f"PaddleOCR availability check failed: {e}")
 
         # メインウィンドウの作成と表示
         window = MainWindow()

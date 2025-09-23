@@ -56,34 +56,55 @@ import cv2
 import numpy as np
 
 from app.core.cpu_profiler import get_adaptive_thread_config
-from app.core.paddlex_init_guard import safe_paddleocr_import
+from app.core.paddlex_init_guard import is_paddleocr_available, safe_paddleocr_import
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Availability flags --------------------------------------------------------
 # ---------------------------------------------------------------------------
-try:  # pragma: no cover - availability detection
-    # Issue #207対応: 基本的な環境設定でPaddleOCRを使用
-    import os
+PaddleOCR: Optional[Any] = None
+_PADDLE_IMPORT_ERROR: Optional[Exception] = None
+_PADDLE_IMPORT_LOCK = threading.Lock()
 
-    # 基本的なCPU専用設定
-    os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
-    os.environ.setdefault("PADDLE_CPU_ONLY", "1")
-
-    # PaddleOCRを直接インポート（PaddleXも内部で使用される）
-    from paddleocr import PaddleOCR
-
-    PADDLEOCR_AVAILABLE = True
-    _PADDLE_IMPORT_ERROR: Optional[Exception] = None
-
-except Exception as _import_error:  # pragma: no cover - dependency missing
-    PaddleOCR = None
-    PADDLEOCR_AVAILABLE = False
-    _PADDLE_IMPORT_ERROR = _import_error
-
+# PaddleOCR availability is checked via importlib without importing the module.
+PADDLEOCR_AVAILABLE = is_paddleocr_available()
 # PaddleX は使用しない（Issue #207対応でPaddleOCRのみ使用）
-PADDLEX_AVAILABLE = False  # PaddleXは使用しない
+PADDLEX_AVAILABLE = False
+
+
+def _ensure_paddleocr_imported() -> bool:
+    """Import :mod:`paddleocr` lazily with paddlex guards applied."""
+
+    global PaddleOCR, _PADDLE_IMPORT_ERROR, PADDLEOCR_AVAILABLE
+
+    if PaddleOCR is not None:
+        return True
+
+    with _PADDLE_IMPORT_LOCK:
+        if PaddleOCR is not None:
+            return True
+
+        if not is_paddleocr_available():
+            _PADDLE_IMPORT_ERROR = ModuleNotFoundError("paddleocr module not found")
+            PADDLEOCR_AVAILABLE = False
+            return False
+
+        try:
+            safe_paddleocr_import()
+            os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
+            os.environ.setdefault("PADDLE_CPU_ONLY", "1")
+            from paddleocr import PaddleOCR as _PaddleOCR  # type: ignore
+
+            PaddleOCR = _PaddleOCR
+            _PADDLE_IMPORT_ERROR = None
+            PADDLEOCR_AVAILABLE = True
+            return True
+        except Exception as exc:  # pragma: no cover - defensive guard
+            PaddleOCR = None
+            _PADDLE_IMPORT_ERROR = exc
+            PADDLEOCR_AVAILABLE = False
+            return False
 
 
 def safe_paddlex_import() -> None:
@@ -341,8 +362,12 @@ class SimplePaddleOCREngine:
         if self._ocr is not None:
             return True
 
-        if PaddleOCR is None and not PADDLEOCR_AVAILABLE:
+        if not _ensure_paddleocr_imported():
             logger.error("PaddleOCR import failed: %s", _PADDLE_IMPORT_ERROR)
+            return False
+
+        if PaddleOCR is None:  # pragma: no cover - defensive safety net
+            logger.error("PaddleOCR class not available after import attempt")
             return False
 
         # Issue #207対応: PaddleOCRのcpp_extension問題は環境変数で回避済み
@@ -1148,7 +1173,7 @@ def _ocr_worker_process(
     """子プロセスでOCRを実行（Apple Silicon用）"""
     try:
         # 子プロセス内でPaddleOCRエンジンを初期化
-        if not PADDLEOCR_AVAILABLE:
+        if not _ensure_paddleocr_imported():
             result_queue.put({"error": "PaddleOCR not available in worker process"})
             return
 
