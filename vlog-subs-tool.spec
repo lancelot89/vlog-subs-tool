@@ -4,7 +4,9 @@
 The goal is to mirror the behaviour of running the source tree directly.
 This spec includes necessary PaddleOCR resources and hidden imports while
 avoiding custom hooks, module exclusions, UPX compression or other complex
-optimisations. Everything the runtime might touch is included in an onedir build.
+optimisations. Everything the runtime might touch is included in an onedir
+build.  A local hook directory is registered so we can bundle paddlex' data
+files (notably the `.version` marker) that PaddleOCR accesses lazily.
 """
 
 from pathlib import Path
@@ -39,6 +41,25 @@ try:
     _datas.extend(paddle_datas)
     print(f"Collected {len(paddle_datas)} Paddle data files")
 
+    try:
+        paddlex_datas = collect_data_files(
+            "paddlex",
+            includes=[
+                ".version",
+                "*.version",
+                "**/.version",
+                "**/*.yml",
+                "**/*.yaml",
+                "**/*.json",
+                "**/*.txt",
+            ],
+        )
+        _datas.extend(paddlex_datas)
+        if paddlex_datas:
+            print(f"Collected {len(paddlex_datas)} PaddleX data files")
+    except ModuleNotFoundError:
+        print("PaddleX is not installed; skipping PaddleX data collection")
+
 except ImportError:
     print("Warning: PyInstaller hooks not available, skipping data collection")
 except Exception as e:
@@ -66,6 +87,7 @@ _hiddenimports = [
     "paddleocr.tools.infer.predict_rec",
     "paddleocr.tools.infer.predict_cls",
     "paddleocr.paddleocr",
+    "paddlex",
     # Core image processing libraries
     "cv2",
     "numpy",
@@ -92,7 +114,7 @@ a = Analysis(
     binaries=[],
     datas=_datas,
     hiddenimports=_hiddenimports,
-    hookspath=[],
+    hookspath=[str(project_root / "hooks")],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],

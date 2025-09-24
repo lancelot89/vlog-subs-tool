@@ -213,6 +213,11 @@ pyinstaller --clean \
   vlog-subs-tool.spec
 ```
 
+> `vlog-subs-tool.spec` は `hooks/` ディレクトリを自動登録し、
+> `paddlex/.version` や各種設定ファイルをバイナリに同梱します。
+> （PaddleOCR が内部で paddlex を import する際の FileNotFoundError を
+> 防ぐためのフックです）
+
 Windows PowerShell の例:
 
 ```powershell
@@ -222,6 +227,24 @@ pyinstaller `
   --workpath .\build\windows `
   .\vlog-subs-tool.spec
 ```
+
+### 2.1 `--onefile` / カスタムエントリーポイントでビルドする場合
+
+`vlog-subs-tool.spec` を使わずに `pyinstaller app/ui/main_window.py --onefile`
+のように直接ビルドする場合は、paddlex のデータファイルを明示的に収集する
+フックを有効にしてください。
+
+```bash
+pyinstaller app/ui/main_window.py \
+  --onefile \
+  --name vlog-subs-tool \
+  --additional-hooks-dir hooks \
+  --collect-submodules paddlex \
+  --collect-data paddlex
+```
+
+> `hooks/hook-paddlex.py` が `.version` や YAML/JSON 設定ファイルを収集し、
+> onefile 展開後でも PaddleOCR の import が失敗しなくなります。
 
 > `scripts/build_binary.sh`（Linux/macOS用）や `scripts/test_exe.ps1`
 > （Windows用）を使うと同じコマンドを自動実行できます。どちらも spec を
