@@ -3,11 +3,25 @@
 
 The goal is to mirror the behaviour of running the source tree directly.
 This spec includes necessary PaddleOCR resources and hidden imports while
-avoiding custom hooks, module exclusions, UPX compression or other complex
-optimisations. Everything the runtime might touch is included in an onedir build.
+avoiding custom hooks, UPX compression or other complex optimisations. It
+also excludes the unused paddlex package so PyInstaller does not attempt to
+bundle it. Everything the runtime might touch is included in an onedir build.
 """
 
 from pathlib import Path
+
+
+def unique(items):
+    """Return a list with duplicates removed while preserving order."""
+
+    seen = set()
+    ordered = []
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        ordered.append(item)
+    return ordered
 
 block_cipher = None
 
@@ -23,26 +37,8 @@ _datas = [
     (str(project_root / "app" / "models"), "app/models"),
 ]
 
-# Collect PaddleOCR data files (YAML/dictionary/config files) for OCR functionality
-try:
-    from PyInstaller.utils.hooks import collect_data_files
-
-    # Collect PaddleOCR's configuration and dictionary files
-    paddleocr_datas = collect_data_files(
-        "paddleocr", includes=["**/*.yml", "**/*.yaml", "**/*.json", "**/*.txt", "**/*.dict"]
-    )
-    _datas.extend(paddleocr_datas)
-    print(f"Collected {len(paddleocr_datas)} PaddleOCR data files")
-
-    # Collect Paddle core configuration files
-    paddle_datas = collect_data_files("paddle", includes=["**/*.yml", "**/*.yaml", "**/*.json"])
-    _datas.extend(paddle_datas)
-    print(f"Collected {len(paddle_datas)} Paddle data files")
-
-except ImportError:
-    print("Warning: PyInstaller hooks not available, skipping data collection")
-except Exception as e:
-    print(f"Warning: Data collection failed: {e}")
+# Binary artifacts collected from Paddle/PaddleOCR packages.
+_binaries = []
 
 # Hidden imports for PaddleOCR and dynamically loaded modules
 _hiddenimports = [
@@ -54,7 +50,6 @@ _hiddenimports = [
     "PySide6.QtMultimediaWidgets",
     # PaddleOCR core modules
     "paddleocr",
-    "paddlepaddle",
     "paddle",
     "paddle.utils",
     "paddle.fluid",
@@ -86,16 +81,59 @@ _hiddenimports = [
     "app.ui.main_window",
 ]
 
+try:
+    from PyInstaller.utils.hooks import collect_all, collect_submodules
+
+    try:
+        paddle_datas, paddle_binaries, paddle_hidden = collect_all("paddle")
+        _datas.extend(paddle_datas)
+        _binaries.extend(paddle_binaries)
+        _hiddenimports.extend(paddle_hidden)
+        print(
+            "Collected Paddle resources: "
+            f"{len(paddle_datas)} data files, {len(paddle_binaries)} binaries, "
+            f"{len(paddle_hidden)} hidden imports"
+        )
+    except Exception as exc:  # pragma: no cover - diagnostic logging
+        print(f"Warning: Failed to collect Paddle package resources: {exc}")
+
+    try:
+        paddleocr_datas, paddleocr_binaries, paddleocr_hidden = collect_all("paddleocr")
+        _datas.extend(paddleocr_datas)
+        _binaries.extend(paddleocr_binaries)
+        _hiddenimports.extend(paddleocr_hidden)
+        print(
+            "Collected PaddleOCR resources: "
+            f"{len(paddleocr_datas)} data files, {len(paddleocr_binaries)} binaries, "
+            f"{len(paddleocr_hidden)} hidden imports"
+        )
+    except Exception as exc:  # pragma: no cover - diagnostic logging
+        print(f"Warning: Failed to collect PaddleOCR package resources: {exc}")
+
+    try:
+        infer_submodules = collect_submodules("paddleocr.tools.infer")
+        _hiddenimports.extend(infer_submodules)
+        print(f"Collected {len(infer_submodules)} paddleocr.tools.infer submodules")
+    except Exception as exc:  # pragma: no cover - diagnostic logging
+        print(f"Warning: Failed to collect paddleocr.tools.infer submodules: {exc}")
+
+except ImportError:  # pragma: no cover - diagnostic logging
+    print("Warning: PyInstaller hooks not available, skipping Paddle resource collection")
+
+_datas = unique(_datas)
+_binaries = unique(_binaries)
+_hiddenimports = unique(_hiddenimports)
+
 a = Analysis(
     ["app/main.py"],
     pathex=[str(project_root)],
-    binaries=[],
+    binaries=_binaries,
     datas=_datas,
     hiddenimports=_hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=["paddlex"],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
