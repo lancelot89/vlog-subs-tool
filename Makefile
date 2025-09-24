@@ -1,7 +1,7 @@
 # vlog-subs-tool Makefile
 # ローカル開発とCode Quality Checks用（venv環境対応）
 
-.PHONY: help venv install install-dev clean clean-all format format-check lint type-check test quality quality-fix build setup all security outdated ci
+.PHONY: help venv install install-dev clean clean-all format format-check lint type-check test quality quality-fix build build-verbose build-debug setup all security outdated ci
 
 # venv環境設定
 VENV_DIR := venv
@@ -46,11 +46,13 @@ help:
 	@echo "  quality-fix  - 自動修正可能な問題を修正"
 	@echo ""
 	@echo "🏗️ ビルド:"
-	@echo "  build        - PyInstallerでビルド"
-	@echo "  build-mac    - macOS用バイナリビルド"
-	@echo "  build-linux  - Linux用バイナリビルド"
+	@echo "  build         - PyInstallerでビルド"
+	@echo "  build-verbose - 詳細ログ付きPyInstallerビルド"
+	@echo "  build-debug   - デバッグ情報付きビルド"
+	@echo "  build-mac     - macOS用バイナリビルド"
+	@echo "  build-linux   - Linux用バイナリビルド"
 	@echo "  build-windows - Windows用バイナリビルド"
-	@echo "  test-binary  - ビルドしたバイナリの動作テスト"
+	@echo "  test-binary   - ビルドしたバイナリの動作テスト"
 	@echo ""
 	@echo "🔄 統合:"
 	@echo "  all          - setup + quality + build"
@@ -173,10 +175,61 @@ build:
 		exit 1; \
 	fi
 	@echo "PyInstallerでビルド中..."
-	$(PYTHON) -m PyInstaller --clean --noconfirm vlog-subs-tool.spec --distpath dist/local-build --workpath build/local-build
+	@mkdir -p logs
+	@echo "ビルドログを保存中: logs/build.log"
+	$(PYTHON) -m PyInstaller --clean --noconfirm vlog-subs-tool.spec --distpath dist/local-build --workpath build/local-build 2>&1 | tee logs/build.log
 	@echo "ビルド完了: dist/local-build/vlog-subs-tool/"
+	@echo "ビルドログ: logs/build.log"
 	@echo "ビルドサイズ:"
 	du -sh dist/local-build/vlog-subs-tool 2>/dev/null || echo "ビルド出力が見つかりません"
+
+# 詳細ログ付きビルド
+build-verbose:
+	@echo "=== PyInstaller Build (Verbose) ==="
+	@if [ ! -f "$(VENV_PYTHON)" ]; then \
+		echo "❌ venv環境が見つかりません。'make setup' を実行してください"; \
+		exit 1; \
+	fi
+	@echo "詳細ログ付きでPyInstallerビルド中..."
+	@mkdir -p logs
+	@echo "詳細ビルドログを保存中: logs/build-verbose.log"
+	$(PYTHON) -m PyInstaller --clean --noconfirm --log-level=DEBUG vlog-subs-tool.spec --distpath dist/local-build --workpath build/local-build 2>&1 | tee logs/build-verbose.log
+	@echo "詳細ビルド完了: dist/local-build/vlog-subs-tool/"
+	@echo "詳細ログ: logs/build-verbose.log"
+	@echo "ビルドサイズ:"
+	du -sh dist/local-build/vlog-subs-tool 2>/dev/null || echo "ビルド出力が見つかりません"
+
+# デバッグ情報付きビルド
+build-debug:
+	@echo "=== PyInstaller Build (Debug Mode) ==="
+	@if [ ! -f "$(VENV_PYTHON)" ]; then \
+		echo "❌ venv環境が見つかりません。'make setup' を実行してください"; \
+		exit 1; \
+	fi
+	@echo "デバッグモードでPyInstallerビルド中..."
+	@mkdir -p logs
+	@echo "デバッグビルドログを保存中: logs/build-debug.log"
+	@echo "環境変数情報を保存..."
+	@echo "=== Build Environment ===" > logs/build-debug.log
+	@echo "Date: $$(date)" >> logs/build-debug.log
+	@echo "Platform: $$(uname -a)" >> logs/build-debug.log
+	@echo "Python Version: $$($(PYTHON) --version)" >> logs/build-debug.log
+	@echo "PyInstaller Version: $$($(PYTHON) -m PyInstaller --version)" >> logs/build-debug.log
+	@echo "Working Directory: $$(pwd)" >> logs/build-debug.log
+	@echo "Environment Variables:" >> logs/build-debug.log
+	@env | grep -E "(PYTHONPATH|PATH|.*PADDLE.*|.*CUDA.*)" >> logs/build-debug.log || echo "No relevant env vars found" >> logs/build-debug.log
+	@echo "" >> logs/build-debug.log
+	@echo "=== PyInstaller Output ===" >> logs/build-debug.log
+	$(PYTHON) -m PyInstaller --clean --noconfirm --log-level=DEBUG --debug=all vlog-subs-tool.spec --distpath dist/local-build --workpath build/local-build 2>&1 | tee -a logs/build-debug.log
+	@echo "デバッグビルド完了: dist/local-build/vlog-subs-tool/"
+	@echo "デバッグログ: logs/build-debug.log"
+	@echo "ビルドサイズ:"
+	du -sh dist/local-build/vlog-subs-tool 2>/dev/null || echo "ビルド出力が見つかりません"
+	@echo ""
+	@echo "🔍 トラブルシューティング情報:"
+	@echo "  - ログファイル: logs/build-debug.log"
+	@echo "  - ワークディレクトリ: build/local-build/"
+	@echo "  - 出力ディレクトリ: dist/local-build/"
 
 # プラットフォーム別バイナリビルド（Issue #200 対応）
 build-mac:
