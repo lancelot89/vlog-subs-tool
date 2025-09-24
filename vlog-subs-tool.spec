@@ -25,45 +25,65 @@ _datas = [
     (str(project_root / "app" / "models"), "app/models"),
 ]
 
-# Collect PaddleOCR data files (YAML/dictionary/config files) for OCR functionality
+# Collect PaddleOCR data files (YAML/dictionary/config files) and package metadata
 try:
-    from PyInstaller.utils.hooks import collect_data_files
-
-    # Collect PaddleOCR's configuration and dictionary files
-    paddleocr_datas = collect_data_files(
-        "paddleocr", includes=["**/*.yml", "**/*.yaml", "**/*.json", "**/*.txt", "**/*.dict"]
-    )
-    _datas.extend(paddleocr_datas)
-    print(f"Collected {len(paddleocr_datas)} PaddleOCR data files")
-
-    # Collect Paddle core configuration files
-    paddle_datas = collect_data_files("paddle", includes=["**/*.yml", "**/*.yaml", "**/*.json"])
-    _datas.extend(paddle_datas)
-    print(f"Collected {len(paddle_datas)} Paddle data files")
-
-    try:
-        paddlex_datas = collect_data_files(
-            "paddlex",
-            includes=[
-                ".version",
-                "*.version",
-                "**/.version",
-                "**/*.yml",
-                "**/*.yaml",
-                "**/*.json",
-                "**/*.txt",
-            ],
-        )
-        _datas.extend(paddlex_datas)
-        if paddlex_datas:
-            print(f"Collected {len(paddlex_datas)} PaddleX data files")
-    except ModuleNotFoundError:
-        print("PaddleX is not installed; skipping PaddleX data collection")
-
+    from PyInstaller.utils.hooks import collect_data_files, copy_metadata
 except ImportError:
     print("Warning: PyInstaller hooks not available, skipping data collection")
-except Exception as e:
-    print(f"Warning: Data collection failed: {e}")
+else:
+    try:
+        # Collect PaddleOCR's configuration and dictionary files
+        paddleocr_datas = collect_data_files(
+            "paddleocr",
+            includes=["**/*.yml", "**/*.yaml", "**/*.json", "**/*.txt", "**/*.dict"],
+        )
+        _datas.extend(paddleocr_datas)
+        print(f"Collected {len(paddleocr_datas)} PaddleOCR data files")
+
+        # Collect Paddle core configuration files
+        paddle_datas = collect_data_files(
+            "paddle", includes=["**/*.yml", "**/*.yaml", "**/*.json"]
+        )
+        _datas.extend(paddle_datas)
+        print(f"Collected {len(paddle_datas)} Paddle data files")
+
+        try:
+            paddlex_datas = collect_data_files(
+                "paddlex",
+                includes=[
+                    ".version",
+                    "*.version",
+                    "**/.version",
+                    "**/*.yml",
+                    "**/*.yaml",
+                    "**/*.json",
+                    "**/*.txt",
+                ],
+            )
+            _datas.extend(paddlex_datas)
+            if paddlex_datas:
+                print(f"Collected {len(paddlex_datas)} PaddleX data files")
+        except ModuleNotFoundError:
+            print("PaddleX is not installed; skipping PaddleX data collection")
+
+        def _extend_with_metadata(dist_name: str, label: str) -> None:
+            try:
+                metadata_entries = copy_metadata(dist_name)
+            except ModuleNotFoundError:
+                print(f"{label} is not installed; skipping metadata collection")
+            except Exception as metadata_error:  # pragma: no cover - diagnostic only
+                print(f"Warning: Failed to collect {label} metadata: {metadata_error}")
+            else:
+                _datas.extend(metadata_entries)
+                if metadata_entries:
+                    print(f"Collected {len(metadata_entries)} {label} metadata files")
+
+        _extend_with_metadata("paddleocr", "PaddleOCR")
+        _extend_with_metadata("paddlepaddle", "PaddlePaddle")
+        _extend_with_metadata("paddlex", "PaddleX")
+
+    except Exception as e:
+        print(f"Warning: Data collection failed: {e}")
 
 # Hidden imports for PaddleOCR and dynamically loaded modules
 _hiddenimports = [

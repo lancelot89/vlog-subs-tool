@@ -10,7 +10,7 @@ files the package loads dynamically and registers all of its lazy imports so
 
 from __future__ import annotations
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
 
 _datas = []
 _hiddenimports = []
@@ -37,6 +37,14 @@ try:
     # paddlex exposes optional helper modules that paddleocr imports lazily.
     # Register all of them so PyInstaller pulls the bytecode into the build.
     _hiddenimports.extend(collect_submodules("paddlex"))
+
+    # Ensure the package's distribution metadata is preserved so
+    # importlib.metadata lookups continue to work inside the frozen app.
+    try:
+        _datas.extend(copy_metadata("paddlex"))
+    except Exception:
+        # copy_metadata raises PackageNotFoundError when the distribution is absent.
+        pass
 except ModuleNotFoundError:
     # The project does not always install paddlex (it is an optional
     # dependency).  Allow the build to continue without it; if the package is

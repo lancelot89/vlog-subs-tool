@@ -214,9 +214,10 @@ pyinstaller --clean \
 ```
 
 > `vlog-subs-tool.spec` は `hooks/` ディレクトリを自動登録し、
-> `paddlex/.version` や各種設定ファイルをバイナリに同梱します。
-> （PaddleOCR が内部で paddlex を import する際の FileNotFoundError を
-> 防ぐためのフックです）
+> `paddlex/.version` や各種設定ファイルに加えて
+> `paddleocr` / `paddlepaddle` / `paddlex` のメタデータもバイナリに同梱します。
+> （PaddleOCR が内部で paddlex を import する際の FileNotFoundError と
+> `importlib.metadata.version("paddleocr")` が失敗する問題を防ぐフックです）
 
 Windows PowerShell の例:
 
@@ -240,7 +241,10 @@ pyinstaller app/ui/main_window.py \
   --name vlog-subs-tool \
   --additional-hooks-dir hooks \
   --collect-submodules paddlex \
-  --collect-data paddlex
+  --collect-data paddlex \
+  --collect-metadata paddleocr \
+  --collect-metadata paddlepaddle \
+  --collect-metadata paddlex
 ```
 
 > `hooks/hook-paddlex.py` が `.version` や YAML/JSON 設定ファイルを収集し、
