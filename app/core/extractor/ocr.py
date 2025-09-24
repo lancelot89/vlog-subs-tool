@@ -82,9 +82,6 @@ def _ensure_paddleocr_imported() -> bool:
         return True
 
     with _PADDLE_IMPORT_LOCK:
-        if PaddleOCR is not None:
-            return True
-
         if not is_paddleocr_available():
             _PADDLE_IMPORT_ERROR = ModuleNotFoundError("paddleocr module not found")
             PADDLEOCR_AVAILABLE = False
@@ -94,7 +91,7 @@ def _ensure_paddleocr_imported() -> bool:
             safe_paddleocr_import()
             os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
             os.environ.setdefault("PADDLE_CPU_ONLY", "1")
-            from paddleocr import PaddleOCR as _PaddleOCR  # type: ignore
+            from paddleocr import PaddleOCR as _PaddleOCR
 
             PaddleOCR = _PaddleOCR
             _PADDLE_IMPORT_ERROR = None

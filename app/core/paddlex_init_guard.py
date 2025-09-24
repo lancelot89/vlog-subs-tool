@@ -59,12 +59,10 @@ def _populate_cpp_extension_stub(module: types.ModuleType) -> types.ModuleType:
     if getattr(module, "_vst_cpp_extension_stub", False):
         return module
 
-    module.__file__ = getattr(
-        module, "__file__", "vlog-subs-tool:paddle_cpp_extension_stub.py"
-    )
+    module.__file__ = getattr(module, "__file__", "vlog-subs-tool:paddle_cpp_extension_stub.py")
     module.__package__ = "paddle.utils"
     module.__path__ = []  # Mark as package so submodule imports succeed
-    module._vst_cpp_extension_stub = True
+    module._vst_cpp_extension_stub = True  # type: ignore[attr-defined]
 
     class _DisabledExtension:
         def __init__(self, *args: Any, **kwargs: Any) -> None:  # pragma: no cover -
@@ -81,9 +79,7 @@ def _populate_cpp_extension_stub(module: types.ModuleType) -> types.ModuleType:
 
     def _log_stubbed(name: str) -> Callable[..., Any]:
         def _inner(*args: Any, **kwargs: Any) -> Any:  # pragma: no cover -
-            logger.debug(
-                "paddle.utils.cpp_extension.%s() stubbed in frozen build", name
-            )
+            logger.debug("paddle.utils.cpp_extension.%s() stubbed in frozen build", name)
             return None
 
         return _inner
@@ -96,38 +92,32 @@ def _populate_cpp_extension_stub(module: types.ModuleType) -> types.ModuleType:
         logger.debug("Skipping paddle.utils.cpp_extension.load() in frozen build")
         return types.SimpleNamespace()
 
-    module.CppExtension = _DisabledExtension
-    module.CUDAExtension = _DisabledExtension
-    module.BuildExtension = _DisabledBuildExtension
-    module.setup = _log_stubbed("setup")
-    module.load = _stub_load
-    module.get_build_directory = (
-        lambda *args, **kwargs: os.path.join(
-            tempfile.gettempdir(), "paddle_cpp_extensions"
-        )
+    module.CppExtension = _DisabledExtension  # type: ignore[attr-defined]
+    module.CUDAExtension = _DisabledExtension  # type: ignore[attr-defined]
+    module.BuildExtension = _DisabledBuildExtension  # type: ignore[attr-defined]
+    module.setup = _log_stubbed("setup")  # type: ignore[attr-defined]
+    module.load = _stub_load  # type: ignore[attr-defined]
+    module.get_build_directory = lambda *args, **kwargs: os.path.join(  # type: ignore[attr-defined]
+        tempfile.gettempdir(), "paddle_cpp_extensions"
     )
-    module.load_op_meta_info_and_register_op = _log_stubbed(
-        "load_op_meta_info_and_register_op"
-    )
-    module.parse_op_info = lambda *args, **kwargs: []
-    module.normalize_extension_kwargs = _stub_normalize
-    module.bootstrap_context = contextlib.nullcontext
-    module.add_compile_flag = _log_stubbed("add_compile_flag")
-    module.clean_object_if_change_cflags = _log_stubbed(
-        "clean_object_if_change_cflags"
-    )
-    module.check_abi_compatibility = _log_stubbed("check_abi_compatibility")
-    module.log_v = lambda *args, **kwargs: None
-    module.find_ccache_home = lambda: None
-    module.find_cuda_home = lambda: None
-    module.find_rocm_home = lambda: None
-    module.IS_WINDOWS = sys.platform.startswith("win")
-    module.OS_NAME = os.name
-    module.MSVC_COMPILE_FLAGS = []
-    module.CLANG_COMPILE_FLAGS = []
-    module.CLANG_LINK_FLAGS = []
-    module.CCACHE_HOME = None
-    module.__all__ = [
+    module.load_op_meta_info_and_register_op = _log_stubbed("load_op_meta_info_and_register_op")  # type: ignore[attr-defined]
+    module.parse_op_info = lambda *args, **kwargs: []  # type: ignore[attr-defined]
+    module.normalize_extension_kwargs = _stub_normalize  # type: ignore[attr-defined]
+    module.bootstrap_context = contextlib.nullcontext  # type: ignore[attr-defined]
+    module.add_compile_flag = _log_stubbed("add_compile_flag")  # type: ignore[attr-defined]
+    module.clean_object_if_change_cflags = _log_stubbed("clean_object_if_change_cflags")  # type: ignore[attr-defined]
+    module.check_abi_compatibility = _log_stubbed("check_abi_compatibility")  # type: ignore[attr-defined]
+    module.log_v = lambda *args, **kwargs: None  # type: ignore[attr-defined]
+    module.find_ccache_home = lambda: None  # type: ignore[attr-defined]
+    module.find_cuda_home = lambda: None  # type: ignore[attr-defined]
+    module.find_rocm_home = lambda: None  # type: ignore[attr-defined]
+    module.IS_WINDOWS = sys.platform.startswith("win")  # type: ignore[attr-defined]
+    module.OS_NAME = os.name  # type: ignore[attr-defined]
+    module.MSVC_COMPILE_FLAGS = []  # type: ignore[attr-defined]
+    module.CLANG_COMPILE_FLAGS = []  # type: ignore[attr-defined]
+    module.CLANG_LINK_FLAGS = []  # type: ignore[attr-defined]
+    module.CCACHE_HOME = None  # type: ignore[attr-defined]
+    module.__all__ = [  # type: ignore[attr-defined]
         "CppExtension",
         "CUDAExtension",
         "BuildExtension",
@@ -139,14 +129,12 @@ def _populate_cpp_extension_stub(module: types.ModuleType) -> types.ModuleType:
     ]
 
     def _module_getattr(name: str) -> Any:  # pragma: no cover - defensive fallback
-        logger.debug(
-            "Providing dynamic stub for paddle.utils.cpp_extension.%s", name
-        )
+        logger.debug("Providing dynamic stub for paddle.utils.cpp_extension.%s", name)
         return _log_stubbed(name)
 
-    module.__getattr__ = _module_getattr  # type: ignore[attr-defined]
-    module.cpp_extension = module
-    module.extension_utils = module
+    module.__getattr__ = _module_getattr  # type: ignore[method-assign]
+    module.cpp_extension = module  # type: ignore[attr-defined]
+    module.extension_utils = module  # type: ignore[attr-defined]
     return module
 
 
