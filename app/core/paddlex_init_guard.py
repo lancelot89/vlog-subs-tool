@@ -4,11 +4,14 @@ PaddleOCR初期化ガード - バイナリ実行時の重複初期化を防止
 Issue #207 対応: PaddleOCRのcpp_extension問題を解決（PaddleXは使用しない）
 """
 
+import contextlib
 import functools
 import logging
 import os
 import sys
+import tempfile
 import threading
+import types
 from typing import Any, Callable, Optional
 
 logger = logging.getLogger(__name__)
@@ -38,6 +41,121 @@ def get_paddleocr_init_status() -> dict:
         "is_binary": hasattr(sys, "_MEIPASS"),
         "binary_init_complete": _binary_init_complete,
     }
+
+
+def _populate_cpp_extension_stub(module: types.ModuleType) -> types.ModuleType:
+    """Install a lightweight stub for :mod:`paddle.utils.cpp_extension`.
+
+    When PaddleOCR imports :mod:`paddle`, the package eagerly imports
+    ``paddle.utils.cpp_extension`` which in turn probes the local compiler tool
+    chain (``ccache``/``cl.exe``/``nvcc``).  PyInstaller bundles do not ship
+    with these developer tools and the probing step emits warnings and, on
+    Windows, may attempt to spawn subprocesses that fail outright.  The
+    application only relies on Paddle's high level Python APIs, therefore the
+    extension machinery can be replaced with a minimal stub that exposes the
+    expected attributes while short‑circuiting any build logic.
+    """
+
+    if getattr(module, "_vst_cpp_extension_stub", False):
+        return module
+
+    module.__file__ = getattr(module, "__file__", "vlog-subs-tool:paddle_cpp_extension_stub.py")
+    module.__package__ = "paddle.utils"
+    module.__path__ = []  # Mark as package so submodule imports succeed
+    module._vst_cpp_extension_stub = True  # type: ignore[attr-defined]
+
+    class _DisabledExtension:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:  # pragma: no cover -
+            self.args = args
+            self.kwargs = kwargs
+
+    class _DisabledBuildExtension:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:  # pragma: no cover -
+            self.args = args
+            self.kwargs = kwargs
+
+        def build_extensions(self, *args: Any, **kwargs: Any) -> None:  # pragma: no cover -
+            return None
+
+    def _log_stubbed(name: str) -> Callable[..., Any]:
+        def _inner(*args: Any, **kwargs: Any) -> Any:  # pragma: no cover -
+            logger.debug("paddle.utils.cpp_extension.%s() stubbed in frozen build", name)
+            return None
+
+        return _inner
+
+    def _stub_normalize(kwargs: Any, use_cuda: bool = False) -> Any:  # pragma: no cover -
+        logger.debug("normalize_extension_kwargs() stubbed in frozen build")
+        return kwargs
+
+    def _stub_load(*args: Any, **kwargs: Any) -> Any:  # pragma: no cover -
+        logger.debug("Skipping paddle.utils.cpp_extension.load() in frozen build")
+        return types.SimpleNamespace()
+
+    module.CppExtension = _DisabledExtension  # type: ignore[attr-defined]
+    module.CUDAExtension = _DisabledExtension  # type: ignore[attr-defined]
+    module.BuildExtension = _DisabledBuildExtension  # type: ignore[attr-defined]
+    module.setup = _log_stubbed("setup")  # type: ignore[attr-defined]
+    module.load = _stub_load  # type: ignore[attr-defined]
+    module.get_build_directory = lambda *args, **kwargs: os.path.join(  # type: ignore[attr-defined]
+        tempfile.gettempdir(), "paddle_cpp_extensions"
+    )
+    module.load_op_meta_info_and_register_op = _log_stubbed("load_op_meta_info_and_register_op")  # type: ignore[attr-defined]
+    module.parse_op_info = lambda *args, **kwargs: []  # type: ignore[attr-defined]
+    module.normalize_extension_kwargs = _stub_normalize  # type: ignore[attr-defined]
+    module.bootstrap_context = contextlib.nullcontext  # type: ignore[attr-defined]
+    module.add_compile_flag = _log_stubbed("add_compile_flag")  # type: ignore[attr-defined]
+    module.clean_object_if_change_cflags = _log_stubbed("clean_object_if_change_cflags")  # type: ignore[attr-defined]
+    module.check_abi_compatibility = _log_stubbed("check_abi_compatibility")  # type: ignore[attr-defined]
+    module.log_v = lambda *args, **kwargs: None  # type: ignore[attr-defined]
+    module.find_ccache_home = lambda: None  # type: ignore[attr-defined]
+    module.find_cuda_home = lambda: None  # type: ignore[attr-defined]
+    module.find_rocm_home = lambda: None  # type: ignore[attr-defined]
+    module.IS_WINDOWS = sys.platform.startswith("win")  # type: ignore[attr-defined]
+    module.OS_NAME = os.name  # type: ignore[attr-defined]
+    module.MSVC_COMPILE_FLAGS = []  # type: ignore[attr-defined]
+    module.CLANG_COMPILE_FLAGS = []  # type: ignore[attr-defined]
+    module.CLANG_LINK_FLAGS = []  # type: ignore[attr-defined]
+    module.CCACHE_HOME = None  # type: ignore[attr-defined]
+    module.__all__ = [  # type: ignore[attr-defined]
+        "CppExtension",
+        "CUDAExtension",
+        "BuildExtension",
+        "load",
+        "setup",
+        "get_build_directory",
+        "load_op_meta_info_and_register_op",
+        "parse_op_info",
+    ]
+
+    def _module_getattr(name: str) -> Any:  # pragma: no cover - defensive fallback
+        logger.debug("Providing dynamic stub for paddle.utils.cpp_extension.%s", name)
+        return _log_stubbed(name)
+
+    module.__getattr__ = _module_getattr  # type: ignore[method-assign]
+    module.cpp_extension = module  # type: ignore[attr-defined]
+    module.extension_utils = module  # type: ignore[attr-defined]
+    return module
+
+
+def _install_cpp_extension_stub() -> None:
+    module_name = "paddle.utils.cpp_extension"
+    existing = sys.modules.get(module_name)
+
+    if existing is None:
+        existing = types.ModuleType(module_name)
+        sys.modules[module_name] = existing
+        logger.info("Installed Paddle cpp_extension stub for frozen runtime")
+    else:
+        logger.info("Reusing pre-imported Paddle cpp_extension module with stub")
+
+    stub = _populate_cpp_extension_stub(existing)
+
+    for alias in (
+        f"{module_name}.cpp_extension",
+        f"{module_name}.extension_utils",
+    ):
+        sys.modules[alias] = stub
 
 
 def ensure_paddleocr_cpp_extension_safe() -> None:
@@ -187,6 +305,9 @@ def setup_paddleocr_environment_for_binary() -> None:
     # Issue #207対応: cpp_extension問題を回避
     os.environ.setdefault("PADDLE_SKIP_CUDA_COMPILER_CHECK", "1")
     os.environ.setdefault("PADDLE_DISABLE_CPP_EXTENSION", "1")
+
+    # PyInstallerバイナリではcpp_extensionをスタブ化してビルドツール探索を防止
+    _install_cpp_extension_stub()
 
     # PaddleX初期化制御（バイナリ実行時の重複初期化防止）
     os.environ.setdefault("PADDLEX_DISABLE_AUTO_INIT", "1")
