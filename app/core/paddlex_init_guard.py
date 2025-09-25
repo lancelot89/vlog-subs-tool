@@ -14,8 +14,7 @@ import sys
 import tempfile
 import threading
 import types
-from typing import Any, Callable, Optional
-
+from typing import Any, Callable, Mapping, Optional, Sequence
 from unittest.mock import MagicMock
 
 logger = logging.getLogger(__name__)
@@ -94,9 +93,9 @@ def _install_paddlex_import_guard() -> None:
 
     def stub_paddlex_import(
         name: str,
-        globals: Optional[dict] = None,
-        locals: Optional[dict] = None,
-        fromlist: tuple[str, ...] = (),
+        globals: Optional[Mapping[str, Any]] = None,
+        locals: Optional[Mapping[str, Any]] = None,
+        fromlist: Sequence[str] = (),
         level: int = 0,
     ) -> types.ModuleType:
         if not name.startswith("paddlex"):
