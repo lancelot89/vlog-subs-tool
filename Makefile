@@ -46,7 +46,7 @@ help:
 	@echo "  quality-fix  - 自動修正可能な問題を修正"
 	@echo ""
 	@echo "🏗️ ビルド:"
-	@echo "  build        - PyInstallerでビルド"
+	@echo "  build        - PyInstallerでビルド (ログ: build/logs/build_latest.log)"
 	@echo "  build-mac    - macOS用バイナリビルド"
 	@echo "  build-linux  - Linux用バイナリビルド"
 	@echo "  build-windows - Windows用バイナリビルド"
@@ -172,11 +172,19 @@ build:
 		echo "❌ venv環境が見つかりません。'make setup' を実行してください"; \
 		exit 1; \
 	fi
+	@mkdir -p build/logs
 	@echo "PyInstallerでビルド中..."
-	$(PYTHON) -m PyInstaller --clean --noconfirm vlog-subs-tool.spec --distpath dist/local-build --workpath build/local-build
+	@echo "=== PyInstaller Build Log - $$(date) ===" > build/logs/build_latest.log
+	@$(PYTHON) -m PyInstaller --clean --noconfirm vlog-subs-tool.spec --distpath dist/local-build --workpath build/local-build 2>&1 | tee -a build/logs/build_latest.log
+	@echo "" >> build/logs/build_latest.log
+	@echo "=== Build Summary - $$(date) ===" >> build/logs/build_latest.log
+	@echo "✅ ビルド成功" | tee -a build/logs/build_latest.log
 	@echo "ビルド完了: dist/local-build/vlog-subs-tool/"
 	@echo "ビルドサイズ:"
-	du -sh dist/local-build/vlog-subs-tool 2>/dev/null || echo "ビルド出力が見つかりません"
+	@du -sh dist/local-build/vlog-subs-tool 2>/dev/null | tee -a build/logs/build_latest.log || echo "ビルド出力が見つかりません" | tee -a build/logs/build_latest.log
+	@cp build/logs/build_latest.log "build/logs/build_$$(date +%Y%m%d_%H%M%S).log"
+	@echo "📝 詳細ログ: build/logs/build_latest.log"
+	@echo "📝 バックアップログ: build/logs/build_$$(date +%Y%m%d_%H%M%S).log"
 
 # プラットフォーム別バイナリビルド（Issue #200 対応）
 build-mac:
