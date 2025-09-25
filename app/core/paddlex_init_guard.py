@@ -6,6 +6,8 @@ Issue #207 対応: PaddleOCRのcpp_extension問題を解決（PaddleXは使用�
 
 import contextlib
 import functools
+import importlib
+import importlib.util
 import logging
 import os
 import sys
@@ -14,12 +16,118 @@ import threading
 import types
 from typing import Any, Callable, Optional
 
+from unittest.mock import MagicMock
+
 logger = logging.getLogger(__name__)
 
 # グローバル状態管理
 _paddleocr_initialized = False
 _paddleocr_init_lock = threading.Lock()
 _binary_init_complete = False  # バイナリ実行時の初期化完了フラグ
+_paddlex_stub_installed = False
+
+
+def _ensure_paddlex_stub(module_name: str) -> types.ModuleType:
+    """Create and cache a lightweight paddlex stub module.
+
+    Paddle >= 2.6 attempts to import :mod:`paddlex` during eager
+    initialisation even though the dependency is optional and this project does
+    not ship it.  When the module is missing PyInstaller binaries would raise
+    ``ModuleNotFoundError`` before the paddlex guard can block the import.
+
+    The stub emulates a namespace package and lazily provides ``MagicMock``
+    objects for attributes and nested submodules so any accidental usage fails
+    softly instead of crashing the process.  Real paddlex installations remain
+    untouched because the stub is only created when ``importlib`` cannot find a
+    concrete spec for the requested module.
+    """
+
+    module = sys.modules.get(module_name)
+    if module is not None:
+        return module
+
+    if importlib.util.find_spec(module_name) is not None:  # pragma: no cover -
+        # A real paddlex module exists, do not shadow it.
+        return importlib.import_module(module_name)
+
+    parent_name, _, child_name = module_name.rpartition(".")
+
+    module = types.ModuleType(module_name)
+    module.__file__ = "vlog-subs-tool:paddlex_stub.py"
+    module.__package__ = parent_name or module_name
+    if not parent_name:
+        module.__path__ = []  # Mark as package root so ``import paddlex.foo`` works.
+
+    def _lazy_attr(name: str, fullname: Optional[str] = None) -> MagicMock:  # pragma: no cover -
+        fullname = fullname or f"{module_name}.{name}"
+        mock = MagicMock(name=fullname)
+        setattr(module, name, mock)
+        return mock
+
+    module.__getattr__ = lambda name: _lazy_attr(name)  # type: ignore[method-assign]
+    sys.modules[module_name] = module
+    logger.info("Registered PaddleX stub module: %s", module_name)
+
+    if parent_name and child_name:
+        parent = _ensure_paddlex_stub(parent_name)
+        setattr(parent, child_name, module)
+
+    return module
+
+
+def _install_paddlex_import_guard() -> None:
+    """Install an import hook that satisfies paddlex lookups."""
+
+    global _paddlex_stub_installed
+
+    if _paddlex_stub_installed:
+        return
+
+    if importlib.util.find_spec("paddlex") is not None:
+        logger.debug("Real PaddleX installation detected; import guard not installed")
+        _paddlex_stub_installed = True
+        return
+
+    import builtins
+
+    original_import = builtins.__import__
+
+    def stub_paddlex_import(
+        name: str,
+        globals: Optional[dict] = None,
+        locals: Optional[dict] = None,
+        fromlist: tuple[str, ...] = (),
+        level: int = 0,
+    ) -> types.ModuleType:
+        if not name.startswith("paddlex"):
+            return original_import(name, globals, locals, fromlist, level)
+
+        root_name, _, remainder = name.partition(".")
+        root_module = _ensure_paddlex_stub(root_name)
+
+        if remainder:
+            # Ensure the immediate child package exists so ``import paddlex.foo`` works.
+            child_name = remainder.split(".")[0]
+            child_module = _ensure_paddlex_stub(f"{root_name}.{child_name}")
+            setattr(root_module, child_name, child_module)
+
+        target_module = _ensure_paddlex_stub(name)
+
+        if fromlist:
+            for attr in fromlist:
+                if attr == "*":
+                    continue
+                qualified = f"{name}.{attr}" if name != "paddlex" else f"paddlex.{attr}"
+                submodule = _ensure_paddlex_stub(qualified)
+                setattr(target_module, attr, submodule)
+            return target_module
+
+        return root_module
+
+    builtins.__import__ = stub_paddlex_import
+    _ensure_paddlex_stub("paddlex")
+    logger.info("Installed PaddleX import guard for frozen runtime")
+    _paddlex_stub_installed = True
 
 
 def is_paddleocr_available() -> bool:
@@ -196,21 +304,7 @@ def ensure_paddleocr_cpp_extension_safe() -> None:
                     del sys.modules[mod]
                     logger.info(f"Removed PaddleX module from sys.modules: {mod}")
 
-                # PaddleXインポートを阻止するモンキーパッチ（バイナリ実行時のみ）
-                def stub_paddlex_import(name: str, *args: Any, **kwargs: Any) -> Any:
-                    if name.startswith("paddlex"):
-                        logger.warning(f"PaddleX import blocked in binary: {name}")
-                        # ダミーモジュールを返して重複初期化を防止
-                        from unittest.mock import Mock
-
-                        return Mock()
-                    return original_import(name, *args, **kwargs)
-
-                # importをパッチ
-                import builtins
-
-                original_import = builtins.__import__
-                builtins.__import__ = stub_paddlex_import
+                _install_paddlex_import_guard()
 
             # cpp_extension.load のモンキーパッチ
             def stub_cpp_extension_load(*args: Any, **kwargs: Any) -> Any:
@@ -314,6 +408,8 @@ def setup_paddleocr_environment_for_binary() -> None:
     os.environ.setdefault("PADDLEX_INIT_DISABLED", "1")
     os.environ.setdefault("PADDLEX_DISABLE", "1")
     os.environ.setdefault("DISABLE_PADDLEX", "1")
+
+    _install_paddlex_import_guard()
 
     # 基本的なCPU専用設定も事前に適用
     os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
