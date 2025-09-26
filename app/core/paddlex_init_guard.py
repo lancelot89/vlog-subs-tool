@@ -1,7 +1,12 @@
-"""
-PaddleOCR初期化ガード - バイナリ実行時の重複初期化を防止
+"""Runtime guards for PaddleOCR/PaddleX in frozen binaries.
 
-Issue #207 対応: PaddleOCRのcpp_extension問題を解決（PaddleXは使用しない）
+The application relies on PaddleOCR and PaddleX to perform OCR inference.
+Frozen binaries produced by PyInstaller need a few adjustments so that
+Paddle's optional C++ extension loader does not attempt to build custom
+operators and so that runtime environments fail fast when required modules
+are missing.  This module centralises those safeguards and exposes helpers
+that other parts of the application can call before interacting with the
+OCR stack.
 """
 
 import contextlib
@@ -14,8 +19,7 @@ import sys
 import tempfile
 import threading
 import types
-from typing import Any, Callable, Mapping, Optional, Sequence
-from unittest.mock import MagicMock
+from typing import Any, Callable, Optional, Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -23,110 +27,6 @@ logger = logging.getLogger(__name__)
 _paddleocr_initialized = False
 _paddleocr_init_lock = threading.Lock()
 _binary_init_complete = False  # バイナリ実行時の初期化完了フラグ
-_paddlex_stub_installed = False
-
-
-def _ensure_paddlex_stub(module_name: str) -> types.ModuleType:
-    """Create and cache a lightweight paddlex stub module.
-
-    Paddle >= 2.6 attempts to import :mod:`paddlex` during eager
-    initialisation even though the dependency is optional and this project does
-    not ship it.  When the module is missing PyInstaller binaries would raise
-    ``ModuleNotFoundError`` before the paddlex guard can block the import.
-
-    The stub emulates a namespace package and lazily provides ``MagicMock``
-    objects for attributes and nested submodules so any accidental usage fails
-    softly instead of crashing the process.  Real paddlex installations remain
-    untouched because the stub is only created when ``importlib`` cannot find a
-    concrete spec for the requested module.
-    """
-
-    module = sys.modules.get(module_name)
-    if module is not None:
-        return module
-
-    if importlib.util.find_spec(module_name) is not None:  # pragma: no cover -
-        # A real paddlex module exists, do not shadow it.
-        return importlib.import_module(module_name)
-
-    parent_name, _, child_name = module_name.rpartition(".")
-
-    module = types.ModuleType(module_name)
-    module.__file__ = "vlog-subs-tool:paddlex_stub.py"
-    module.__package__ = parent_name or module_name
-    if not parent_name:
-        module.__path__ = []  # Mark as package root so ``import paddlex.foo`` works.
-
-    def _lazy_attr(name: str, fullname: Optional[str] = None) -> MagicMock:  # pragma: no cover -
-        fullname = fullname or f"{module_name}.{name}"
-        mock = MagicMock(name=fullname)
-        setattr(module, name, mock)
-        return mock
-
-    module.__getattr__ = lambda name: _lazy_attr(name)  # type: ignore[method-assign]
-    sys.modules[module_name] = module
-    logger.info("Registered PaddleX stub module: %s", module_name)
-
-    if parent_name and child_name:
-        parent = _ensure_paddlex_stub(parent_name)
-        setattr(parent, child_name, module)
-
-    return module
-
-
-def _install_paddlex_import_guard() -> None:
-    """Install an import hook that satisfies paddlex lookups."""
-
-    global _paddlex_stub_installed
-
-    if _paddlex_stub_installed:
-        return
-
-    if importlib.util.find_spec("paddlex") is not None:
-        logger.debug("Real PaddleX installation detected; import guard not installed")
-        _paddlex_stub_installed = True
-        return
-
-    import builtins
-
-    original_import = builtins.__import__
-
-    def stub_paddlex_import(
-        name: str,
-        globals: Optional[Mapping[str, Any]] = None,
-        locals: Optional[Mapping[str, Any]] = None,
-        fromlist: Sequence[str] = (),
-        level: int = 0,
-    ) -> types.ModuleType:
-        if not name.startswith("paddlex"):
-            return original_import(name, globals, locals, fromlist, level)
-
-        root_name, _, remainder = name.partition(".")
-        root_module = _ensure_paddlex_stub(root_name)
-
-        if remainder:
-            # Ensure the immediate child package exists so ``import paddlex.foo`` works.
-            child_name = remainder.split(".")[0]
-            child_module = _ensure_paddlex_stub(f"{root_name}.{child_name}")
-            setattr(root_module, child_name, child_module)
-
-        target_module = _ensure_paddlex_stub(name)
-
-        if fromlist:
-            for attr in fromlist:
-                if attr == "*":
-                    continue
-                qualified = f"{name}.{attr}" if name != "paddlex" else f"paddlex.{attr}"
-                submodule = _ensure_paddlex_stub(qualified)
-                setattr(target_module, attr, submodule)
-            return target_module
-
-        return root_module
-
-    builtins.__import__ = stub_paddlex_import
-    _ensure_paddlex_stub("paddlex")
-    logger.info("Installed PaddleX import guard for frozen runtime")
-    _paddlex_stub_installed = True
 
 
 def is_paddleocr_available() -> bool:
@@ -148,6 +48,46 @@ def get_paddleocr_init_status() -> dict:
         "is_binary": hasattr(sys, "_MEIPASS"),
         "binary_init_complete": _binary_init_complete,
     }
+
+
+def verify_paddle_runtime_dependencies(
+    modules: Optional[Sequence[str]] = None,
+) -> None:
+    """Ensure critical Paddle modules can be imported.
+
+    Parameters
+    ----------
+    modules:
+        Optional explicit list of module names to validate.  When ``None`` the
+        default list (``paddle``, ``paddleocr`` and ``paddlex``) is used.
+
+    Raises
+    ------
+    ModuleNotFoundError
+        If any of the required modules cannot be imported.  The exception
+        message contains the per-module error details to help with debugging
+        missing runtime dependencies inside frozen binaries.
+    """
+
+    modules = modules or ("paddle", "paddleocr", "paddlex")
+    failures = []
+
+    for module_name in modules:
+        try:
+            importlib.import_module(module_name)
+        except Exception as exc:  # pragma: no cover - defensive guard
+            logger.error("Required module import failed: %s (%s)", module_name, exc)
+            failures.append((module_name, exc))
+        else:
+            logger.debug("Verified import for module: %s", module_name)
+
+    if failures:
+        summary = ", ".join(f"{name}: {error}" for name, error in failures)
+        raise ModuleNotFoundError(
+            "Failed to import required Paddle modules. "
+            f"Please ensure the runtime includes paddlepaddle, paddleocr and paddlex. "
+            f"Details: {summary}"
+        )
 
 
 def _populate_cpp_extension_stub(module: types.ModuleType) -> types.ModuleType:
@@ -288,23 +228,6 @@ def ensure_paddleocr_cpp_extension_safe() -> None:
                 os.environ.setdefault("PADDLE_SKIP_CUDA_COMPILER_CHECK", "1")
                 os.environ.setdefault("PADDLE_DISABLE_CPP_EXTENSION", "1")
 
-            # PaddleX初期化制御（Issue #207: 重複初期化エラー防止）
-            os.environ.setdefault("PADDLEX_DISABLE_AUTO_INIT", "1")
-            os.environ.setdefault("PADDLEX_INIT_DISABLED", "1")
-
-            # バイナリ実行時のPaddleX完全無効化
-            if getattr(sys, "frozen", False):
-                os.environ.setdefault("PADDLEX_DISABLE", "1")
-                os.environ.setdefault("DISABLE_PADDLEX", "1")
-
-                # PaddleXモジュールの初期化を阻止
-                paddlex_modules = [mod for mod in sys.modules.keys() if mod.startswith("paddlex")]
-                for mod in paddlex_modules:
-                    del sys.modules[mod]
-                    logger.info(f"Removed PaddleX module from sys.modules: {mod}")
-
-                _install_paddlex_import_guard()
-
             # cpp_extension.load のモンキーパッチ
             def stub_cpp_extension_load(*args: Any, **kwargs: Any) -> Any:
                 logger.warning("cpp_extension.load() called - returning stub to prevent crash")
@@ -328,7 +251,6 @@ def ensure_paddleocr_cpp_extension_safe() -> None:
                 "CUDA_VISIBLE_DEVICES": os.environ.get("CUDA_VISIBLE_DEVICES"),
                 "PADDLE_CPU_ONLY": os.environ.get("PADDLE_CPU_ONLY"),
                 "PADDLE_DISABLE_CPP_EXTENSION": os.environ.get("PADDLE_DISABLE_CPP_EXTENSION"),
-                "PADDLEX_DISABLE": os.environ.get("PADDLEX_DISABLE"),
             }
             logger.info(f"PaddleOCR cpp_extension guard applied with environment: {env_status}")
 
@@ -345,7 +267,6 @@ def ensure_paddleocr_cpp_extension_safe() -> None:
                 "PADDLE_DISABLE_CPP_EXTENSION": os.environ.get(
                     "PADDLE_DISABLE_CPP_EXTENSION", "NOT_SET"
                 ),
-                "PADDLEX_DISABLE": os.environ.get("PADDLEX_DISABLE", "NOT_SET"),
             }
             logger.error(f"Environment at failure: {env_diagnosis}")
             raise
@@ -401,14 +322,6 @@ def setup_paddleocr_environment_for_binary() -> None:
 
     # PyInstallerバイナリではcpp_extensionをスタブ化してビルドツール探索を防止
     _install_cpp_extension_stub()
-
-    # PaddleX初期化制御（バイナリ実行時の重複初期化防止）
-    os.environ.setdefault("PADDLEX_DISABLE_AUTO_INIT", "1")
-    os.environ.setdefault("PADDLEX_INIT_DISABLED", "1")
-    os.environ.setdefault("PADDLEX_DISABLE", "1")
-    os.environ.setdefault("DISABLE_PADDLEX", "1")
-
-    _install_paddlex_import_guard()
 
     # 基本的なCPU専用設定も事前に適用
     os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")

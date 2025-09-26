@@ -157,7 +157,22 @@ def test_imports(logger: Any) -> bool:
         logger.error(f"❌ Stage 4: 重要ライブラリ - {e}")
         return False
 
-    # Stage 5: アプリケーションモジュール
+    # Stage 5: Paddle/PaddleOCR/PaddleX modules
+    try:
+        import paddle  # type: ignore
+        import paddlex  # type: ignore
+        import paddleocr  # type: ignore
+
+        logger.info(
+            "✅ Stage 5: Paddle runtime modules - OK (paddle=%s, paddlex=%s)",
+            getattr(paddle, "__version__", "unknown"),
+            getattr(paddlex, "__version__", "unknown"),
+        )
+    except Exception as e:
+        logger.error(f"❌ Stage 5: Paddle runtime modules - {e}")
+        return False
+
+    # Stage 6: アプリケーションモジュール
     try:
         import importlib
 
@@ -168,13 +183,13 @@ def test_imports(logger: Any) -> bool:
 
         # Check if main function exists
         if hasattr(main_module, "main"):
-            logger.info("✅ Stage 5: アプリケーションモジュール - OK")
+            logger.info("✅ Stage 6: アプリケーションモジュール - OK")
             return True
         else:
-            logger.error("❌ Stage 5: main function not found")
+            logger.error("❌ Stage 6: main function not found")
             return False
     except Exception as e:
-        logger.error(f"❌ Stage 5: アプリケーションモジュール - {e}")
+        logger.error(f"❌ Stage 6: アプリケーションモジュール - {e}")
         return False
 
 
@@ -190,22 +205,28 @@ def main() -> None:
     logger.info("メインエントリーポイント開始")
     logger.info("multiprocessing.freeze_support() 実行完了")
 
-    # Issue #207 対応: PaddleOCRのcpp_extension問題を防止（PaddleX不使用）
-    # バイナリ実行時のPaddleOCR環境設定のみを事前に適用
+    # Issue #207 対応: PaddleOCRのcpp_extension問題を防止し、依存関係を事前検証
+    # バイナリ実行時のPaddleOCR環境設定と依存チェックを先に実行
     try:
         from app.core.paddlex_init_guard import (
             complete_binary_initialization,
             get_paddleocr_init_status,
             setup_paddleocr_environment_for_binary,
+            verify_paddle_runtime_dependencies,
         )
 
         # バイナリ実行時の環境設定を適用
         setup_paddleocr_environment_for_binary()
+        verify_paddle_runtime_dependencies()
+        logger.info("Verified paddle/paddleocr/paddlex runtime dependencies")
 
         # 初期化状態をログ出力
         init_status = get_paddleocr_init_status()
         logger.info(f"PaddleOCR environment setup status: {init_status}")
 
+    except ModuleNotFoundError as e:
+        logger.error(f"Paddle dependency preflight failed: {e}")
+        raise
     except Exception as e:
         logger.warning(f"PaddleOCR environment setup failed: {e}")
         # 環境設定が失敗してもアプリは継続実行

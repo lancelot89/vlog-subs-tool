@@ -41,6 +41,26 @@
 
 **Pythonがインストールされているパソコンで実行できます**
 
+> 🔌 **LinuxでPyInstallerバイナリを利用する場合の追加パッケージ**
+>
+> QtベースのGUIを安定して表示するため、以下のランタイムライブラリを事前にインストールしてください。
+>
+> ```bash
+> sudo apt-get update
+> sudo apt-get install -y \
+>   libxkbcommon-x11-0 \
+>   libxcb-icccm4 \
+>   libxcb-image0 \
+>   libxcb-keysyms1 \
+>   libxcb-render-util0 \
+>   libxcb-xkb1 \
+>   libxcb-cursor0 \
+>   libsm6 \
+>   libice6
+> ```
+>
+> これらが不足していると、XCB関連の警告や起動時クラッシュが発生することがあります。
+
 ```bash
 # 1. このツールをダウンロード
 git clone https://github.com/lancelot89/vlog-subs-tool.git

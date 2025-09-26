@@ -55,8 +55,22 @@ from typing import (
 import cv2
 import numpy as np
 
+try:  # pragma: no cover - heavy dependency validated in integration tests
+    import paddlex  # type: ignore
+except Exception as exc:  # pragma: no cover - defensive guard for dev envs
+    paddlex = None  # type: ignore[assignment]
+    _PADDLEX_IMPORT_ERROR: Optional[Exception] = exc
+    PADDLEX_AVAILABLE = False
+else:
+    _PADDLEX_IMPORT_ERROR = None
+    PADDLEX_AVAILABLE = True
+
 from app.core.cpu_profiler import get_adaptive_thread_config
-from app.core.paddlex_init_guard import is_paddleocr_available, safe_paddleocr_import
+from app.core.paddlex_init_guard import (
+    is_paddleocr_available,
+    safe_paddleocr_import,
+    verify_paddle_runtime_dependencies,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -69,8 +83,7 @@ _PADDLE_IMPORT_LOCK = threading.Lock()
 
 # PaddleOCR availability is checked via importlib without importing the module.
 PADDLEOCR_AVAILABLE = is_paddleocr_available()
-# PaddleX は使用しない（Issue #207対応でPaddleOCRのみ使用）
-PADDLEX_AVAILABLE = False
+# PaddleX availability matches the direct import attempt above.
 
 
 def _ensure_paddleocr_imported() -> bool:
@@ -88,6 +101,7 @@ def _ensure_paddleocr_imported() -> bool:
             return False
 
         try:
+            verify_paddle_runtime_dependencies()
             safe_paddleocr_import()
             os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
             os.environ.setdefault("PADDLE_CPU_ONLY", "1")
@@ -102,11 +116,6 @@ def _ensure_paddleocr_imported() -> bool:
             _PADDLE_IMPORT_ERROR = exc
             PADDLEOCR_AVAILABLE = False
             return False
-
-
-def safe_paddlex_import() -> None:
-    """PaddleXインポート（使用しないためNoneを返す）"""
-    return None
 
 
 # ---------------------------------------------------------------------------

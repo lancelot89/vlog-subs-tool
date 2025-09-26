@@ -2,10 +2,9 @@
 """PyInstaller spec for the vlog-subs-tool application.
 
 The goal is to mirror the behaviour of running the source tree directly.
-This spec includes necessary PaddleOCR resources and hidden imports while
-avoiding custom hooks, UPX compression or other complex optimisations. It
-also excludes the unused paddlex package so PyInstaller does not attempt to
-bundle it. Everything the runtime might touch is included in an onedir build.
+This spec includes necessary PaddleOCR/PaddleX resources and hidden imports
+while avoiding custom hooks, UPX compression or other complex optimisations.
+Everything the runtime might touch is included in an onedir build.
 """
 
 from pathlib import Path
@@ -61,6 +60,8 @@ _hiddenimports = [
     "paddleocr.tools.infer.predict_rec",
     "paddleocr.tools.infer.predict_cls",
     "paddleocr.paddleocr",
+    # PaddleX runtime
+    "paddlex",
     # Core image processing libraries
     "cv2",
     "numpy",
@@ -82,7 +83,7 @@ _hiddenimports = [
 ]
 
 try:
-    from PyInstaller.utils.hooks import collect_all, collect_submodules
+    from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules
 
     try:
         paddle_datas, paddle_binaries, paddle_hidden = collect_all("paddle")
@@ -117,6 +118,18 @@ try:
     except Exception as exc:  # pragma: no cover - diagnostic logging
         print(f"Warning: Failed to collect paddleocr.tools.infer submodules: {exc}")
 
+    try:
+        paddlex_datas = collect_data_files("paddlex", include_py_files=True)
+        paddlex_hidden = collect_submodules("paddlex")
+        _datas.extend(paddlex_datas)
+        _hiddenimports.extend(paddlex_hidden)
+        print(
+            "Collected PaddleX resources: "
+            f"{len(paddlex_datas)} data files, 0 binaries, {len(paddlex_hidden)} hidden imports"
+        )
+    except Exception as exc:  # pragma: no cover - diagnostic logging
+        print(f"Warning: Failed to collect PaddleX package resources: {exc}")
+
 except ImportError:  # pragma: no cover - diagnostic logging
     print("Warning: PyInstaller hooks not available, skipping Paddle resource collection")
 
@@ -133,7 +146,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["paddlex"],
+    excludes=[],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
