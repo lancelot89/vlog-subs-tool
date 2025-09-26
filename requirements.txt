@@ -1,8 +1,8 @@
 # GUI Framework
 PySide6==6.7.2
 
-# Video Processing - Compatible with PaddleOCR runtime
-opencv-python==4.10.0.84
+# Video Processing - Compatible with PaddleOCR runtime constraints
+opencv-python==4.6.0.66
 ffmpeg-python==0.2.0
 
 # OCR - Fixed versions to avoid paddlex import issues
@@ -18,7 +18,7 @@ sentencepiece==0.1.99
 langdetect==1.0.9
 opencc-python-reimplemented==0.1.7
 
-# Data Processing - NumPy version compatible with OpenCV 4.10.x
+# Data Processing - NumPy version compatible with OpenCV 4.6.x
 pandas==2.2.2
 numpy==1.26.4
 
