@@ -2,19 +2,20 @@
 PySide6==6.7.2
 
 # Video Processing - Compatible with PaddleOCR runtime constraints
-opencv-python==4.6.0.66
+opencv-python==4.10.0.84
 ffmpeg-python==0.2.0
 
 # OCR - Fixed versions to avoid paddlex import issues
 paddlepaddle==3.0.0
 paddleocr==2.7.0.3
 pytesseract==0.3.10  # オプション
+PyMuPDF==1.24.14  # Compatible prebuilt wheel version
 
 # Local Translation
 torch==2.2.2
 ctranslate2==3.20.0
 transformers==4.44.2
-sentencepiece==0.1.99
+sentencepiece==0.2.0
 langdetect==1.0.9
 opencc-python-reimplemented==0.1.7
 

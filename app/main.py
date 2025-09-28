@@ -7,15 +7,13 @@
 from __future__ import annotations
 
 import argparse
+import importlib.metadata as importlib_metadata
 import logging
 import os
 import sys
 import traceback
 from pathlib import Path
-from typing import Any, List, Tuple
-
-import importlib.metadata as importlib_metadata
-
+from typing import Any, List, Tuple, Union
 
 CURRENT_LOG_FILE: Path | None = None
 
@@ -84,7 +82,9 @@ def setup_logging(log_dir_override: Path | None = None) -> Path:
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / "vlog-subs-tool-debug.log"
 
-    handlers = [logging.FileHandler(log_file, encoding="utf-8")]
+    handlers: List[Union[logging.FileHandler, logging.StreamHandler]] = [
+        logging.FileHandler(log_file, encoding="utf-8")
+    ]
 
     if is_console_available():
         handlers.append(logging.StreamHandler(sys.stdout))
