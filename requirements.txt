@@ -1,48 +1,45 @@
 # GUI Framework
-PySide6>=6.5.0
+PySide6==6.7.2
 
-# Video Processing - Compatible with paddleocr 2.7.* requirements
-opencv-python<=4.6.0.66
-ffmpeg-python>=0.2.0
+# Video Processing - Compatible with PaddleOCR runtime constraints
+opencv-python==4.6.0.66
+ffmpeg-python==0.2.0
 
 # OCR - Fixed versions to avoid paddlex import issues
 paddlepaddle==3.0.0
-paddleocr==2.7.*
-pytesseract>=0.3.10  # オプション
+paddleocr==2.7.0.3
+pytesseract==0.3.10  # オプション
 
 # Local Translation
-torch>=2.0.0
-ctranslate2>=3.20.0
-transformers>=4.30.0
-sentencepiece>=0.1.99
-langdetect>=1.0.9
-opencc-python-reimplemented>=0.1.7
+torch==2.2.2
+ctranslate2==3.20.0
+transformers==4.44.2
+sentencepiece==0.1.99
+langdetect==1.0.9
+opencc-python-reimplemented==0.1.7
 
-# Data Processing - NumPy version compatible with opencv-python 4.6.x
-pandas>=2.0.0
-numpy>=1.24.0,<2.0
+# Data Processing - NumPy version compatible with OpenCV 4.6.x
+pandas==2.2.2
+numpy==1.26.4
 
 # File Handling
-python-bidi>=0.4.2  # RTL language support
-pysrt>=1.1.2  # SRT file handling
-
-# Packaging
-pyinstaller>=5.13.0
+python-bidi==0.4.2  # RTL language support
+pysrt==1.1.2  # SRT file handling
 
 # Configuration
-PyYAML>=6.0
+PyYAML==6.0.2
 
 # Image Processing (additional for OCR preprocessing)
-Pillow>=10.0.0
+Pillow==10.4.0
 
 # Logging
-loguru>=0.7.0
+loguru==0.7.2
 
 # Progress bars for GUI
-tqdm>=4.65.0
+tqdm==4.66.5
 
 # Network requests (for enhanced download functionality)
-requests>=2.31.0
+requests==2.32.3
 
 # System monitoring (for benchmarking)
-psutil>=5.9.0
+psutil==5.9.8

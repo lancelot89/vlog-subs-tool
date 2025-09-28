@@ -20,42 +20,60 @@
 ## 📥 ダウンロード・インストール
 
 ### 💻 動作環境
-- **Windows**: Windows 10/11
-- **Mac**: macOS 10.15以降
-- **Linux**: Ubuntu 20.04以降
-- **メモリ**: 4GB以上推奨
-- **容量**: 2GB以上の空き容量
+- **Windows**: Windows 10/11（64bit）
+- **macOS**: 13 Ventura / 14 Sonoma / 15 Sequoia
+- **CPU/GPU**: CPU版 PaddleOCR 同梱。GPU を利用する場合は別途 CUDA/cuDNN をインストールしてください。
+- **メモリ**: 8GB以上推奨
+- **容量**: 5GB以上の空き容量（同梱Python環境＋OCRモデルを含む）
 
-### ⬇️ インストール方法
+### ⬇️ インストール方法（同梱ランタイム版・推奨）
 
-#### 🎯 方法1: かんたん版（推奨）
-以下のリンクから、お使いのOSに合うファイルをダウンロードしてください：
+1. [最新リリース](https://github.com/lancelot89/vlog-subs-tool/releases/latest) からお使いの OS 向けアーカイブをダウンロードします。
+2. ZIP を任意のフォルダーに展開します（日本語名・スペースを含むパスでも利用できます）。
+3. フォルダー内の `run.bat`（Windows）または `run.command`（macOS）をダブルクリックして起動します。
+   - Windows では初回に SmartScreen が表示される場合があります。「詳細情報」→「実行」で続行してください。
+   - macOS では Gatekeeper による警告が出た場合、`run.command` を右クリックして「開く」を選択すると実行できます。
+4. デスクトップや Dock にショートカットを配置したい場合は、`README_start_here.md` の手順に従ってください。
 
-- **Windows**: [📦 vlog-subs-tool.exe をダウンロード](https://github.com/lancelot89/vlog-subs-tool/releases/latest) (準備中)
-- **Mac**: [📦 VLog字幕ツール.app をダウンロード](https://github.com/lancelot89/vlog-subs-tool/releases/latest) (準備中)
-- **Linux**: [📦 vlog-subs-tool.AppImage をダウンロード](https://github.com/lancelot89/vlog-subs-tool/releases/latest) (準備中)
+> **ログファイル**: 起動時の診断ログは `Windows: %LOCALAPPDATA%\VlogSubsTool\logs`、`macOS: ~/Library/Logs/vlog-subs-tool` に保存されます。問題発生時は `vlog-subs-tool-debug.log` と `launch.log` を確認してください。
 
-> **📌 お知らせ**: インストーラー版は現在準備中です。それまでは「ソースコード版」をご利用ください。
-
-#### 🔧 方法2: ソースコード版（少し詳しい方向け）
-
-**Pythonがインストールされているパソコンで実行できます**
+### 🔧 開発者・上級者向け（ソースコード版）
 
 ```bash
 # 1. このツールをダウンロード
 git clone https://github.com/lancelot89/vlog-subs-tool.git
 cd vlog-subs-tool
 
-# 2. 必要なファイルをインストール
-python3 -m venv venv
-source venv/bin/activate  # Mac/Linux
-# venv\Scripts\activate   # Windows
-
-pip install -e .
+# 2. 同梱版と同じ依存バージョンで仮想環境を構築
+python3 -m venv .venv
+source .venv/bin/activate  # Windows は .venv\Scripts\activate
+pip install --upgrade pip
+pip install -r requirements.txt
 
 # 3. ツールを起動
 python -m app.main
+
+# 依存診断のみを行いたい場合
+python -m app.main --check
 ```
+
+## 🛠️ 配布パッケージの作り方（開発者向け）
+
+同梱ランタイムは `scripts/build_env.sh`（macOS/Linux）または `scripts/build_env.ps1`（Windows）で再現できます。
+
+```bash
+# macOS / Linux
+./scripts/build_env.sh dist/AppRoot
+
+# Windows (PowerShell)
+pwsh scripts/build_env.ps1 -TargetDir (Resolve-Path dist/AppRoot)
+```
+
+- `dist/AppRoot/env` に仮想環境が作成され、`requirements.txt` に定義された固定バージョンがインストールされます。
+- `run.bat` / `run.command` / `README_start_here.md` を同じフォルダーに配置すると、そのまま配布パッケージとして利用できます。
+- Windows のインストーラーは `installer/installer.iss` を Inno Setup でビルドすることで生成できます。macOS は `run.command` を Platypus 等でラップしてください。
+
+> GitHub Actions 等で自動ビルドする場合は、上記スクリプトを CI ジョブに組み込み、生成物をアーティファクトとしてアップロードします。
 
 ## 📖 基本的な使い方
 
@@ -116,6 +134,11 @@ python -m app.main
 **Q: ツールが起動しない**
 - Windows: ウイルス対策ソフトが実行をブロックしている可能性があります
 - 実行ファイルを「信頼できるファイル」として設定してください
+
+**Q: SmartScreen / Gatekeeper が警告を表示する**
+- Windows: ダイアログの「詳細情報」をクリックし、「実行」を選択します。
+- macOS: `run.command` を右クリックして「開く」を選択し、表示されたダイアログで再度「開く」を押してください。
+- 署名・公証は別Issueで対応予定のため、警告が表示されるのは仕様です。
 
 **Q: インストールができない**
 - Pythonバージョンが古い可能性があります（Python 3.12以降が必要）

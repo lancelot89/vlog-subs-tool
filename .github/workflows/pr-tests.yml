@@ -18,7 +18,7 @@ jobs:
     - uses: actions/checkout@v5
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.12'
 
@@ -46,25 +46,19 @@ jobs:
         python -m pytest tests/unit/ -v --tb=short
       continue-on-error: true  # test failures are informational
 
-  build-test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ['3.12']
-
-    name: Build Test on ${{ matrix.os }}
+  bundled-runtime:
+    runs-on: ubuntu-latest
+    name: Bundled Runtime Smoke Test
 
     steps:
     - uses: actions/checkout@v5
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: '3.12'
 
-    - name: Install system dependencies (Linux)
-      if: matrix.os == 'ubuntu-latest'
+    - name: Install system dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y \
@@ -81,41 +75,18 @@ jobs:
           libfontconfig1 \
           libfreetype6
 
-    - name: Install Python dependencies
+    - name: Build embedded runtime
       run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pyinstaller
+        bash scripts/build_env.sh dist/test-runtime
 
-    - name: Test import functionality
+    - name: Run diagnostics check
       run: |
-        python -c "
-        try:
-            import sys
-            sys.path.insert(0, 'app')
-            from core.models import SubtitleItem
-            from core.extractor.ocr import SimplePaddleOCREngine
-            from core.format.srt import SRTFormatter
-            print('Success: Core modules import successfully')
-        except Exception as e:
-            print(f'Error: Import failed: {e}')
-            sys.exit(1)
-        "
+        dist/test-runtime/env/bin/python -m app.main --check
 
-    - name: Test PyInstaller spec validation
+    - name: Validate launcher scripts
       run: |
-        pyinstaller --noconfirm --log-level INFO vlog-subs-tool.spec --distpath dist/test-build
-      continue-on-error: true  # Build failures are informational for now
-
-    - name: Check build output size
-      if: success() || failure()
-      run: |
-        echo "=== Build Output Analysis ==="
-        if [ -d "dist/test-build" ]; then
-          du -sh dist/test-build/* || echo "No build output found"
-        else
-          echo "Build directory not created"
-        fi
+        bash -n run.command
+        python -m compileall run.bat
       shell: bash
 
   dependency-check:
@@ -126,7 +97,7 @@ jobs:
     - uses: actions/checkout@v5
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.12'
 

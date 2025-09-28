@@ -1,16 +1,23 @@
 #!/usr/bin/env python3
-"""
-VLog字幕ツール メインエントリーポイント
-PyInstaller バイナリとソースコード実行の両方に対応
+"""VLog字幕ツールのエントリーポイント。
+
+同梱Python環境からの起動と従来のソースコード実行の両方をサポートする。
 """
 
+from __future__ import annotations
+
+import argparse
 import logging
 import os
 import sys
 import traceback
-from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, List, Tuple
+
+import importlib.metadata as importlib_metadata
+
+
+CURRENT_LOG_FILE: Path | None = None
 
 
 def is_console_available() -> bool:
@@ -49,29 +56,46 @@ def safe_input_prompt(message: str = "Press Enter to continue...") -> None:
             pass  # コンソールエラーは無視
 
 
-def setup_logging() -> None:
-    """
-    デバッグ用ロギング設定
-    """
-    # ログファイルのパス設定
-    if getattr(sys, "frozen", False):
-        # PyInstallerでビルドされた場合、実行ファイルと同じディレクトリに
-        log_dir = Path(sys.executable).parent
-    else:
-        # 開発環境では現在のディレクトリに
-        log_dir = Path.cwd()
+def get_user_log_dir(log_dir_override: Path | None = None) -> Path:
+    """Resolve the log directory under the current user's profile."""
 
+    if log_dir_override is not None:
+        return log_dir_override
+
+    home = Path.home()
+
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA", home / "AppData" / "Local"))
+        return base / "VlogSubsTool" / "logs"
+
+    if sys.platform == "darwin":
+        return home / "Library" / "Logs" / "vlog-subs-tool"
+
+    state_home = Path(os.environ.get("XDG_STATE_HOME", home / ".local" / "state"))
+    return state_home / "vlog-subs-tool" / "logs"
+
+
+def setup_logging(log_dir_override: Path | None = None) -> Path:
+    """Configure logging so that launch diagnostics reach the user folder."""
+
+    global CURRENT_LOG_FILE
+
+    log_dir = get_user_log_dir(log_dir_override)
+    log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / "vlog-subs-tool-debug.log"
 
-    # ハンドラーリスト（ファイル出力のみ）
     handlers = [logging.FileHandler(log_file, encoding="utf-8")]
 
-    # ロガー設定
+    if is_console_available():
+        handlers.append(logging.StreamHandler(sys.stdout))
+
     logging.basicConfig(
         level=logging.DEBUG,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=handlers,
     )
+
+    CURRENT_LOG_FILE = log_file
 
     logger = logging.getLogger(__name__)
     logger.info("=== VLog字幕ツール ログ開始 ===")
@@ -82,6 +106,46 @@ def setup_logging() -> None:
     if hasattr(sys, "_MEIPASS"):
         logger.info(f"_MEIPASS: {sys._MEIPASS}")
     logger.info(f"Log file: {log_file}")
+
+    log_dependency_versions(logger)
+
+    return log_file
+
+
+def log_dependency_versions(logger: logging.Logger) -> None:
+    """Log pinned dependency versions for support diagnostics."""
+
+    packages = [
+        "PySide6",
+        "opencv-python",
+        "ffmpeg-python",
+        "paddlepaddle",
+        "paddleocr",
+        "pytesseract",
+        "torch",
+        "ctranslate2",
+        "transformers",
+        "sentencepiece",
+        "langdetect",
+        "opencc-python-reimplemented",
+        "pandas",
+        "numpy",
+        "python-bidi",
+        "pysrt",
+        "PyYAML",
+        "Pillow",
+        "loguru",
+        "tqdm",
+        "requests",
+        "psutil",
+    ]
+
+    for package in packages:
+        try:
+            version = importlib_metadata.version(package)
+            logger.info("Dependency check: %s==%s", package, version)
+        except importlib_metadata.PackageNotFoundError:
+            logger.warning("Dependency missing: %s (not installed)", package)
 
 
 def setup_paths() -> bool:
@@ -178,14 +242,40 @@ def test_imports(logger: Any) -> bool:
         return False
 
 
-def main() -> None:
+def parse_launch_arguments(argv: List[str]) -> Tuple[argparse.Namespace, List[str]]:
+    """Parse command line arguments, keeping Qt arguments intact."""
+
+    parser = argparse.ArgumentParser(
+        add_help=True,
+        description="VLog字幕ツール ランチャー",
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Run dependency diagnostics and exit.",
+    )
+    parser.add_argument(
+        "--log-dir",
+        type=Path,
+        default=None,
+        help="Override the directory where launch logs are written.",
+    )
+
+    args, remaining = parser.parse_known_args(argv)
+    return args, remaining
+
+
+def main(argv: List[str] | None = None) -> None:
     """メインエントリーポイント"""
+    argv = list(sys.argv[1:] if argv is None else argv)
+    args, remaining_args = parse_launch_arguments(argv)
+
     # PyInstallerバイナリ実行時の安全対策（PaddleXエラー対策）
     import multiprocessing
 
     multiprocessing.freeze_support()
 
-    setup_logging()
+    log_file = setup_logging(args.log_dir)
     logger = logging.getLogger(__name__)
     logger.info("メインエントリーポイント開始")
     logger.info("multiprocessing.freeze_support() 実行完了")
@@ -213,6 +303,19 @@ def main() -> None:
     is_standalone = setup_paths()
     logger.info(f"実行環境: {'スタンドアロン' if is_standalone else 'ソースコード'}")
 
+    if args.check:
+        logger.info("--check オプションが指定されたため、診断のみを実行します")
+        success = test_imports(logger)
+        if success:
+            logger.info("環境診断が正常に完了しました")
+            print("✅ VLog字幕ツール 環境診断が完了しました。")
+            print(f"   ログファイル: {log_file}")
+            sys.exit(0)
+        logger.error("環境診断で問題が見つかりました")
+        print("❌ VLog字幕ツール 環境診断で問題が見つかりました。詳細はログを参照してください。")
+        print(f"   ログファイル: {log_file}")
+        sys.exit(1)
+
     try:
         # デバッグ: 段階的インポートテスト
         if not test_imports(logger):
@@ -232,6 +335,7 @@ def main() -> None:
             main_module = importlib.import_module("ui.main_window")
 
         logger.info("UIモジュール読み込み完了、アプリケーション起動中...")
+        sys.argv = [sys.argv[0]] + remaining_args
         main_module.main()
         logger.info("アプリケーション正常終了")
 
@@ -266,7 +370,8 @@ def main() -> None:
         print(f"❌ 予期しないエラーが発生しました: {e}")
         print()
         print("🔧 詳細ログ:")
-        print(f"   ログファイル: vlog-subs-tool-debug.log")
+        log_hint = CURRENT_LOG_FILE if CURRENT_LOG_FILE is not None else "(ログファイル未設定)"
+        print(f"   ログファイル: {log_hint}")
         print()
         print("🔧 解決方法:")
         print("- アプリケーションを再起動してください")
