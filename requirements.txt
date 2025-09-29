@@ -24,7 +24,7 @@ pandas==2.2.2
 numpy==1.26.4
 
 # File Handling
-python-bidi==0.4.2  # RTL language support
+python-bidi==0.6.6  # RTL language support
 pysrt==1.1.2  # SRT file handling
 
 # Configuration
