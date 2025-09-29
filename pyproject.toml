@@ -46,7 +46,7 @@ dependencies = [
     "python-bidi==0.4.2",
     "pysrt==1.1.2",
     "PyYAML==6.0.2",
-    "Pillow==10.4.0",
+    "Pillow==11.3.0",
     "loguru==0.7.2",
     "tqdm==4.66.5",
     "requests==2.32.3",
