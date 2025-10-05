@@ -9,7 +9,8 @@ if (-not $Python) {
 
 $EnvDir = Join-Path $TargetDir 'env'
 
-if (Test-Path $EnvDir -and $env:FORCE_REBUILD -ne '1') {
+$ForceRebuild = $env:FORCE_REBUILD -eq '1'
+if ((Test-Path $EnvDir) -and (-not $ForceRebuild)) {
     Write-Host "[INFO] Reusing existing environment at $EnvDir"
 } else {
     Write-Host "[INFO] Creating virtual environment at $EnvDir"
