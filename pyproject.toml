@@ -33,7 +33,7 @@ dependencies = [
     "opencv-python==4.6.0.66",
     "ffmpeg-python==0.2.0",
     "paddlepaddle==3.0.0",
-    "paddleocr==2.7.0.3",
+    "paddleocr==3.3.0",
     "pytesseract==0.3.10",
     "torch==2.2.2",
     "ctranslate2==3.20.0",

@@ -7,7 +7,7 @@ ffmpeg-python==0.2.0
 
 # OCR - Fixed versions to avoid paddlex import issues
 paddlepaddle==3.0.0
-paddleocr==2.7.0.3
+paddleocr==3.3.0
 pytesseract==0.3.10  # オプション
 PyMuPDF==1.20.2  # Compatible with PaddleOCR requirement <1.21.0
 
